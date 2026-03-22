@@ -13,4 +13,5 @@ export const JobType = {
   analysis: "analysis",
   arrangement: "arrangement",
   export: "export",
+  render: "render",
 } as const;

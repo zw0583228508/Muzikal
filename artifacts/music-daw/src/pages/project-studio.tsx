@@ -160,6 +160,10 @@ export default function ProjectStudio() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [selectedFormats, setSelectedFormats] = useState<Record<string, boolean>>({
+    midi: true, musicxml: false, pdf: false,
+    wav: true, flac: false, mp3: false, stems: false,
+  });
 
   // Data Hooks
   const { data: project, isLoading: isProjLoading } = useGetProject(projectId);
@@ -392,22 +396,84 @@ export default function ProjectStudio() {
               </TabsContent>
 
               {/* EXPORT TAB */}
-              <TabsContent value="export" className="space-y-6 mt-0">
+              <TabsContent value="export" className="space-y-4 mt-0">
+                {/* Score / MIDI formats */}
                 <div className="daw-panel p-4">
-                  <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-4">{t("Formats")}</h4>
+                  <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-3">
+                    Score &amp; MIDI
+                  </h4>
                   <div className="space-y-2">
-                    {['MIDI Tracks', 'MusicXML Score', 'WAV Audio', 'Separated Stems'].map(fmt => (
-                      <label key={fmt} className="flex items-center gap-3 p-3 rounded border border-white/5 bg-black/20 cursor-pointer hover:bg-white/5">
-                        <input type="checkbox" className="accent-primary w-4 h-4 rounded bg-transparent border-white/20" defaultChecked />
-                        <span className="text-sm" dir="ltr">{t(fmt)}</span>
+                    {([['midi','MIDI Tracks'],['musicxml','MusicXML Score'],['pdf','Lead Sheet PDF']] as [string,string][]).map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-3 p-3 rounded border border-white/5 bg-black/20 cursor-pointer hover:bg-white/5">
+                        <input
+                          type="checkbox"
+                          className="accent-primary w-4 h-4"
+                          checked={!!selectedFormats[key]}
+                          onChange={e => setSelectedFormats(f => ({ ...f, [key]: e.target.checked }))}
+                        />
+                        <span className="text-sm" dir="ltr">{t(label)}</span>
                       </label>
                     ))}
                   </div>
+                  <Button
+                    className="w-full mt-3"
+                    variant="secondary"
+                    onClick={() => {
+                      const formats = ['midi','musicxml','pdf'].filter(f => selectedFormats[f]);
+                      if (!formats.length) return;
+                      exportMut.mutate({ projectId, data: { formats } }, {
+                        onSuccess: (res: any) => setActiveJobId(res.jobId)
+                      });
+                    }}
+                    disabled={!!activeJobId || !arrangement}
+                  >
+                    <Download className="w-4 h-4 mr-2" /> {t("Export Files")}
+                  </Button>
                 </div>
-                
-                <Button className="w-full" onClick={() => exportMut.mutate({ projectId, data: { formats: ['midi', 'wav'] } })} disabled={!!activeJobId}>
-                  <Download className="w-4 h-4 mr-2" /> {t("Export Files")}
-                </Button>
+
+                {/* Audio render formats */}
+                <div className="daw-panel p-4">
+                  <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-3">
+                    Audio Render
+                  </h4>
+                  <div className="space-y-2">
+                    {([['wav','WAV Audio (Lossless)'],['flac','FLAC Audio (Lossless)'],['mp3','MP3 320kbps'],['stems','Separated Stems']] as [string,string][]).map(([key, label]) => (
+                      <label key={key} className="flex items-center gap-3 p-3 rounded border border-white/5 bg-black/20 cursor-pointer hover:bg-white/5">
+                        <input
+                          type="checkbox"
+                          className="accent-primary w-4 h-4"
+                          checked={!!selectedFormats[key]}
+                          onChange={e => setSelectedFormats(f => ({ ...f, [key]: e.target.checked }))}
+                        />
+                        <span className="text-sm" dir="ltr">{t(label)}</span>
+                      </label>
+                    ))}
+                  </div>
+                  <Button
+                    className="w-full mt-3 bg-accent hover:bg-accent/80 text-white"
+                    onClick={async () => {
+                      const formats = ['wav','flac','mp3','stems'].filter(f => selectedFormats[f]);
+                      if (!formats.length) return;
+                      try {
+                        const res = await fetch(`/api/projects/${projectId}/render`, {
+                          method: 'POST',
+                          headers: { 'Content-Type': 'application/json' },
+                          body: JSON.stringify({ formats }),
+                        });
+                        const data = await res.json();
+                        setActiveJobId(data.jobId);
+                      } catch(e) { console.error(e); }
+                    }}
+                    disabled={!!activeJobId || !arrangement}
+                  >
+                    <Music className="w-4 h-4 mr-2" /> {t("Render Audio")}
+                  </Button>
+                  {!arrangement && (
+                    <p className="text-xs text-muted-foreground mt-2 text-center">
+                      {t("Generate an arrangement first")}
+                    </p>
+                  )}
+                </div>
               </TabsContent>
             </div>
           </Tabs>

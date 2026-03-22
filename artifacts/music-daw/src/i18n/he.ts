@@ -77,10 +77,24 @@ export default {
     "Tempo Factor": "מקדם קצב",
     "Formats": "פורמטים",
     "Export Files": "ייצא קבצים",
-    "MIDI Tracks": "MIDI Tracks",
-    "MusicXML Score": "MusicXML Score",
+    "MIDI Tracks": "רצועות MIDI",
+    "MusicXML Score": "תו MusicXML",
     "WAV Audio": "WAV Audio",
-    "Separated Stems": "Separated Stems",
-    "Job": "משימה"
+    "Separated Stems": "Stems נפרדים",
+    "Lead Sheet PDF": "Lead Sheet PDF",
+    "Job": "משימה",
+    "Render Audio": "רנדר אודיו",
+    "Generate an arrangement first": "צור עיבוד תחילה",
+    "WAV Audio (Lossless)": "WAV (ללא אובדן)",
+    "FLAC Audio (Lossless)": "FLAC (ללא אובדן)",
+    "MP3 320kbps": "MP3 320kbps",
+    "Upload failed": "ההעלאה נכשלה",
+    "Analysis failed to start": "הניתוח נכשל",
+    "Synthesizing instruments": "מסנתז כלים",
+    "Mixing tracks": "מוזג רצועות",
+    "Mastering": "מאסטרינג",
+    "Writing audio": "כותב קובץ אודיו",
+    "Render complete": "הרנדר הושלם",
+    "No waveform data": "אין נתוני גל קול"
   }
 };

@@ -7,7 +7,7 @@ export const projectStatusEnum = pgEnum("project_status", [
 ]);
 
 export const jobTypeEnum = pgEnum("job_type", [
-  "upload", "analysis", "arrangement", "export"
+  "upload", "analysis", "arrangement", "export", "render"
 ]);
 
 export const jobStatusEnum = pgEnum("job_status", [

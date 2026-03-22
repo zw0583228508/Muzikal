@@ -274,9 +274,11 @@ def export_lead_sheet(chords: List[Dict], key: str, bpm: float, time_sig: tuple,
 
 
 def run_export(project_id: int, analysis: dict, arrangement: dict,
-               formats: List[str], output_dir: str) -> Dict[str, str]:
+               formats: List[str], output_dir: str,
+               progress_callback=None) -> Dict[str, str]:
     """
     Run all requested exports. Returns dict of format → file path.
+    Handles: midi, musicxml, pdf, wav, flac, mp3, stems.
     """
     logger.info(f"Exporting project {project_id}: {formats}")
     os.makedirs(output_dir, exist_ok=True)
@@ -292,33 +294,57 @@ def run_export(project_id: int, analysis: dict, arrangement: dict,
     melody_notes = analysis.get("melody", {}).get("notes", [])
     structure = analysis.get("structure", {}).get("sections", [])
     tracks = arrangement.get("tracks", [])
+    total_duration = float(arrangement.get("totalDurationSeconds", 120.0))
 
+    # MIDI
     if "midi" in formats:
         midi_path = os.path.join(output_dir, f"project_{project_id}.mid")
         try:
+            if progress_callback:
+                progress_callback("Exporting MIDI", 20)
             export_midi(tracks, bpm=bpm, output_path=midi_path)
             results["midi"] = midi_path
+            logger.info(f"MIDI exported: {midi_path}")
         except Exception as e:
             logger.error(f"MIDI export failed: {e}")
 
+    # MusicXML
     if "musicxml" in formats:
         xml_path = os.path.join(output_dir, f"project_{project_id}.musicxml")
         try:
-            xml_content = export_musicxml(chords, melody_notes, key, mode, bpm, time_sig, xml_path)
+            if progress_callback:
+                progress_callback("Exporting MusicXML", 35)
+            export_musicxml(chords, melody_notes, key, mode, bpm, time_sig, xml_path)
             results["musicxml"] = xml_path
         except Exception as e:
             logger.error(f"MusicXML export failed: {e}")
 
+    # Lead Sheet PDF (text fallback)
     if "pdf" in formats:
-        # PDF requires music21 + lilypond - generate lead sheet text instead
         pdf_path = os.path.join(output_dir, f"project_{project_id}_lead_sheet.txt")
         try:
+            if progress_callback:
+                progress_callback("Generating lead sheet", 45)
             lead_sheet = export_lead_sheet(chords, key, bpm, time_sig, structure)
-            with open(pdf_path, "w") as f:
+            with open(pdf_path, "w", encoding="utf-8") as f:
                 f.write(lead_sheet)
             results["pdf"] = pdf_path
         except Exception as e:
-            logger.error(f"PDF/lead sheet export failed: {e}")
+            logger.error(f"Lead sheet export failed: {e}")
+
+    # Audio formats — delegate to render pipeline
+    audio_formats = [f for f in formats if f in ("wav", "flac", "mp3", "stems")]
+    if audio_formats and tracks:
+        try:
+            from audio.render_pipeline import run_audio_render
+            if progress_callback:
+                progress_callback("Rendering audio", 50)
+            audio_results = run_audio_render(
+                project_id, tracks, total_duration, audio_formats, output_dir, progress_callback
+            )
+            results.update(audio_results)
+        except Exception as e:
+            logger.error(f"Audio render failed: {e}")
 
     logger.info(f"Export complete: {list(results.keys())}")
     return results

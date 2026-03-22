@@ -102,3 +102,10 @@ class ExportRequest(BaseModel):
     project_id: int
     formats: List[str] = ["midi"]  # midi, musicxml, pdf, wav, flac, mp3, stems
     output_dir: Optional[str] = None
+
+
+class RenderRequest(BaseModel):
+    job_id: str
+    project_id: int
+    formats: List[str] = ["wav"]  # wav, flac, mp3, stems
+    output_dir: Optional[str] = None

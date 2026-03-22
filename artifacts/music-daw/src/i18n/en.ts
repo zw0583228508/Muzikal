@@ -34,6 +34,7 @@ export default {
     "Analyzing rhythm": "Analyzing rhythm",
     "Analysis": "Analysis",
     "Arrangement": "Arrangement",
+    "Arrange": "Arrange",
     "analyzing": "analyzing",
     "analyzed": "analyzed",
     "arranging": "arranging",
@@ -80,7 +81,16 @@ export default {
     "MusicXML Score": "MusicXML Score",
     "WAV Audio": "WAV Audio",
     "Separated Stems": "Separated Stems",
+    "Lead Sheet PDF": "Lead Sheet PDF",
     "Job": "Job",
-    "Arrange": "Arrange"
+    "Arrange": "Arrange",
+    "Render Audio": "Render Audio",
+    "Generate an arrangement first": "Generate an arrangement first",
+    "WAV Audio (Lossless)": "WAV Audio (Lossless)",
+    "FLAC Audio (Lossless)": "FLAC Audio (Lossless)",
+    "MP3 320kbps": "MP3 320kbps",
+    "Upload failed": "Upload failed",
+    "Analysis failed to start": "Analysis failed to start",
+    "No waveform data": "No waveform data"
   }
 };

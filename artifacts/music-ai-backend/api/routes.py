@@ -13,11 +13,12 @@ from typing import Optional, List
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
 
-from api.schemas import AnalyzeRequest, ArrangeRequest, ExportRequest
+from api.schemas import AnalyzeRequest, ArrangeRequest, ExportRequest, RenderRequest
 from api.database import update_job, update_project_status, save_analysis_result, save_arrangement
 from orchestration.arranger import generate_arrangement, STYLES
 
 EXPORTS_BASE_DIR = os.environ.get("EXPORTS_DIR", "/tmp/musicai_exports")
+RENDERS_BASE_DIR = os.environ.get("RENDERS_DIR", "/tmp/musicai_renders")
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +195,7 @@ def run_export_pipeline(job_id: str, project_id: int, formats: List[str],
 
                 # Load arrangement
                 cur.execute(
-                    "SELECT tracks FROM arrangements WHERE project_id=%s ORDER BY id DESC LIMIT 1",
+                    "SELECT tracks_data FROM arrangements WHERE project_id=%s ORDER BY id DESC LIMIT 1",
                     (project_id,)
                 )
                 arr_row = cur.fetchone()
@@ -214,7 +215,7 @@ def run_export_pipeline(job_id: str, project_id: int, formats: List[str],
 
         arrangement = {}
         if arr_row:
-            tracks = arr_row["tracks"]
+            tracks = arr_row["tracks_data"]
             if isinstance(tracks, str):
                 tracks = json.loads(tracks)
             arrangement = {"tracks": tracks}
@@ -233,3 +234,70 @@ def run_export_pipeline(job_id: str, project_id: int, formats: List[str],
     except Exception as e:
         logger.exception(f"Export failed for job {job_id}: {e}")
         update_job(job_id, "failed", 0, "Export failed", str(e))
+
+
+# ── Render Endpoint (Audio Synthesis) ────────────────────────────────────────
+
+@router.post("/render")
+async def start_render(request: RenderRequest, background_tasks: BackgroundTasks):
+    """Start audio rendering pipeline in background."""
+    background_tasks.add_task(
+        run_render_pipeline,
+        request.job_id,
+        request.project_id,
+        request.formats,
+        request.output_dir,
+    )
+    return {"jobId": request.job_id, "status": "queued"}
+
+
+def run_render_pipeline(job_id: str, project_id: int, formats: List[str],
+                         custom_output_dir: Optional[str]):
+    """Render audio from arrangement tracks."""
+    from api.database import get_db_connection
+    import json
+
+    try:
+        update_job(job_id, "running", 5, "Loading arrangement data")
+
+        output_dir = custom_output_dir or os.path.join(RENDERS_BASE_DIR, f"project_{project_id}")
+        os.makedirs(output_dir, exist_ok=True)
+
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    "SELECT tracks_data, total_duration_seconds FROM arrangements WHERE project_id=%s ORDER BY id DESC LIMIT 1",
+                    (project_id,)
+                )
+                arr_row = cur.fetchone()
+        finally:
+            conn.close()
+
+        if not arr_row:
+            raise ValueError(f"No arrangement found for project {project_id}")
+
+        tracks = arr_row["tracks_data"]
+        if isinstance(tracks, str):
+            tracks = json.loads(tracks)
+        total_duration = float(arr_row["total_duration_seconds"] or 120.0)
+
+        def progress_callback(step: str, pct: float):
+            update_job(job_id, "running", pct, step)
+
+        update_job(job_id, "running", 10, "Starting audio synthesis")
+
+        from audio.render_pipeline import run_audio_render
+        results = run_audio_render(
+            project_id, tracks, total_duration, formats, output_dir, progress_callback
+        )
+
+        update_job(job_id, "completed", 100, "Render complete", extra={
+            "renderedFiles": results,
+            "outputDir": output_dir,
+        })
+        logger.info(f"Render complete for project {project_id}: {list(results.keys())}")
+
+    except Exception as e:
+        logger.exception(f"Render failed for job {job_id}: {e}")
+        update_job(job_id, "failed", 0, "Render failed", str(e))

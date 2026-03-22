@@ -29,12 +29,24 @@ def analyze_rhythm(y: np.ndarray, sr: int) -> Dict[str, Any]:
         tightness=100,
     )
 
+    # librosa >= 0.10 may return a 0-d or 1-d array; squeeze to scalar safely
+    tempo_arr = np.atleast_1d(np.squeeze(tempo))
+    bpm_bt = float(tempo_arr[0]) if tempo_arr.size > 0 else 0.0
+
     # Also try plp (predominant local pulse) for robust tempo
+    # librosa 0.10+ moved this to librosa.feature.rhythm.tempo
     pulse = librosa.beat.plp(onset_envelope=onset_env, sr=sr)
-    tempo_plp = float(librosa.beat.tempo(onset_envelope=pulse, sr=sr, aggregate=None).mean())
+    try:
+        tempo_plp_arr = librosa.feature.rhythm.tempo(onset_envelope=pulse, sr=sr, aggregate=None)
+    except AttributeError:
+        try:
+            tempo_plp_arr = librosa.beat.tempo(onset_envelope=pulse, sr=sr, aggregate=None)
+        except Exception:
+            tempo_plp_arr = np.array([bpm_bt])
+    tempo_plp = float(np.atleast_1d(tempo_plp_arr).mean())
 
     # Use the more confident tempo estimate
-    bpm = float(tempo) if float(tempo) > 0 else tempo_plp
+    bpm = bpm_bt if bpm_bt > 0 else tempo_plp
     bpm = round(bpm, 2)
 
     beat_grid = [float(b) for b in beats]

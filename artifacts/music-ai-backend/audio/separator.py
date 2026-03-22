@@ -33,9 +33,9 @@ def separate_with_demucs(audio_path: str, output_dir: str) -> dict:
     try:
         cmd = [
             "python3", "-m", "demucs",
-            "--two-stems", "vocals",  # Fast: only separate vocals vs accompaniment
-            "--model", DEMUCS_MODEL,
-            "--out", output_dir,
+            "--two-stems", "vocals",
+            "-n", DEMUCS_MODEL,
+            "-o", output_dir,
             "--mp3",
             audio_path,
         ]
@@ -47,8 +47,8 @@ def separate_with_demucs(audio_path: str, output_dir: str) -> dict:
         # Full 4-stem mode
         cmd_full = [
             "python3", "-m", "demucs",
-            "--model", DEMUCS_MODEL,
-            "--out", output_dir,
+            "-n", DEMUCS_MODEL,
+            "-o", output_dir,
             audio_path,
         ]
         result2 = subprocess.run(cmd_full, capture_output=True, text=True, timeout=600)

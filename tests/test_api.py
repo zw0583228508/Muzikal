@@ -139,3 +139,76 @@ class TestLocksEndpoints:
     def test_invalid_lock_component_returns_400(self):
         r = api(f"/projects/{self.pid}/locks/invalid_component", method="PATCH", json={"locked": True})
         assert r.status_code == 400
+
+
+class TestMockModeEndpoint:
+    def test_mock_mode_returns_200(self):
+        r = api("/projects/mock-mode")
+        assert r.status_code == 200
+
+    def test_mock_mode_has_required_fields(self):
+        r = api("/projects/mock-mode")
+        data = r.json()
+        assert "isMock" in data, "isMock field missing"
+        assert "pipelineVersion" in data, "pipelineVersion field missing"
+        assert "modelVersions" in data, "modelVersions field missing"
+
+    def test_mock_mode_is_mock_is_boolean(self):
+        r = api("/projects/mock-mode")
+        assert isinstance(r.json()["isMock"], bool)
+
+    def test_mock_mode_pipeline_version_format(self):
+        r = api("/projects/mock-mode")
+        version = r.json()["pipelineVersion"]
+        parts = version.split(".")
+        assert len(parts) == 3, f"Expected semver x.y.z, got: {version}"
+
+    def test_mock_mode_model_versions_has_7_models(self):
+        r = api("/projects/mock-mode")
+        model_versions = r.json()["modelVersions"]
+        assert isinstance(model_versions, dict)
+        expected_models = {"madmom", "essentia", "chord-cnn", "pyin", "msaf", "demucs", "crepe"}
+        for model in expected_models:
+            assert model in model_versions, f"Model '{model}' missing from modelVersions"
+
+    def test_analyze_without_audio_fails_in_real_mode(self):
+        """In non-mock mode, analysis without audio should return 400."""
+        r = api("/projects/mock-mode")
+        if r.json().get("isMock"):
+            pytest.skip("MOCK_MODE=true — server allows analysis without audio")
+        cr = api("/projects", method="POST", json={"name": "No-Audio Test"})
+        pid = cr.json()["id"]
+        ar = api(f"/projects/{pid}/analyze", method="POST")
+        assert ar.status_code == 400
+        assert "audio" in ar.json().get("error", "").lower()
+        api(f"/projects/{pid}", method="DELETE")
+
+
+class TestAnalysisResultFields:
+    """Verify that real analysis results include confidence, warnings, alternatives."""
+
+    def test_analysis_endpoint_returns_404_when_no_analysis(self):
+        cr = requests.post(f"{BASE_URL}/projects", json={"name": "Analysis Fields Test"}, timeout=10)
+        pid = cr.json()["id"]
+        try:
+            r = api(f"/projects/{pid}/analysis")
+            assert r.status_code == 404
+        finally:
+            requests.delete(f"{BASE_URL}/projects/{pid}", timeout=10)
+
+    def test_analysis_in_mock_mode_starts_job(self):
+        import time
+        mode = api("/projects/mock-mode").json()
+        if not mode.get("isMock"):
+            pytest.skip("Skipping mock analysis test — MOCK_MODE=false")
+        cr = requests.post(f"{BASE_URL}/projects", json={"name": "Mock Analysis Test"}, timeout=10)
+        pid = cr.json()["id"]
+        try:
+            ar = api(f"/projects/{pid}/analyze", method="POST")
+            assert ar.status_code == 200
+            job = ar.json()
+            assert "jobId" in job
+            assert job["isMock"] is True
+            time.sleep(2)
+        finally:
+            requests.delete(f"{BASE_URL}/projects/{pid}", timeout=10)

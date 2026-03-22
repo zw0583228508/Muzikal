@@ -187,7 +187,26 @@ def run_arrangement_pipeline(job_id: str, project_id: int, style_id: str,
         )
 
         update_job(job_id, "running", 80, "Saving arrangement")
-        save_arrangement(project_id, style_id, arrangement["tracks"], arrangement["totalDurationSeconds"])
+        arrangement_plan = {
+            "harmonicPlan": arrangement.get("harmonicPlan"),
+            "sections": arrangement.get("sections"),
+            "profileUsed": arrangement.get("profileUsed"),
+        }
+        generation_metadata = {
+            "bpm": arrangement.get("bpm"),
+            "style": style_id,
+            "density": density,
+            "humanize": do_humanize,
+            "tempoFactor": tempo_factor,
+        }
+        save_arrangement(
+            project_id,
+            style_id,
+            arrangement.get("tracks", []),
+            arrangement.get("totalDurationSeconds", 0),
+            arrangement_plan=arrangement_plan,
+            generation_metadata=generation_metadata,
+        )
 
         update_project_status(project_id, "arranged")
         update_job(job_id, "completed", 100, "Arrangement complete")

@@ -360,6 +360,14 @@ export default function ProjectStudio() {
     refetchInterval: 0,
   });
 
+  const { data: modeData } = useQuery<{ isMock: boolean; pipelineVersion?: string; modelVersions?: Record<string, string> }>({
+    queryKey: ["/api/projects/mock-mode"],
+    queryFn: () => fetch("/api/projects/mock-mode").then(r => r.json()),
+    staleTime: Infinity,
+  });
+  const isMockMode = modeData?.isMock ?? false;
+  const modelVersions = modeData?.modelVersions ?? {};
+
   // ─ Mutations
   const uploadMut = useUploadAudio();
   const analyzeMut = useStartAnalysis();
@@ -582,16 +590,19 @@ export default function ProjectStudio() {
                   <div className="text-center py-10 space-y-4">
                     <Activity className="w-12 h-12 text-muted-foreground mx-auto opacity-20" />
                     <p className="text-sm text-muted-foreground">{t("No analysis data yet.")}</p>
-                    <Button onClick={handleAnalyze} disabled={!project.audioFileName || !!activeJobId} className="w-full">
+                    <Button onClick={handleAnalyze} disabled={(!!activeJobId) || (!project.audioFileName && !isMockMode)} className="w-full">
                       <Zap className="w-4 h-4 mr-2" /> {t("Start Analysis")}
                     </Button>
-                    {!project.audioFileName && (
+                    {!project.audioFileName && !isMockMode && (
                       <>
                         <input type="file" ref={fileInputRef} className="hidden" accept="audio/*" onChange={handleUpload} />
                         <Button variant="outline" className="w-full" onClick={() => fileInputRef.current?.click()}>
                           <Upload className="w-4 h-4 mr-2" /> {t("Upload Audio")}
                         </Button>
                       </>
+                    )}
+                    {!project.audioFileName && isMockMode && (
+                      <p className="text-xs text-amber-400/70">{t("MOCK MODE — analysis runs on simulated data")}</p>
                     )}
                   </div>
                 ) : (
@@ -734,6 +745,18 @@ export default function ProjectStudio() {
                     <Button variant="outline" className="w-full" onClick={handleAnalyze} disabled={!!activeJobId}>
                       <Zap className="w-4 h-4 mr-2" /> {t("Re-analyze")}
                     </Button>
+
+                    {Object.keys(modelVersions).length > 0 && (
+                      <div className="daw-panel p-3 space-y-1">
+                        <h4 className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-widest mb-2">{t("Models")}</h4>
+                        {Object.entries(modelVersions).map(([model, version]) => (
+                          <div key={model} className="flex justify-between text-[10px]" dir="ltr">
+                            <span className="text-muted-foreground">{model}</span>
+                            <span className="text-primary/70 font-mono">{String(version)}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </>
                 )}
               </TabsContent>
@@ -777,6 +800,22 @@ export default function ProjectStudio() {
                     <Slider defaultValue={[50]} max={100} dir="ltr" />
                   </div>
                 </div>
+
+                {arrangement?.arrangementPlan?.harmonicPlan && (
+                  <div className="daw-panel p-4 space-y-2">
+                    <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Harmonic Plan")}</h4>
+                    <p className="text-xs font-mono text-white/70 leading-relaxed" dir="ltr">
+                      {Array.isArray(arrangement.arrangementPlan.harmonicPlan)
+                        ? arrangement.arrangementPlan.harmonicPlan.join(" → ")
+                        : String(arrangement.arrangementPlan.harmonicPlan)}
+                    </p>
+                    {arrangement.arrangementPlan.profileUsed && (
+                      <p className="text-[10px] text-muted-foreground">
+                        {t("Profile")}: <span className="text-primary/80">{arrangement.arrangementPlan.profileUsed}</span>
+                      </p>
+                    )}
+                  </div>
+                )}
 
               </TabsContent>
 

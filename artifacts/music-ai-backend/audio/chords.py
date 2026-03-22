@@ -175,9 +175,26 @@ def analyze_chords(y: np.ndarray, sr: int, rhythm: dict, key: dict) -> Dict[str,
     # Build lead sheet string (chord names per measure)
     lead_sheet = " | ".join(lead_sheet_parts[:16]) if lead_sheet_parts else ""
 
-    logger.info(f"Detected {len(chord_events)} chord events")
+    avg_confidence = float(np.mean([c["confidence"] for c in chord_events])) if chord_events else 0.0
+    low_conf_count = sum(1 for c in chord_events if c["confidence"] < 0.5)
+
+    warnings = []
+    if not chord_events:
+        warnings.append("No chord events detected — audio may be non-harmonic or too short")
+    elif avg_confidence < 0.5:
+        warnings.append(f"Low average chord confidence ({avg_confidence:.0%}) — harmonic content may be sparse")
+    if low_conf_count > len(chord_events) * 0.4:
+        warnings.append(f"{low_conf_count}/{len(chord_events)} chords have low confidence — consider manual review")
+
+    alternatives = list({c["alternatives"][0] for c in chord_events if c.get("alternatives")} )[:5]
+
+    logger.info(f"Detected {len(chord_events)} chord events, avg confidence={avg_confidence:.2f}")
 
     return {
         "chords": chord_events,
         "leadSheet": lead_sheet,
+        "confidence": round(avg_confidence, 3),
+        "alternatives": alternatives,
+        "warnings": warnings,
+        "model": "chroma-cqt-template",
     }

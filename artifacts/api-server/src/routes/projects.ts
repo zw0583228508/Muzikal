@@ -139,9 +139,10 @@ function serializeJob(j: typeof jobsTable.$inferSelect) {
 // Returns the current MOCK_MODE flag so the frontend can display a banner on load.
 router.get("/mock-mode", (_req, res) => {
   res.json({
+    isMock: MOCK_MODE,
     mockMode: MOCK_MODE,
     pipelineVersion: PIPELINE_VERSION,
-    modelVersions: MOCK_MODE ? null : MODEL_VERSIONS,
+    modelVersions: MODEL_VERSIONS,
     message: MOCK_MODE
       ? "Running in MOCK MODE — results are simulated (dev only)"
       : "Running against live Python backend",
@@ -220,7 +221,7 @@ router.post("/:id/analyze", async (req, res) => {
   if (projectId === null) return;
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
-  if (!project.audioFilePath) { res.status(400).json({ error: "No audio file uploaded yet" }); return; }
+  if (!project.audioFilePath && !MOCK_MODE) { res.status(400).json({ error: "No audio file uploaded yet" }); return; }
 
   const jobId = `analysis-${uuidv4()}`;
   await db.insert(jobsTable).values({ jobId, projectId, type: "analysis", status: "queued", progress: 0, currentStep: "Queued" });
@@ -229,18 +230,22 @@ router.post("/:id/analyze", async (req, res) => {
   // Fire-and-forget: call Python or simulate
   (async () => {
     try {
-      await callPythonBackend("/analyze", {
-        job_id: jobId,
-        project_id: projectId,
-        audio_file_path: project.audioFilePath,
-        pipeline_version: PIPELINE_VERSION,
-      });
-    } catch (err) {
-      if (!MOCK_MODE) {
-        await failJobNoPython(jobId, projectId, err);
-      } else {
-        console.warn("[MOCK] Python backend unavailable, running simulated analysis");
+      if (MOCK_MODE) {
         await runSimulatedAnalysis(jobId, projectId);
+      } else {
+        await callPythonBackend("/analyze", {
+          job_id: jobId,
+          project_id: projectId,
+          audio_file_path: project.audioFilePath,
+          pipeline_version: PIPELINE_VERSION,
+        });
+      }
+    } catch (err) {
+      console.error("[analyze] pipeline error:", err);
+      try {
+        await failJobNoPython(jobId, projectId, err);
+      } catch (failErr) {
+        console.error("[analyze] failed to mark job as failed (project may have been deleted):", failErr);
       }
     }
   })();
@@ -801,7 +806,7 @@ async function runSimulatedArrangement(jobId: string, projectId: number, styleId
     totalDurationSeconds: totalDuration,
     isCurrent: true,
     versionNumber: nextVersion,
-    generationMetadata: { isMock: true, bpm: totalDuration, style: styleId },
+    generationMetadata: { isMock: true, bpm, style: styleId },
   });
 
   await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Arrangement complete", isMock: true });

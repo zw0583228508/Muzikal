@@ -143,9 +143,29 @@ def analyze_melody(y: np.ndarray, sr: int, rhythm: dict) -> Dict[str, Any]:
     # Infer harmony from melody
     inferred_harmony = infer_harmony_from_melody(notes)
 
-    logger.info(f"Extracted {len(notes)} melody notes")
+    voiced_ratio = float(np.mean(voiced_flag)) if len(voiced_flag) > 0 else 0.0
+    confidence = round(min(1.0, voiced_ratio * 1.5), 3)
+
+    warnings = []
+    if len(notes) < 5:
+        warnings.append("Very few melody notes detected — audio may be purely rhythmic or percussive")
+    if voiced_ratio < 0.1:
+        warnings.append(f"Low voiced ratio ({voiced_ratio:.0%}) — melody extraction unreliable")
+    if voiced_ratio > 0.9:
+        warnings.append("Very high voiced ratio — may include non-melodic harmonic content")
+
+    pitch_range = (max(n["pitch"] for n in notes) - min(n["pitch"] for n in notes)) if notes else 0
+    alternatives = [inferred_harmony[0]] if inferred_harmony else []
+
+    logger.info(f"Extracted {len(notes)} melody notes, voiced_ratio={voiced_ratio:.2f}, confidence={confidence}")
 
     return {
         "notes": notes,
         "inferredHarmony": inferred_harmony,
+        "confidence": confidence,
+        "alternatives": alternatives,
+        "warnings": warnings,
+        "voicedRatio": round(voiced_ratio, 3),
+        "pitchRangeSemitones": pitch_range,
+        "model": "pyin",
     }

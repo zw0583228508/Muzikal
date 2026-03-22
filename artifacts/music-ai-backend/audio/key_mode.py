@@ -45,6 +45,23 @@ def chroma_to_key(chroma_vector: np.ndarray):
     return best_key, best_mode, max(0.0, min(1.0, (best_score + 1) / 2))
 
 
+def chroma_to_key_top_k(chroma_vector: np.ndarray, k: int = 3) -> List[Dict]:
+    """Return top-k key candidates with scores."""
+    scores = []
+    for i, note in enumerate(NOTE_NAMES):
+        rolled_major = np.roll(MAJOR_PROFILE, i)
+        rolled_minor = np.roll(MINOR_PROFILE, i)
+        score_major = float(np.corrcoef(chroma_vector, rolled_major)[0, 1])
+        score_minor = float(np.corrcoef(chroma_vector, rolled_minor)[0, 1])
+        scores.append((note, "major", score_major))
+        scores.append((note + "m", "minor", score_minor))
+    scores.sort(key=lambda x: x[2], reverse=True)
+    return [
+        {"key": s[0], "mode": s[1], "score": round(max(0.0, min(1.0, (s[2] + 1) / 2)), 3)}
+        for s in scores[:k]
+    ]
+
+
 def analyze_key(y: np.ndarray, sr: int) -> Dict[str, Any]:
     """
     Full key and mode analysis with modulation detection.
@@ -53,7 +70,6 @@ def analyze_key(y: np.ndarray, sr: int) -> Dict[str, Any]:
     logger.info("Running key analysis...")
 
     hop_length = 512
-    n_fft = 4096
 
     # Compute CQT-based chroma for better pitch accuracy
     chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length, n_chroma=12)
@@ -62,10 +78,13 @@ def analyze_key(y: np.ndarray, sr: int) -> Dict[str, Any]:
     global_chroma = chroma.mean(axis=1)
     global_key, global_mode, confidence = chroma_to_key(global_chroma)
 
+    # Top-k alternative keys
+    top_keys = chroma_to_key_top_k(global_chroma, k=4)
+    alternatives = [k["key"] for k in top_keys if k["key"] != global_key][:3]
+
     # Sliding window for modulation detection
-    duration = len(y) / sr
-    window_size = max(int(sr * 8 / hop_length), 32)  # 8 second window
-    step_size = max(int(sr * 4 / hop_length), 16)    # 4 second step
+    window_size = max(int(sr * 8 / hop_length), 32)
+    step_size = max(int(sr * 4 / hop_length), 16)
 
     modulations = []
     prev_key = global_key
@@ -84,11 +103,22 @@ def analyze_key(y: np.ndarray, sr: int) -> Dict[str, Any]:
             })
             prev_key = key
 
+    warnings = []
+    if confidence < 0.55:
+        warnings.append(f"Low key confidence ({confidence:.0%}) — chromatic or atonal content possible")
+    if len(modulations) > 3:
+        warnings.append(f"{len(modulations)} modulations detected — complex harmonic structure")
+    if len(modulations) == 0 and confidence < 0.6:
+        warnings.append("Key detection uncertain — consider verifying manually")
+
     logger.info(f"Key: {global_key} {global_mode}, confidence={confidence:.2f}, modulations={len(modulations)}")
 
     return {
         "globalKey": global_key,
         "mode": global_mode,
         "confidence": round(confidence, 3),
+        "alternatives": alternatives,
+        "warnings": warnings,
         "modulations": modulations,
+        "model": "chroma-cqt-ks",
     }

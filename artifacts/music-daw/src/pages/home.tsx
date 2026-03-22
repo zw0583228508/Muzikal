@@ -7,8 +7,11 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, Music2, Clock, Calendar, Activity, Loader2 } from "lucide-react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
+import { useTranslation } from "react-i18next";
+import { LanguageToggle } from "@/components/language-toggle";
 
 export default function Home() {
+  const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { data: projects, isLoading } = useListProjects();
@@ -31,9 +34,9 @@ export default function Home() {
   });
 
   const handleCreate = () => {
-    const name = prompt("Project Name:", "New Track");
+    const name = prompt(t("Project Name:"), t("New Track"));
     if (!name) return;
-    createMutation.mutate({ data: { name, description: "A new masterpiece" } });
+    createMutation.mutate({ data: { name, description: t("A new masterpiece") } });
   };
 
   const getStatusColor = (status: Project['status']) => {
@@ -68,14 +71,17 @@ export default function Home() {
               </div>
             </div>
             <div>
-              <h1 className="text-3xl md:text-5xl font-display font-bold text-white text-glow">MusicAI Studio</h1>
-              <p className="text-muted-foreground mt-1">Intelligence & Generation DAW</p>
+              <h1 className="text-3xl md:text-5xl font-display font-bold text-white text-glow">{t("MusicAI Studio")}</h1>
+              <p className="text-muted-foreground mt-1">{t("Intelligence & Generation DAW")}</p>
             </div>
           </div>
-          <Button size="lg" onClick={handleCreate} disabled={createMutation.isPending} className="group">
-            {createMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Plus className="mr-2 h-5 w-5 group-hover:scale-125 transition-transform" />}
-            New Project
-          </Button>
+          <div className="flex items-center gap-4">
+            <LanguageToggle />
+            <Button size="lg" onClick={handleCreate} disabled={createMutation.isPending} className="group">
+              {createMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Plus className="mr-2 h-5 w-5 group-hover:scale-125 transition-transform" />}
+              {t("New Project")}
+            </Button>
+          </div>
         </header>
 
         {isLoading ? (
@@ -91,9 +97,9 @@ export default function Home() {
             <div className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-6">
               <Music2 className="w-10 h-10 text-primary" />
             </div>
-            <h2 className="text-2xl font-display font-bold mb-4">No Projects Yet</h2>
-            <p className="text-muted-foreground mb-8">Start your journey by creating a new project. You can upload audio for analysis, or start generating from scratch.</p>
-            <Button size="lg" variant="glow" onClick={handleCreate}>Create Your First Project</Button>
+            <h2 className="text-2xl font-display font-bold mb-4">{t("No Projects Yet")}</h2>
+            <p className="text-muted-foreground mb-8">{t("Start your journey by creating a new project. You can upload audio for analysis, or start generating from scratch.")}</p>
+            <Button size="lg" variant="glow" onClick={handleCreate}>{t("Create Your First Project")}</Button>
           </motion.div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -109,18 +115,18 @@ export default function Home() {
                     <div className="flex justify-between items-start mb-4">
                       <h3 className="text-xl font-bold text-white group-hover:text-primary transition-colors">{project.name}</h3>
                       <Badge variant={getStatusColor(project.status)} className="capitalize">
-                        {project.status === 'done' ? 'Ready' : project.status}
+                        {project.status === 'done' ? t('Ready') : t(project.status)}
                       </Badge>
                     </div>
                     
-                    <div className="space-y-3 mb-6">
+                    <div className="space-y-3 mb-6" dir="ltr">
                       <div className="flex items-center text-sm text-muted-foreground">
                         <Clock className="w-4 h-4 mr-2" />
-                        {project.audioDurationSeconds ? `${Math.round(project.audioDurationSeconds)}s` : 'No audio'}
+                        {project.audioDurationSeconds ? `${Math.round(project.audioDurationSeconds)}s` : t('No audio')}
                       </div>
                       <div className="flex items-center text-sm text-muted-foreground">
                         <Activity className="w-4 h-4 mr-2" />
-                        {project.audioFileName || 'Empty timeline'}
+                        {project.audioFileName || t('Empty timeline')}
                       </div>
                       <div className="flex items-center text-sm text-muted-foreground">
                         <Calendar className="w-4 h-4 mr-2" />
@@ -131,7 +137,7 @@ export default function Home() {
                   
                   <div className="px-6 py-4 border-t border-white/5 flex justify-between items-center bg-black/20">
                     <Button variant="ghost" size="sm" asChild>
-                      <Link href={`/project/${project.id}`} className="text-primary hover:text-primary/80">Open Studio</Link>
+                      <Link href={`/project/${project.id}`} className="text-primary hover:text-primary/80">{t("Open Studio")}</Link>
                     </Button>
                     <Button 
                       variant="ghost" 
@@ -139,7 +145,7 @@ export default function Home() {
                       className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
                       onClick={(e) => {
                         e.stopPropagation();
-                        if (confirm('Delete project?')) {
+                        if (confirm(t('Delete project?'))) {
                           deleteMutation.mutate({ projectId: project.id });
                         }
                       }}

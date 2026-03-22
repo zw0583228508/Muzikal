@@ -291,7 +291,7 @@ router.get("/:id/arrangement", async (req, res) => {
 // POST /api/projects/:id/export
 router.post("/:id/export", async (req, res) => {
   const projectId = parseInt(req.params.id);
-  const { formats } = req.body;
+  const { formats = ["midi"] } = req.body;
 
   const jobId = `export-${uuidv4()}`;
 
@@ -304,8 +304,15 @@ router.post("/:id/export", async (req, res) => {
     currentStep: "Queued",
   });
 
-  // Simulate export process
-  runSimulatedExport(jobId, projectId, formats);
+  // Try Python backend first, fall back to simulation
+  (async () => {
+    try {
+      await callPythonBackend("/export", { job_id: jobId, project_id: projectId, formats });
+    } catch (err) {
+      console.warn("[export] Python backend unavailable, using simulation:", (err as Error).message);
+      runSimulatedExport(jobId, projectId, formats);
+    }
+  })();
 
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.jobId, jobId));
   res.json({

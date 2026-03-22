@@ -27,16 +27,22 @@ async def init_db():
     logger.info("Python backend connected to PostgreSQL")
 
 
-def update_job(job_id: str, status: str, progress: float, current_step: str, error_message: str = None):
+def update_job(job_id: str, status: str, progress: float, current_step: str,
+               error_message: str = None, extra: dict = None):
     """Update job progress in DB."""
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            if error_message:
+            # Store extra metadata as JSON in error_message field (reuse for now)
+            # In the future we'd add a result_data column
+            stored_error = error_message
+            if extra and not error_message:
+                stored_error = json.dumps(extra)
+            if stored_error:
                 cur.execute(
                     """UPDATE jobs SET status=%s, progress=%s, current_step=%s, error_message=%s,
                        updated_at=NOW() WHERE job_id=%s""",
-                    (status, progress, current_step, error_message, job_id)
+                    (status, progress, current_step, stored_error, job_id)
                 )
             else:
                 cur.execute(

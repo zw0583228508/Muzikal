@@ -95,3 +95,10 @@ class FullAnalysis(BaseModel):
     melody: MelodyAnalysis
     structure: StructureAnalysis
     waveform_data: List[float]
+
+
+class ExportRequest(BaseModel):
+    job_id: str
+    project_id: int
+    formats: List[str] = ["midi"]  # midi, musicxml, pdf, wav, flac, mp3, stems
+    output_dir: Optional[str] = None

@@ -13,9 +13,11 @@ from typing import Optional, List
 from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
 
-from api.schemas import AnalyzeRequest, ArrangeRequest
+from api.schemas import AnalyzeRequest, ArrangeRequest, ExportRequest
 from api.database import update_job, update_project_status, save_analysis_result, save_arrangement
 from orchestration.arranger import generate_arrangement, STYLES
+
+EXPORTS_BASE_DIR = os.environ.get("EXPORTS_DIR", "/tmp/musicai_exports")
 
 logger = logging.getLogger(__name__)
 
@@ -151,3 +153,83 @@ def run_arrangement_pipeline(job_id: str, project_id: int, style_id: str,
         logger.exception(f"Arrangement failed for job {job_id}: {e}")
         update_job(job_id, "failed", 0, "Arrangement failed", str(e))
         update_project_status(project_id, "error")
+
+
+# ── Export Endpoint ──────────────────────────────────────────────────────────
+
+@router.post("/export")
+async def start_export(request: ExportRequest, background_tasks: BackgroundTasks):
+    """Start export pipeline in background."""
+    background_tasks.add_task(
+        run_export_pipeline,
+        request.job_id,
+        request.project_id,
+        request.formats,
+        request.output_dir,
+    )
+    return {"jobId": request.job_id, "status": "queued"}
+
+
+def run_export_pipeline(job_id: str, project_id: int, formats: List[str],
+                         custom_output_dir: Optional[str]):
+    """Run export pipeline in background."""
+    from api.database import get_db_connection
+    import json
+
+    try:
+        update_job(job_id, "running", 5, "Preparing export")
+
+        output_dir = custom_output_dir or os.path.join(EXPORTS_BASE_DIR, f"project_{project_id}")
+        os.makedirs(output_dir, exist_ok=True)
+
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                # Load analysis
+                cur.execute(
+                    "SELECT rhythm_data, key_data, chords_data, melody_data, structure_data FROM analysis_results WHERE project_id=%s",
+                    (project_id,)
+                )
+                analysis_row = cur.fetchone()
+
+                # Load arrangement
+                cur.execute(
+                    "SELECT tracks FROM arrangements WHERE project_id=%s ORDER BY id DESC LIMIT 1",
+                    (project_id,)
+                )
+                arr_row = cur.fetchone()
+        finally:
+            conn.close()
+
+        if not analysis_row:
+            raise ValueError(f"No analysis found for project {project_id}")
+
+        analysis = {
+            "rhythm": analysis_row["rhythm_data"],
+            "key": analysis_row["key_data"],
+            "chords": analysis_row["chords_data"],
+            "melody": analysis_row["melody_data"],
+            "structure": analysis_row["structure_data"],
+        }
+
+        arrangement = {}
+        if arr_row:
+            tracks = arr_row["tracks"]
+            if isinstance(tracks, str):
+                tracks = json.loads(tracks)
+            arrangement = {"tracks": tracks}
+
+        update_job(job_id, "running", 20, "Exporting files")
+
+        from audio.export_engine import run_export
+        results = run_export(project_id, analysis, arrangement, formats, output_dir)
+
+        update_job(job_id, "completed", 100, "Export complete", extra={
+            "exportedFiles": results,
+            "outputDir": output_dir,
+        })
+        logger.info(f"Export complete for project {project_id}: {list(results.keys())}")
+
+    except Exception as e:
+        logger.exception(f"Export failed for job {job_id}: {e}")
+        update_job(job_id, "failed", 0, "Export failed", str(e))

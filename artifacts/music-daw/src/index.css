@@ -1,9 +1,9 @@
-@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700&family=Rajdhani:wght@400;500;600;700&family=Noto+Sans+Hebrew:wght@400;500;600;700&display=swap');
 @import "tailwindcss";
 
 @theme inline {
-  --font-sans: 'Figtree', sans-serif;
-  --font-display: 'Rajdhani', sans-serif;
+  --font-sans: 'Figtree', 'Noto Sans Hebrew', sans-serif;
+  --font-display: 'Rajdhani', 'Noto Sans Hebrew', sans-serif;
 
   --color-background: hsl(240 10% 4%);
   --color-foreground: hsl(0 0% 95%);

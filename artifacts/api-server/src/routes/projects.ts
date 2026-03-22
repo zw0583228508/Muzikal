@@ -6,6 +6,7 @@ import { eq, desc, and } from "drizzle-orm";
 import { db, projectsTable, jobsTable, analysisResultsTable, arrangementsTable, projectFilesTable } from "@workspace/db";
 import { v4 as uuidv4 } from "uuid";
 import { broadcastJobUpdate } from "../lib/websocket";
+import { parseProjectId } from "../lib/validate";
 
 const router: IRouter = Router();
 
@@ -97,7 +98,10 @@ function serializeProject(p: typeof projectsTable.$inferSelect) {
     audioFileName: p.audioFileName,
     audioFilePath: p.audioFilePath,
     audioDurationSeconds: p.audioDurationSeconds,
-    userCorrections: (p as unknown as Record<string, unknown>).userCorrections ?? null,
+    audioSampleRate: p.audioSampleRate,
+    audioChannels: p.audioChannels,
+    audioCodec: p.audioCodec,
+    userCorrections: p.userCorrections ?? null,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
   };
@@ -111,8 +115,10 @@ function serializeJob(j: typeof jobsTable.$inferSelect) {
     status: j.status,
     progress: j.progress,
     currentStep: j.currentStep,
-    isMock: (j as unknown as Record<string, unknown>).isMock ?? false,
-    errorMessage: (j as unknown as Record<string, unknown>).errorMessage ?? null,
+    isMock: j.isMock ?? false,
+    errorMessage: j.errorMessage ?? null,
+    resultData: j.resultData ?? null,
+    warnings: j.warnings ?? null,
     createdAt: j.createdAt,
   };
 }
@@ -138,7 +144,8 @@ router.post("/", async (req, res) => {
 
 // GET /api/projects/:id
 router.get("/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseProjectId(req, res);
+  if (id === null) return;
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
   res.json(serializeProject(project));
@@ -146,7 +153,8 @@ router.get("/:id", async (req, res) => {
 
 // DELETE /api/projects/:id
 router.delete("/:id", async (req, res) => {
-  const id = parseInt(req.params.id);
+  const id = parseProjectId(req, res);
+  if (id === null) return;
   await db.delete(projectsTable).where(eq(projectsTable.id, id));
   res.status(204).send();
 });
@@ -155,7 +163,8 @@ router.delete("/:id", async (req, res) => {
 
 // POST /api/projects/:id/upload
 router.post("/:id/upload", upload.single("file"), async (req, res) => {
-  const projectId = parseInt(req.params.id);
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
   const file = req.file;
   if (!file) { res.status(400).json({ error: "No file provided" }); return; }
 
@@ -182,7 +191,8 @@ router.post("/:id/upload", upload.single("file"), async (req, res) => {
 
 // POST /api/projects/:id/analyze
 router.post("/:id/analyze", async (req, res) => {
-  const projectId = parseInt(req.params.id);
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
   if (!project.audioFilePath) { res.status(400).json({ error: "No audio file uploaded yet" }); return; }
@@ -216,7 +226,8 @@ router.post("/:id/analyze", async (req, res) => {
 
 // GET /api/projects/:id/analysis
 router.get("/:id/analysis", async (req, res) => {
-  const projectId = parseInt(req.params.id);
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
   const [result] = await db.select().from(analysisResultsTable).where(eq(analysisResultsTable.projectId, projectId));
   if (!result) { res.status(404).json({ error: "Analysis not ready" }); return; }
   res.json({
@@ -227,7 +238,13 @@ router.get("/:id/analysis", async (req, res) => {
     melody: result.melodyData,
     structure: result.structureData,
     waveformData: result.waveformData,
-    pipelineVersion: PIPELINE_VERSION,
+    vocals: result.vocalsData,
+    sourceSeparation: result.sourceSeparationData,
+    tonalTimeline: result.tonalTimelineData,
+    confidenceData: result.confidenceData,
+    pipelineVersion: result.pipelineVersion ?? PIPELINE_VERSION,
+    createdAt: result.createdAt,
+    updatedAt: result.updatedAt,
   });
 });
 
@@ -235,7 +252,8 @@ router.get("/:id/analysis", async (req, res) => {
 
 // POST /api/projects/:id/corrections  — store user overrides for analysis data
 router.post("/:id/corrections", async (req, res) => {
-  const projectId = parseInt(req.params.id);
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
@@ -275,7 +293,8 @@ router.post("/:id/corrections", async (req, res) => {
 
 // POST /api/projects/:id/arrangement
 router.post("/:id/arrangement", async (req, res) => {
-  const projectId = parseInt(req.params.id);
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
   const { styleId, instruments, density, humanize, tempoFactor } = req.body;
 
   const jobId = `arrangement-${uuidv4()}`;
@@ -308,24 +327,50 @@ router.post("/:id/arrangement", async (req, res) => {
   res.json(serializeJob(job));
 });
 
-// GET /api/projects/:id/arrangement
+// GET /api/projects/:id/arrangement  — returns the current (latest) arrangement version
 router.get("/:id/arrangement", async (req, res) => {
-  const projectId = parseInt(req.params.id);
-  const [result] = await db.select().from(arrangementsTable).where(eq(arrangementsTable.projectId, projectId));
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const [result] = await db.select().from(arrangementsTable)
+    .where(and(eq(arrangementsTable.projectId, projectId), eq(arrangementsTable.isCurrent, true)))
+    .orderBy(desc(arrangementsTable.versionNumber))
+    .limit(1);
   if (!result) { res.status(404).json({ error: "Arrangement not ready" }); return; }
   res.json({
     projectId: result.projectId,
+    versionNumber: result.versionNumber,
     styleId: result.styleId,
     tracks: result.tracksData,
     totalDurationSeconds: result.totalDurationSeconds,
+    arrangementPlan: result.arrangementPlan,
+    generationMetadata: result.generationMetadata,
+    createdAt: result.createdAt,
   });
+});
+
+// GET /api/projects/:id/arrangement/history  — all arrangement versions
+router.get("/:id/arrangement/history", async (req, res) => {
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const versions = await db.select().from(arrangementsTable)
+    .where(eq(arrangementsTable.projectId, projectId))
+    .orderBy(desc(arrangementsTable.versionNumber));
+  res.json(versions.map(v => ({
+    id: v.id,
+    versionNumber: v.versionNumber,
+    isCurrent: v.isCurrent,
+    styleId: v.styleId,
+    totalDurationSeconds: v.totalDurationSeconds,
+    createdAt: v.createdAt,
+  })));
 });
 
 // ─── Audio stream ─────────────────────────────────────────────────────────────
 
 // GET /api/projects/:id/audio  (HTTP range-request streaming)
 router.get("/:id/audio", async (req, res) => {
-  const projectId = parseInt(req.params.id);
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) return res.status(404).json({ error: "Project not found" });
   if (!project.audioFilePath || !fs.existsSync(project.audioFilePath)) {
@@ -364,7 +409,8 @@ router.get("/:id/audio", async (req, res) => {
 
 // GET /api/projects/:id/files
 router.get("/:id/files", async (req, res) => {
-  const projectId = parseInt(req.params.id);
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
   const files = await db.select().from(projectFilesTable)
     .where(eq(projectFilesTable.projectId, projectId))
     .orderBy(desc(projectFilesTable.createdAt));
@@ -376,7 +422,8 @@ router.get("/:id/files", async (req, res) => {
 
 // GET /api/projects/:id/files/:filename/download
 router.get("/:id/files/:filename/download", async (req, res) => {
-  const projectId = parseInt(req.params.id);
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
   const { filename } = req.params;
   const [file] = await db.select().from(projectFilesTable).where(
     and(eq(projectFilesTable.projectId, projectId), eq(projectFilesTable.fileName, filename))
@@ -401,7 +448,8 @@ router.get("/:id/files/:filename/download", async (req, res) => {
 
 // POST /api/projects/:id/render
 router.post("/:id/render", async (req, res) => {
-  const projectId = parseInt(req.params.id);
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
   const { formats = ["wav"] } = req.body;
 
   const jobId = `render-${uuidv4()}`;
@@ -444,7 +492,8 @@ router.post("/:id/render", async (req, res) => {
 
 // POST /api/projects/:id/export
 router.post("/:id/export", async (req, res) => {
-  const projectId = parseInt(req.params.id);
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
   const { formats = ["midi"] } = req.body;
 
   const jobId = `export-${uuidv4()}`;

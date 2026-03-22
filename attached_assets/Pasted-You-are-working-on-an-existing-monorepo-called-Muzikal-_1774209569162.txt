@@ -1,0 +1,649 @@
+You are working on an existing monorepo called Muzikal.
+
+Your task is NOT to redesign it from scratch in theory.
+Your task is to take the CURRENT repository and upgrade it into a real production-grade AI music platform in the correct order.
+
+You must work from the current codebase exactly as it exists now.
+
+====================================================
+MISSION
+====================================================
+
+Take the existing Muzikal project and transform it from a strong prototype / partial production shell into a reliable, modular, technically correct, musically intelligent platform.
+
+Do not add flashy new features before fixing the architecture.
+Do not fake success.
+Do not silently simulate completed jobs.
+Do not leave database mismatches.
+Do not keep duplicate style definitions across services.
+Do not treat preview rendering as final-quality rendering.
+Do not store result JSON inside error fields.
+
+Work in the exact order below.
+
+====================================================
+PHASE 1 — STABILIZE THE CURRENT FOUNDATION
+====================================================
+
+1. Audit the current monorepo and preserve what is already good:
+- React DAW frontend
+- Express API server
+- FastAPI Python backend
+- PostgreSQL via Drizzle
+- OpenAPI-based typed API layer
+- existing music analysis / arrangement / export structure
+
+2. Do NOT rebuild from scratch unless absolutely necessary.
+Refactor and harden the existing system.
+
+3. First produce a short internal implementation map:
+- which files are already usable
+- which files are placeholders
+- which files are unsafe
+- which files are production blockers
+
+====================================================
+PHASE 2 — FIX CURRENT PRODUCTION BLOCKERS FIRST
+====================================================
+
+Fix these issues before building anything new:
+
+1. Remove silent fake-success paths.
+Current behavior:
+- if Python backend fails, the Node layer may run mock flows when MOCK_MODE is enabled
+Required fix:
+- mock mode must be explicit and isolated
+- every mock result must be marked mock in DB, API responses, and UI
+- production mode must never silently fall back to simulation
+- UI must clearly show mock banner and mock job label
+- real jobs and mock jobs must never be mixed
+
+2. Replace improper use of jobs.error_message for result metadata.
+Current issue:
+- Python backend stores extra result metadata in error_message
+Required fix:
+- add proper DB columns:
+  - result_data JSONB
+  - warnings JSONB
+  - artifacts_data JSONB
+  - processing_metadata JSONB
+- update Node and Python code to use these fields correctly
+- error_message must contain only real errors
+
+3. Fix arrangement table conflict logic.
+Current issue:
+- Python save_arrangement uses ON CONFLICT(project_id)
+- arrangements.project_id is not unique
+Required fix:
+- decide the intended model:
+  A. one arrangement per project → add unique constraint on project_id
+  B. multiple arrangements per project → remove ON CONFLICT(project_id) logic and version arrangements properly
+I want the better long-term design:
+- support multiple arrangements per project
+- add arrangement revisioning
+- remove invalid ON CONFLICT(project_id)
+
+4. Add strict route validation.
+Current issue:
+- many routes use parseInt(req.params.id) with weak validation
+Required fix:
+- validate params, body, and query everywhere
+- reject invalid IDs with proper 400 errors
+- never allow NaN to flow into DB queries
+- use a shared validation layer
+
+5. Persist all analysis outputs.
+Current issue:
+- analysis results currently save rhythm/key/chords/melody/structure/waveform
+- but not all computed data is fully persisted
+Required fix:
+- extend analysis_results to store:
+  - vocals_data
+  - source_separation_data
+  - tonal_timeline_data
+  - confidence_data
+  - pipeline_version
+  - model_versions
+  - processing_metadata
+
+6. Fix project metadata persistence.
+Required fix:
+- store and update real:
+  - audio duration
+  - sample rate
+  - channels
+  - file hash
+  - normalization metadata
+- do not leave audioDurationSeconds mostly unused
+
+7. Clean pyproject.toml and Python dependency definition.
+Current issue:
+- pyproject contains huge unrelated tool.uv.sources clutter
+Required fix:
+- reduce pyproject to only real project dependencies
+- move optional heavy models into documented extras if needed
+- ensure reproducible installs
+
+====================================================
+PHASE 3 — UNIFY CONFIGURATION AND SOURCE OF TRUTH
+====================================================
+
+1. Create one single source of truth for musical styles.
+Current issue:
+- styles are duplicated across Node and Python
+Required fix:
+- move style definitions into one shared config source
+- recommended location:
+  /configs/styles/
+    genres.yaml
+    arranger_profiles.yaml
+- both Node and Python must load from the same source
+- frontend style selector must consume styles from API, not hardcoded duplicates
+
+2. Create one single source of truth for versions.
+Track:
+- pipeline version
+- analysis engine version
+- chord model version
+- melody model version
+- structure model version
+- render engine version
+- style profile version
+- arranger profile version
+
+3. Create one shared schema contract for:
+- projects
+- jobs
+- analysis results
+- arrangements
+- exports
+- render results
+- corrections
+- revisions
+
+====================================================
+PHASE 4 — REPLACE THE CURRENT PSEUDO-QUEUE WITH A REAL JOB SYSTEM
+====================================================
+
+Current issue:
+- FastAPI BackgroundTasks is not a real durable queue
+Required fix:
+- API layer should only create jobs and enqueue them
+- worker layer must process them
+- jobs must survive API restarts
+- jobs must support retries for recoverable failures
+- jobs must support cancellation and timeout handling
+
+Required architecture:
+- Express API creates DB job + queue message
+- dedicated worker process consumes jobs
+- Python processing runs in worker context
+- status updates written back to DB
+- WebSocket broadcasts state changes
+
+Job states:
+- pending
+- queued
+- running
+- completed
+- failed
+- cancelled
+
+Optional step states:
+- preprocessing
+- separation
+- rhythm
+- key
+- chords
+- melody
+- structure
+- arrangement
+- orchestration
+- rendering
+- exporting
+
+====================================================
+PHASE 5 — HARDEN THE AUDIO INGESTION LAYER
+====================================================
+
+Build a proper ingestion pipeline around the current upload flow.
+
+Required:
+- validate file integrity
+- probe metadata with ffmpeg/ffprobe
+- compute checksum
+- normalize to internal canonical format
+- store sample rate, channels, duration, codec, bitrate if relevant
+- trim leading/trailing silence when requested
+- generate waveform data once and cache it
+- generate spectrogram preview data once and cache it
+
+Reject or warn on:
+- empty files
+- corrupted files
+- unreadable codecs
+- extremely short files
+- clipped or suspicious input
+
+Persist all ingestion metadata in DB.
+
+====================================================
+PHASE 6 — IMPROVE SOURCE SEPARATION AND STORE EVERYTHING
+====================================================
+
+Keep Demucs as baseline, but harden the implementation.
+
+Required:
+- separate into stems
+- compute stem-level diagnostics
+- detect low-confidence separation
+- store stem file paths in project_files or a dedicated stems table
+- store source separation metadata in analysis_results
+- expose separation results to the frontend
+
+Do not run separation and then lose the metadata.
+
+====================================================
+PHASE 7 — UPGRADE ANALYSIS ENGINES IN THE CURRENT PYTHON BACKEND
+====================================================
+
+Take the existing analyzer structure and improve each engine without breaking modularity.
+
+A. Rhythm engine
+- keep current rhythm pipeline but improve confidence reporting
+- add beat stability score
+- add alternate tempo candidates when ambiguous
+- add tempo-map support instead of only one BPM when needed
+
+B. Key/mode engine
+- keep current tonal analysis but add local key timeline
+- support mode-aware output more honestly
+- track modulations explicitly
+
+C. Chord engine
+Current state:
+- template matching baseline
+Required upgrade:
+- keep baseline but add better segmentation and bass-informed logic
+- improve slash-chord and inversion handling
+- preserve ambiguity instead of flattening everything
+- output:
+  - as_played_chords
+  - optimized_chords
+  - roman_numerals
+  - confidence
+  - alternatives
+
+D. Melody engine
+- improve note segmentation quality
+- add confidence
+- add phrase-level structure
+- support vocal-only mode explicitly
+
+E. Vocal engine
+- strengthen F0 contour extraction path
+- add note events
+- add vibrato and phrasing metadata
+- store everything
+
+F. Structure engine
+- improve section confidence
+- expose repeated-section linkage
+- add clearer section naming and fallback behavior
+
+====================================================
+PHASE 8 — ADD PIPELINE VERSIONING AND REPRODUCIBILITY
+====================================================
+
+Every analysis result must store:
+- pipeline_version
+- model_versions
+- processing_metadata
+- created_from_audio_hash
+- created_from_file_path
+- sample rate used
+- analysis timestamp
+
+Same for arrangement, render, and export results.
+
+The system must be able to explain:
+“this output was created with these engine versions.”
+
+====================================================
+PHASE 9 — REBUILD THE ARRANGEMENT LAYER CORRECTLY
+====================================================
+
+Take the current arranger and turn it into a real layered engine.
+
+Required separation:
+1. arrangement planning
+2. orchestration
+3. performance humanization
+4. rendering
+
+Do not keep them too entangled.
+
+Arrangement engine must output a structured arrangement plan:
+- section map
+- harmonic plan
+- instrumentation by section
+- density curve
+- transitions
+- intro type
+- outro type
+- modulation plan
+- energy curve
+
+Then orchestration must consume that plan.
+
+Support arrangement revisions:
+- a project can have multiple arrangement versions
+- each version must record style, settings, and generation metadata
+
+====================================================
+PHASE 10 — REBUILD THE STYLE SYSTEM FOR OUR REAL GOAL
+====================================================
+
+The current styles are a good start, but not enough.
+
+Extend styles into two layers:
+
+1. Genre profiles
+Examples:
+- Hasidic
+- Middle Eastern
+- Pop
+- Rock
+- Jazz
+- Ballad
+- Hip-Hop
+- Cinematic
+- Wedding
+- Acoustic
+
+2. Arranger profiles
+Each arranger profile must define:
+- preferred instrumentation
+- density rules
+- intro behavior
+- transition behavior
+- ending behavior
+- harmonic tendencies
+- voicing tendencies
+- dynamic tendencies
+- rhythm feel
+
+Implement profiles as structured data, not scattered conditionals.
+
+====================================================
+PHASE 11 — TURN THE CURRENT ORCHESTRATOR INTO A REAL INSTRUMENT ENGINE
+====================================================
+
+Keep the current multi-track generation idea, but improve it.
+
+Required:
+- separate orchestration logic by instrument family
+- use register-aware writing
+- avoid muddy voicings
+- avoid impossible ranges
+- differentiate rhythm roles, pad roles, melodic roles, counter-line roles
+- store per-track metadata:
+  - instrument
+  - channel
+  - program
+  - notes
+  - articulation data
+  - velocity map
+  - humanization metadata
+
+Support regeneration by track and by section.
+
+====================================================
+PHASE 12 — SPLIT PREVIEW RENDERING FROM HIGH-QUALITY RENDERING
+====================================================
+
+Current issue:
+- internal synthesis engine is useful, but not final-quality audio
+
+Required fix:
+- define the current synthesis renderer as Preview Render Engine
+- keep it fast for quick playback previews
+- mark preview renders clearly in UI and API
+
+Then create a separate High Quality Render Engine abstraction:
+- patch-based
+- instrument-definition based
+- articulation aware
+- replaceable in the future by better playback engines
+
+Do not pretend preview output is final studio-quality output.
+
+====================================================
+PHASE 13 — IMPROVE MIXING AND MASTERING ARCHITECTURE
+====================================================
+
+Current mixing is a useful start.
+Now formalize it.
+
+Required:
+- per-track mix presets
+- bus routing metadata
+- style-based defaults
+- render metadata stored in DB
+- warnings when source render quality is preview-only
+
+Mix engine must enhance good orchestration, not hide bad orchestration.
+
+====================================================
+PHASE 14 — REBUILD EXPORT AS A FIRST-CLASS SYSTEM
+====================================================
+
+Current export exists but needs to become more correct.
+
+Required export types:
+- MIDI
+- MusicXML
+- PDF lead sheet
+- PDF full score
+- WAV
+- FLAC
+- MP3
+- stems
+
+Required export improvements:
+- proper quantization rules
+- measure-aware notation
+- ties/rests handling
+- chord symbols
+- note spelling
+- lead sheet layout
+- full score layout
+- validation before marking export complete
+
+Do not treat PDF as a text dump fallback unless explicitly marked simplified.
+
+====================================================
+PHASE 15 — ADD MANUAL CORRECTION AS A CORE FEATURE
+====================================================
+
+Current manual correction support is only partial.
+Expand it seriously.
+
+User must be able to edit:
+- BPM
+- meter
+- key
+- mode
+- chords
+- sections
+- melody notes
+- arrangement by section
+- instrumentation
+- track mute/solo/lock
+- regenerate only selected sections
+- regenerate only selected tracks
+
+Add lock system:
+- lock harmony
+- lock structure
+- lock melody
+- lock selected tracks
+- lock instrumentation
+
+Regeneration must respect locks.
+
+====================================================
+PHASE 16 — UPGRADE THE FRONTEND INTO A TRUE WORKSTATION
+====================================================
+
+The current frontend is strong. Keep it.
+Now harden and deepen it.
+
+Required screens:
+- dashboard
+- upload/import
+- analysis workspace
+- arrangement workspace
+- orchestration workspace
+- piano roll editor
+- mixer
+- export center
+- generated files browser
+- revisions/history
+
+Required behavior:
+- explicit job states
+- explicit mock states
+- live step updates
+- better analysis visualization
+- editable chords and sections
+- arrangement section controls
+- track-level regeneration controls
+- revision switching
+
+====================================================
+PHASE 17 — CLEAN API DESIGN
+====================================================
+
+Refine API endpoints to support:
+- projects
+- uploads
+- analysis jobs
+- arrangement jobs
+- render jobs
+- export jobs
+- style profiles
+- arranger profiles
+- corrections
+- revisions
+- generated files
+- audio/stem preview endpoints
+
+Every endpoint must:
+- validate input
+- return typed output
+- return clear errors
+- expose mock vs real status explicitly
+
+====================================================
+PHASE 18 — TESTING AND QA
+====================================================
+
+Add real tests.
+
+1. Unit tests
+- audio preprocessing
+- rhythm extraction
+- key detection
+- chord parsing
+- structure labeling
+- style loading
+- export validation
+- schema validation
+
+2. Integration tests
+- upload → analysis
+- analysis → arrangement
+- arrangement → render
+- render → export
+
+3. Regression tests
+Use a small curated set of known audio files with expected:
+- tempo
+- key
+- chord checkpoints
+- section checkpoints
+
+4. Frontend tests
+- project creation
+- upload flow
+- job updates
+- correction flow
+- export flow
+
+====================================================
+PHASE 19 — FINAL CODE QUALITY RULES
+====================================================
+
+1. Keep module boundaries clean.
+2. No giant god-files.
+3. Every major function must have clear inputs and outputs.
+4. Every job must emit:
+- status
+- progress
+- warnings
+- result metadata
+- error metadata if failed
+5. Every major output must include confidence where ambiguity exists.
+6. Every DB write path must be safe, explicit, and version-aware.
+
+====================================================
+PHASE 20 — EXECUTION ORDER
+====================================================
+
+Implement in this exact order:
+
+1. Audit current code and map real vs placeholder parts
+2. Fix DB schema problems
+3. Add proper job result fields
+4. Remove unsafe fake-success behavior
+5. Add strict route validation
+6. Persist all ingestion and analysis metadata
+7. Unify style source of truth
+8. Add versioning everywhere
+9. Replace pseudo-queue with real durable jobs
+10. Harden ingestion
+11. Harden source separation
+12. Upgrade rhythm engine
+13. Upgrade tonal engine
+14. Upgrade chord engine
+15. Upgrade melody and vocal engine
+16. Upgrade structure engine
+17. Rebuild arrangement planning layer
+18. Rebuild orchestration layer
+19. Split preview render from HQ render
+20. Improve mixing/mastering architecture
+21. Rebuild export system
+22. Expand manual correction system
+23. Upgrade frontend workflows
+24. Add tests
+25. Final hardening and cleanup
+
+====================================================
+FINAL DIRECTIVE
+====================================================
+
+Treat the current Muzikal repository as a serious product in transition.
+
+Preserve the good parts.
+Fix the dangerous parts first.
+Then deepen the music intelligence.
+Then deepen the workstation experience.
+
+Build this as a real commercial AI music platform:
+- reliable
+- musically intelligent
+- modular
+- honest
+- premium
+- scalable

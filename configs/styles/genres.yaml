@@ -1,0 +1,204 @@
+# MusicAI Studio — Single Source of Truth for Musical Styles
+# Both the Node.js API server and the Python backend load from this file.
+# Do NOT duplicate style definitions anywhere else.
+# version: 1.0.0
+
+styles:
+  - id: pop
+    name: "Pop"
+    nameHe: "פופ"
+    genre: "Pop"
+    genreHe: "פופ"
+    description: "Modern pop with lush pads and catchy melodies"
+    instrumentation: [piano, strings, bass, drums, synth_pad, lead_synth]
+    density_default: 0.75
+    tempo_feel: "straight"
+    harmonic_tendency: "diatonic"
+    intro_bars: 4
+    outro_bars: 4
+
+  - id: jazz
+    name: "Jazz"
+    nameHe: "ג'אז"
+    genre: "Jazz"
+    genreHe: "ג'אז"
+    description: "Sophisticated jazz with extended harmonies"
+    instrumentation: [piano, double_bass, drums, trumpet, saxophone]
+    density_default: 0.65
+    tempo_feel: "swing"
+    harmonic_tendency: "extended_chords"
+    intro_bars: 4
+    outro_bars: 4
+
+  - id: rnb
+    name: "R&B / Soul"
+    nameHe: "R&B / סול"
+    genre: "R&B"
+    genreHe: "R&B"
+    description: "Soulful groove with warm harmonies"
+    instrumentation: [piano, electric_bass, drums, strings, choir, organ]
+    density_default: 0.72
+    tempo_feel: "straight_groove"
+    harmonic_tendency: "neo_soul"
+    intro_bars: 4
+    outro_bars: 4
+
+  - id: classical
+    name: "Classical"
+    nameHe: "קלאסי"
+    genre: "Classical"
+    genreHe: "קלאסי"
+    description: "Full orchestral arrangement with classical voice leading"
+    instrumentation: [strings, woodwinds, brass, piano, harp, timpani]
+    density_default: 0.80
+    tempo_feel: "rubato"
+    harmonic_tendency: "common_practice"
+    intro_bars: 8
+    outro_bars: 8
+
+  - id: electronic
+    name: "Electronic"
+    nameHe: "אלקטרוני"
+    genre: "Electronic"
+    genreHe: "אלקטרוני"
+    description: "Synth-driven electronic with punchy beats"
+    instrumentation: [synth_lead, synth_pad, bass_synth, drum_machine, arpeggiator]
+    density_default: 0.80
+    tempo_feel: "straight"
+    harmonic_tendency: "minimal"
+    intro_bars: 8
+    outro_bars: 8
+
+  - id: rock
+    name: "Rock"
+    nameHe: "רוק"
+    genre: "Rock"
+    genreHe: "רוק"
+    description: "Driving rock with electric guitars and powerful drums"
+    instrumentation: [electric_guitar, bass_guitar, drums, piano, strings]
+    density_default: 0.78
+    tempo_feel: "straight"
+    harmonic_tendency: "power_chords"
+    intro_bars: 4
+    outro_bars: 4
+
+  - id: bossa_nova
+    name: "Bossa Nova"
+    nameHe: "בוסה נובה"
+    genre: "Bossa Nova"
+    genreHe: "בוסה נובה"
+    description: "Brazilian bossa nova with nylon guitar and light percussion"
+    instrumentation: [nylon_guitar, acoustic_bass, drums_brush, flute, piano]
+    density_default: 0.60
+    tempo_feel: "bossa"
+    harmonic_tendency: "bossa_extended"
+    intro_bars: 4
+    outro_bars: 4
+
+  - id: ambient
+    name: "Ambient"
+    nameHe: "אמביינט"
+    genre: "Ambient"
+    genreHe: "אמביינט"
+    description: "Atmospheric ambient with slow evolving textures"
+    instrumentation: [synth_pad, strings, piano, guitar_reverb, choir]
+    density_default: 0.40
+    tempo_feel: "floating"
+    harmonic_tendency: "modal"
+    intro_bars: 8
+    outro_bars: 16
+
+  - id: hasidic
+    name: "חסידי / Hasidic"
+    nameHe: "חסידי"
+    genre: "Hasidic"
+    genreHe: "חסידי"
+    description: "Traditional Hasidic niggun with violin, accordion, and clarinet"
+    instrumentation: [violin, clarinet, accordion, double_bass, drums_simple]
+    density_default: 0.70
+    tempo_feel: "waltz_or_march"
+    harmonic_tendency: "minor_with_augmented_second"
+    scale_preference: "dorian_or_phrygian"
+    intro_bars: 4
+    outro_bars: 4
+    notes: "Use augmented second intervals characteristic of Ashkenazi music"
+
+  - id: middle_eastern
+    name: "מזרחי / Middle Eastern"
+    nameHe: "מזרחי"
+    genre: "Middle Eastern"
+    genreHe: "מזרחי"
+    description: "Middle Eastern with oud, darbuka, and maqam scales"
+    instrumentation: [oud, darbuka, violin, qanun, bass, piano]
+    density_default: 0.68
+    tempo_feel: "maqam_rhythm"
+    harmonic_tendency: "maqam"
+    scale_preference: "hijaz_or_rast"
+    intro_bars: 4
+    outro_bars: 4
+    notes: "Use maqam scales (Hijaz, Rast, Bayati); quarter-tone ornaments in melody"
+
+  - id: hiphop
+    name: "Hip-Hop / Trap"
+    nameHe: "היפ-הופ / טראפ"
+    genre: "Hip-Hop"
+    genreHe: "היפ-הופ"
+    description: "Modern hip-hop with trap beats and 808 bass"
+    instrumentation: [drum_machine_808, bass_808, piano, strings_staccato, synth_pad]
+    density_default: 0.65
+    tempo_feel: "trap"
+    harmonic_tendency: "minor_modal"
+    intro_bars: 4
+    outro_bars: 4
+
+  - id: ballad
+    name: "Ballad"
+    nameHe: "בלדה"
+    genre: "Ballad"
+    genreHe: "בלדה"
+    description: "Emotional ballad with piano and sweeping strings"
+    instrumentation: [piano, strings, choir, bass, drums_soft]
+    density_default: 0.55
+    tempo_feel: "slow_straight"
+    harmonic_tendency: "diatonic_emotional"
+    intro_bars: 4
+    outro_bars: 8
+
+  - id: cinematic
+    name: "Cinematic"
+    nameHe: "קולנועי"
+    genre: "Cinematic"
+    genreHe: "קולנועי"
+    description: "Epic cinematic with full orchestra and choir"
+    instrumentation: [strings, brass, choir, timpani, piano, harp, woodwinds]
+    density_default: 0.85
+    tempo_feel: "dramatic"
+    harmonic_tendency: "neo_romantic"
+    intro_bars: 8
+    outro_bars: 8
+
+  - id: wedding
+    name: "Wedding Band"
+    nameHe: "להקת חתונה"
+    genre: "Wedding"
+    genreHe: "חתונה"
+    description: "Festive wedding band with full arrangement"
+    instrumentation: [piano, bass, drums, brass, strings, guitar]
+    density_default: 0.80
+    tempo_feel: "festive"
+    harmonic_tendency: "major_diatonic"
+    intro_bars: 4
+    outro_bars: 4
+
+  - id: acoustic
+    name: "Acoustic / Folk"
+    nameHe: "אקוסטי / פולק"
+    genre: "Acoustic"
+    genreHe: "אקוסטי"
+    description: "Intimate acoustic arrangement with guitar and minimal percussion"
+    instrumentation: [acoustic_guitar, acoustic_bass, cajon, violin, piano]
+    density_default: 0.50
+    tempo_feel: "straight"
+    harmonic_tendency: "folk_diatonic"
+    intro_bars: 4
+    outro_bars: 4

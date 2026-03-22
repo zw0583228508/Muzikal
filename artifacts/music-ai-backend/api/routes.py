@@ -15,7 +15,8 @@ from fastapi.responses import JSONResponse
 
 from api.schemas import AnalyzeRequest, ArrangeRequest, ExportRequest, RenderRequest
 from api.database import update_job, update_project_status, save_analysis_result, save_arrangement
-from orchestration.arranger import generate_arrangement, STYLES
+from orchestration.arranger import generate_arrangement
+from audio.style_loader import load_styles, get_style
 
 EXPORTS_BASE_DIR = os.environ.get("EXPORTS_DIR", "/tmp/musicai_exports")
 RENDERS_BASE_DIR = os.environ.get("RENDERS_DIR", "/tmp/musicai_renders")
@@ -54,17 +55,21 @@ def _save_files_to_db(project_id: int, job_id: str, results: dict):
 
 
 @router.get("/styles")
-async def get_styles():
-    """Return available musical styles."""
+async def get_styles_endpoint():
+    """Return available musical styles from canonical YAML config."""
+    styles = load_styles()
     return [
         {
-            "id": style_id,
-            "name": config["name"],
-            "genre": config["genre"],
-            "description": config["description"],
-            "tags": config["tags"],
+            "id": s["id"],
+            "name": s.get("name", s["id"]),
+            "nameHe": s.get("nameHe", s.get("name", s["id"])),
+            "genre": s.get("genre", ""),
+            "genreHe": s.get("genreHe", s.get("genre", "")),
+            "description": s.get("description", ""),
+            "density_default": s.get("density_default", 0.7),
+            "instrumentation": s.get("instrumentation", []),
         }
-        for style_id, config in STYLES.items()
+        for s in styles
     ]
 
 
@@ -120,9 +125,19 @@ def run_analysis_pipeline(job_id: str, project_id: int, audio_file_path: str):
 
         result = run_full_analysis(audio_file_path, project_id, progress_callback)
 
-        save_analysis_result(project_id, result)
+        # Persist audio metadata (duration, sample rate, etc.)
+        from api.database import update_project_audio_metadata
+        update_project_audio_metadata(project_id, {
+            "duration_seconds": result.get("duration"),
+            "sample_rate": result.get("sampleRate"),
+            "channels": 1,  # loaded as mono
+            "codec": None,
+        })
+
+        save_analysis_result(project_id, result, pipeline_version="1.0.0")
         update_project_status(project_id, "analyzed")
-        update_job(job_id, "completed", 100, "Analysis complete")
+        update_job(job_id, "completed", 100, "Analysis complete",
+                   result_data={"pipeline_version": "1.0.0", "duration": result.get("duration")})
         logger.info(f"Analysis complete for project {project_id}")
 
     except Exception as e:

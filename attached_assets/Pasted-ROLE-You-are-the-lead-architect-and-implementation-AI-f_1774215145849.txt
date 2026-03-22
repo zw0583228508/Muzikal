@@ -1,0 +1,860 @@
+ROLE
+You are the lead architect and implementation AI for an existing music-AI monorepo called Muzikal.
+Your task is to upgrade it from a rule-based prototype into a production-grade AI music platform.
+
+NON-NEGOTIABLE GOALS
+1. Keep the existing product direction: upload audio -> analyze music -> generate arrangement/orchestration -> edit in DAW-like UI -> export.
+2. Preserve the monorepo and improve it incrementally instead of rewriting everything blindly.
+3. Replace weak heuristic engines with real model-backed pipelines.
+4. Make the system production-ready, async, GPU-aware, testable, and deployable outside Replit.
+5. Do not produce placeholder code. Implement complete, runnable code with clear boundaries and docs.
+6. When uncertain, choose maintainability and quality over clever shortcuts.
+
+PRIMARY PRODUCT CAPABILITIES TO BUILD
+A. Audio ingestion and normalization
+B. Beat / tempo / meter detection
+C. Key / mode / modulation detection
+D. Chord recognition
+E. Melody / pitch extraction
+F. Stem separation
+G. Structure detection (intro / verse / chorus / bridge / outro)
+H. Style-conditioned arrangement generation
+I. DAW-ready timeline + MIDI note events + track metadata
+J. Export to MIDI, MusicXML/PDF-ready notation data, stems, and final audio renders
+
+HIGH-LEVEL ARCHITECTURE TO TARGET
+
+1) Frontend
+- Keep React/TypeScript frontend.
+- Turn it into a serious studio UI:
+  - upload workflow
+  - project dashboard
+  - analysis inspector
+  - arrangement timeline
+  - piano roll editor
+  - track mute/solo
+  - export center
+  - live job progress
+- Keep Hebrew/English support.
+
+2) API Layer
+- Keep a typed API layer.
+- Prefer one clear API contract.
+- If there is duplicated responsibility between Node API and Python backend, simplify:
+  - Node/TS handles auth, projects, billing/web app concerns
+  - Python handles audio/ML jobs and inference
+- Expose all AI tasks as async jobs with status:
+  - queued
+  - preprocessing
+  - analyzing
+  - separating
+  - arranging
+  - rendering
+  - completed
+  - failed
+
+3) Job System
+- Implement a real distributed task system:
+  - Redis as broker/state cache
+  - Celery workers for Python AI jobs
+- Separate workers by capability:
+  - cpu-analysis-worker
+  - gpu-separation-worker
+  - gpu-generation-worker
+  - render-worker
+- Every long-running job must be resumable/retriable and report progress.
+
+4) Storage
+- Use object storage for:
+  - uploaded audio
+  - generated stems
+  - preview renders
+  - final exports
+  - cached features
+- Use signed URLs.
+- Never keep critical generated assets only on ephemeral local disk.
+
+5) Database
+- Normalize project/job schema.
+- Add tables/collections for:
+  - users
+  - projects
+  - source_assets
+  - analysis_runs
+  - arrangement_versions
+  - render_versions
+  - exports
+  - jobs
+  - model_registry
+- Every arrangement/render should be versioned.
+
+TARGET TECH STACK
+
+Python ML / audio
+- Python 3.11+
+- FastAPI
+- Pydantic v2
+- Celery + Redis
+- librosa for beat/onset and general DSP utilities
+- Essentia for robust tonal/rhythm descriptors and key extraction
+- Basic Pitch for lightweight audio-to-MIDI / melody extraction
+- Pedalboard for audio effects / render utilities
+- pretty_midi + mido + music21 for MIDI / notation transformations
+- ffmpeg for media conversion and waveform prep
+- PyTorch for model inference/training
+
+Music generation / style
+- Use AudioCraft / MusicGen as the starting generation backbone
+- Add MusicGen-Style style conditioning where useful
+- Build your own arrangement layer on top instead of pretending text-to-music alone solves orchestration
+
+Frontend
+- React + TypeScript
+- State management with a predictable store
+- WebSocket or SSE for live job updates
+- waveform + piano roll visualization
+- track inspector and event editing
+
+Infra
+- Docker for every service
+- docker-compose for local dev
+- production deployment target should be GPU-capable infrastructure
+- Replit must not be the long-term inference environment
+
+WHAT TO DO FIRST: CODEBASE AUDIT AND REFACTOR PLAN
+
+Step 1:
+Audit the existing repository and classify all modules into:
+- keep as-is
+- refactor
+- replace
+- remove
+- move
+
+Step 2:
+Specifically inspect the current music-analysis and arrangement modules.
+Identify heuristic/rule-based code and replace it systematically with model-backed or hybrid systems.
+
+Step 3:
+Create a migration document inside the repo:
+- docs/architecture/current-state.md
+- docs/architecture/target-state.md
+- docs/architecture/migration-plan.md
+
+Step 4:
+Create a clean package structure like this:
+
+/services
+  /web-app
+  /api-server
+  /ml-service
+  /worker-analysis
+  /worker-generation
+  /worker-render
+/packages
+  /schemas
+  /audio-core
+  /music-theory
+  /timeline-core
+  /export-core
+  /shared-utils
+/models
+  /checkpoints
+  /configs
+/docs
+  /architecture
+  /ml
+  /api
+
+AUDIO PIPELINE TO IMPLEMENT
+
+PIPELINE STAGE 1 — INGESTION
+Build a production-grade ingestion pipeline:
+- accept wav/mp3/flac/m4a/video input
+- transcode to canonical wav
+- validate duration/sample rate/channels
+- loudness normalize
+- store source and canonical asset
+- compute checksum for deduplication
+
+Output:
+{
+  "assetId": "...",
+  "durationSec": ...,
+  "sampleRate": 44100,
+  "channels": 2,
+  "format": "wav",
+  "storageUrl": "...",
+  "checksum": "..."
+}
+
+PIPELINE STAGE 2 — FEATURE EXTRACTION
+Implement feature extraction service:
+- onset envelope
+- beat positions
+- tempo curve
+- meter estimate
+- chroma / HPCP
+- tonal centroid
+- spectral contrast
+- RMS / energy curve
+- section boundaries
+- vocal activity estimate
+- melody contour
+
+Cache extracted features so they are reusable across jobs.
+
+PIPELINE STAGE 3 — RHYTHM / TEMPO / METER
+Implement:
+- beat tracking with confidence
+- tempo estimate
+- variable tempo support
+- time signature estimate
+- downbeat approximation
+- bar segmentation
+
+Do not return only a single BPM number.
+Return:
+- global tempo
+- local tempo curve
+- beat grid
+- bar grid
+- confidence
+- warnings
+
+PIPELINE STAGE 4 — KEY / MODE / MODULATION
+Replace simplistic key heuristics with a hybrid pipeline:
+- Essentia-based key candidates
+- chroma/HPCP confirmation
+- confidence scoring
+- modulation window analysis
+- top-k candidate keys
+
+Return:
+- global key
+- mode
+- modulation events
+- alternatives
+- confidence
+- evidence summary
+
+PIPELINE STAGE 5 — CHORD RECOGNITION
+Replace pure template matching with a hybrid approach:
+- segment by beats/bars
+- chroma/HPCP features
+- optional Viterbi/HMM smoothing
+- local key awareness
+- top-k chord candidates
+- confidence and ambiguity markers
+
+Must support at least:
+- maj
+- min
+- 7
+- maj7
+- min7
+- dim
+- aug
+- sus2
+- sus4
+- add9
+- slash chords where feasible
+
+Return a chord timeline plus roman numerals relative to current key.
+
+PIPELINE STAGE 6 — MELODY / NOTE TRANSCRIPTION
+Implement a melody extraction/transcription path:
+- first use Basic Pitch as the baseline model
+- support monophonic vocal melody extraction well
+- store note events with pitch bend or confidence if available
+- generate MIDI preview
+- expose editable note events to frontend
+
+Return:
+- notes
+- pitch confidence
+- note density
+- pitch range
+- phrase segmentation
+
+PIPELINE STAGE 7 — STEM SEPARATION
+Implement source separation as its own job type.
+Requirements:
+- vocals
+- drums
+- bass
+- other
+Optional:
+- piano
+- guitar
+- strings
+if later custom models support it
+
+Important:
+- design this behind a provider interface so the backend can swap separation models later
+- do not hardwire the whole app to a single archived repo
+- make output versioned and cacheable
+
+PIPELINE STAGE 8 — STRUCTURE DETECTION
+Implement musical form segmentation:
+- intro
+- verse
+- pre-chorus
+- chorus
+- bridge
+- solo
+- outro
+Use hybrid rule + embedding similarity + energy/novelty features.
+Return section labels with confidence and allow relabeling in UI.
+
+ARRANGEMENT / ORCHESTRATION ENGINE TO BUILD
+
+CORE PRINCIPLE
+Do not fake “AI arrangement” with random note generators and fixed if/else style rules.
+Build a layered system:
+
+Layer 1: musical analysis
+- beat/bar grid
+- harmony
+- structure
+- melody
+- energy curve
+
+Layer 2: style profile
+- instrumentation family
+- rhythmic feel
+- harmonic tendencies
+- density rules
+- articulation tendencies
+- dynamics shape
+- intro/chorus/bridge conventions
+
+Layer 3: arrangement planner
+- decides what instruments play in each section
+- controls density and register
+- controls doubling/unison/counterlines
+- controls transitions/fills/risers/stops
+
+Layer 4: track generator
+Generates note events for each track:
+- drums/percussion
+- bass
+- piano/keys
+- guitars
+- strings
+- brass
+- pads/synths
+- lead ornament layers
+- choir if style demands
+
+Layer 5: renderer
+- MIDI export
+- preview render
+- final mix render
+
+STYLE SYSTEM TO BUILD
+Implement style as data + learned behavior.
+
+A. Create canonical style profiles:
+- hasidic
+- wedding
+- pop
+- ballad
+- cinematic
+- rock
+- jazz
+- middle_eastern
+- electronic
+- ambient
+
+Each style profile must define:
+- preferred instrumentation
+- density by section
+- rhythmic archetypes
+- bass movement patterns
+- chord voicing tendencies
+- ornament vocabulary
+- transition vocabulary
+- register policy
+- dynamics policy
+
+B. Add “arranger persona” overlays
+Examples:
+- Mona-like orchestral wedding energy
+- modern pop producer
+- cinematic trailer arranger
+- warm acoustic live-band arranger
+
+Do not imitate copyrighted works directly.
+Implement personas as abstract production behaviors, not cloning.
+
+C. Add style-conditioning hooks
+- short audio reference input
+- textual style description
+- project-level style tokens
+- section-specific overrides
+
+ARRANGEMENT ALGORITHM REQUIREMENTS
+
+1. Drums / percussion
+- section-aware patterns
+- fills before transitions
+- density automation by section
+- support multiple groove templates
+- optional swing/shuffle
+- humanization
+- quantization control
+
+2. Bass
+- root/fifth/octave patterns
+- passing tones where musically justified
+- style-aware rhythm
+- register control
+- lock to kick in relevant styles
+
+3. Piano / keys
+- voice-leading between chord events
+- inversions
+- spread voicings
+- rhythmic comping variants
+- section-aware density
+
+4. Strings
+- pad vs ostinato vs marcato vs countermelody modes
+- legato phrase generation
+- chorus lifts
+- bridge reductions
+- octave stacking
+
+5. Brass / winds
+- accent shots
+- call-and-response phrases
+- section punches
+- dynamic swells
+- wedding/hasidic energy support
+
+6. Guitars / plucked instruments
+- strumming engine
+- arpeggio engine
+- rhythmic chucks
+- instrument-specific range and voicing
+
+7. Melody support
+- never destroy source melody
+- generate countermelodies only when space exists
+- allow “vocal-safe arrangement mode”
+
+8. Transitions
+- fills
+- cymbal swells
+- tom builds
+- risers
+- stops
+- pickups
+- modulation transitions where requested
+
+TIMELINE / INTERNAL DATA MODEL
+
+Create a canonical timeline schema used everywhere:
+- project
+- bpm map
+- meter map
+- markers
+- sections
+- chord events
+- melody notes
+- tracks
+- clips
+- notes
+- CC/automation lanes
+- render metadata
+
+Every generated track event must be serializable to JSON and convertible to MIDI.
+Do not tie core data model to frontend UI components.
+
+EXAMPLE TRACK EVENT SHAPE
+{
+  "trackId": "strings_main",
+  "instrument": "strings",
+  "startBeat": 64,
+  "durationBeats": 2,
+  "pitch": 76,
+  "velocity": 92,
+  "articulation": "legato",
+  "channel": 5
+}
+
+MODEL STRATEGY
+
+1. Near-term practical baseline
+Use hybrid systems first:
+- DSP + ML for analysis
+- deterministic arrangement planner
+- model-assisted phrase generation in selected layers
+
+2. Mid-layer generation
+Use MusicGen / AudioCraft only where it helps:
+- style embeddings
+- texture ideas
+- optional accompaniment references
+- audio continuation ideas
+But do not use raw text-to-music output as the main internal arrangement representation.
+
+3. Internal learned components to add
+Build trainable models for:
+- section classification
+- chord sequence smoothing
+- style embedding classifier
+- track-density prediction
+- instrument activation prediction
+- fill prediction
+- countermelody suggestion
+
+4. Future advanced generation
+Plan for:
+- transformer-based symbolic arrangement generation
+- audio-conditioned orchestration
+- retrieval-augmented phrase library from your own licensed MIDI corpus
+- user feedback reinforcement loops
+
+DATASET STRATEGY
+
+Create a legal/licensable training data plan.
+Do not scrape random copyrighted material irresponsibly.
+
+Build internal datasets for:
+- aligned MIDI + audio
+- section labels
+- chord labels
+- style labels
+- instrumentation labels
+- arrangement density labels
+
+Create tooling for:
+- dataset manifests
+- feature precompute
+- train/val/test split
+- quality scoring
+- bad sample filtering
+- experiment tracking
+
+EVALUATION FRAMEWORK
+
+Implement real evaluation, not vague “sounds good”.
+Track:
+
+Analysis metrics
+- beat F-measure
+- tempo error tolerance
+- key accuracy
+- chord frame accuracy
+- note transcription precision/recall/F1
+
+Arrangement metrics
+- note density by track
+- register collisions
+- harmonic compatibility
+- rhythm tightness
+- section contrast
+- repetition vs variation score
+
+Rendering metrics
+- clipping detection
+- LUFS target
+- true peak
+- stem integrity
+
+Human review tools
+- A/B compare arrangement versions
+- quality rubric forms
+- per-style rating
+- “too busy / too empty / wrong harmony / wrong groove” tags
+
+BACKEND IMPLEMENTATION RULES
+
+1. Every job must have:
+- id
+- type
+- input payload
+- output payload
+- status
+- progress
+- createdAt
+- startedAt
+- finishedAt
+- errorCode
+- errorMessage
+
+2. Every ML service must expose:
+- /health
+- /version
+- /models
+- /infer/*
+- /jobs/*
+- /metrics
+
+3. Add model registry support
+Track:
+- model name
+- version
+- checkpoint path
+- checksum
+- device
+- task
+- date loaded
+
+4. Add observability
+- structured logging
+- request correlation IDs
+- job tracing
+- inference timing
+- GPU memory logging
+- failure analytics
+
+FRONTEND IMPLEMENTATION RULES
+
+Build these pages/views:
+
+1. Upload / New Project
+- file upload
+- style selection
+- arranger persona selection
+- project settings
+- advanced analysis options
+
+2. Project Overview
+- waveform
+- sections
+- key/tempo/chords summary
+- job states
+- recent versions
+
+3. Studio View
+- track list
+- piano roll
+- chord lane
+- section markers
+- melody lane
+- mute/solo
+- quantize/humanize controls
+- regenerate section
+- regenerate track
+- export actions
+
+4. Analysis Inspector
+- tempo graph
+- key candidates
+- modulation map
+- chord confidence
+- melody confidence
+- separation preview
+
+5. Export Center
+- MIDI
+- stems
+- preview mix
+- full mix
+- notation package
+- JSON timeline bundle
+
+INTERACTION FEATURES TO BUILD
+- “Regenerate only chorus strings”
+- “Make drums simpler”
+- “Increase wedding energy”
+- “Use more brass in final chorus”
+- “Keep melody untouched”
+- “Humanize piano more”
+- “Export rehearsal version without vocals”
+
+These should map to actual backend edit/regeneration operations, not fake UI.
+
+EXPORT SYSTEM REQUIREMENTS
+
+1. MIDI export
+- one MIDI per project
+- optional per-track MIDI zip
+- tempo map and markers preserved
+
+2. Notation export
+- generate MusicXML-compatible intermediate representation
+- support later PDF sheet export
+- melody lead sheet mode
+- chord chart mode
+- piano reduction mode where possible
+
+3. Audio export
+- stems
+- preview mix
+- final mix
+- instrumental only
+- click track optional
+
+4. Archive export
+- project bundle including JSON timeline + MIDI + metadata
+
+RENDER / MIX ENGINE
+
+Implement two render modes:
+
+A. Fast preview
+- lightweight instruments/soundfonts
+- quick bounce
+- low latency
+
+B. High quality render
+- better sample routing abstraction
+- better FX chain
+- mastering-safe limiter
+- loudness normalization target
+- consistent export settings
+
+The render system must be provider-based.
+Do not hardcode one vendor/library forever.
+
+SECURITY / MULTI-TENANCY / PRODUCTIZATION
+
+Implement:
+- authenticated project ownership
+- signed asset access
+- quotas
+- job limits
+- cancellation
+- retries
+- abuse prevention
+- safe temp-file cleanup
+
+TESTING REQUIREMENTS
+
+Write:
+1. Unit tests
+- music theory helpers
+- timeline transforms
+- API payload validation
+- arrangement rules
+
+2. Integration tests
+- upload -> analyze
+- analyze -> arrange
+- arrange -> export
+- separation -> render
+
+3. Golden tests
+- deterministic arrangement snapshots for fixed seeds
+- chord timeline snapshots
+- MIDI event snapshots
+
+4. Performance tests
+- short audio under X time
+- medium project under Y time
+- memory ceiling checks
+- concurrency checks
+
+5. Failure tests
+- corrupted audio
+- missing model checkpoint
+- Redis down
+- storage timeout
+- worker crash recovery
+
+DOCUMENTATION TO CREATE
+- README with actual setup
+- docs/local-dev.md
+- docs/services.md
+- docs/job-system.md
+- docs/model-registry.md
+- docs/arrangement-engine.md
+- docs/api.md
+- docs/export-format.md
+
+VERY IMPORTANT IMPLEMENTATION PRIORITY
+
+PHASE 1 — STABILIZE EXISTING APP
+- make repo boot cleanly
+- fix broken imports / dead modules
+- normalize configs
+- centralize environment variables
+- add health checks
+- make current jobs visible and debuggable
+
+PHASE 2 — UPGRADE ANALYSIS
+- tempo/meter
+- key/mode
+- chords
+- melody
+- structure
+- feature cache
+
+PHASE 3 — ADD REAL ASYNC WORKERS
+- Redis
+- Celery
+- retries
+- progress events
+- job persistence
+
+PHASE 4 — ADD SEPARATION
+- provider abstraction
+- cached stems
+- frontend stem preview
+
+PHASE 5 — REBUILD ARRANGER
+- section planner
+- instrumentation planner
+- track generators
+- style profiles
+- arranger personas
+- regenerate-by-section / regenerate-by-track
+
+PHASE 6 — RENDER + EXPORT
+- preview render
+- final render
+- MIDI
+- notation data
+- bundles
+
+PHASE 7 — HARDEN FOR PRODUCTION
+- Docker
+- observability
+- quotas
+- object storage
+- deployment configs
+- smoke tests
+
+CONCRETE CODE RULES
+- Prefer small modules with one responsibility.
+- Eliminate giant files where possible.
+- Use typed schemas everywhere.
+- Add docstrings and comments only where they add real value.
+- No fake TODO implementations.
+- No placeholder mock AI.
+- No random note generation pretending to be orchestration intelligence.
+- No silent failures.
+- Every confidence score must have a clear derivation.
+- Every provider/model integration must be swappable.
+
+EXPECTED DELIVERABLES FROM YOU
+Produce the work in this exact order:
+
+1. A repository audit summary
+2. A target architecture summary
+3. A file-by-file migration plan
+4. Actual code changes
+5. New tests
+6. Updated docs
+7. A final report with:
+   - what was replaced
+   - what remains heuristic
+   - what now uses real models
+   - what is ready for production
+   - what is not yet ready
+
+FINAL QUALITY BAR
+The result must feel like the foundation of a serious commercial AI music platform:
+- technically credible
+- scalable
+- musically useful
+- editable
+- versioned
+- exportable
+- ready to evolve into a world-class product
+
+Now start by auditing the existing repo and then execute the migration in small, correct, production-quality steps.

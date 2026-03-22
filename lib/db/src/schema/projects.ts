@@ -46,9 +46,13 @@ export const jobsTable = pgTable("jobs", {
   currentStep: text("current_step"),
   isMock: boolean("is_mock").notNull().default(false),
   errorMessage: text("error_message"),
+  errorCode: text("error_code"),
+  inputPayload: jsonb("input_payload"),
   resultData: jsonb("result_data"),
   warnings: jsonb("warnings"),
   processingMetadata: jsonb("processing_metadata"),
+  startedAt: timestamp("started_at"),
+  finishedAt: timestamp("finished_at"),
   createdAt: timestamp("created_at").notNull().defaultNow(),
   updatedAt: timestamp("updated_at").notNull().defaultNow(),
 });

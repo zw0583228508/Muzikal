@@ -25,6 +25,7 @@ import {
   Piano
 } from "lucide-react";
 import { PianoRoll } from "@/components/piano-roll";
+import { AnalysisInspector } from "@/components/analysis-inspector";
 import { formatTime, cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "@/components/language-toggle";
@@ -123,7 +124,7 @@ function FailedBanner({ message }: { message: string }) {
 
 // ─── Track Lane ───────────────────────────────────────────────────────────────
 
-function TrackLane({ track, isSelected, onSelect }: { track: any; isSelected: boolean; onSelect: () => void }) {
+function TrackLane({ track, isSelected, onSelect, onRegen }: { track: any; isSelected: boolean; onSelect: () => void; onRegen?: (trackId: string) => void }) {
   const { t } = useTranslation();
   return (
     <div
@@ -145,6 +146,13 @@ function TrackLane({ track, isSelected, onSelect }: { track: any; isSelected: bo
               className={cn("w-6 h-6 rounded text-xs font-bold transition-colors", track.soloed ? "bg-yellow-500/20 text-yellow-500" : "bg-white/5 hover:bg-white/10")}
               title={t("Solo")}
             >S</button>
+            {onRegen && (
+              <button
+                className="w-6 h-6 rounded text-xs font-bold transition-colors bg-accent/10 text-accent/70 hover:bg-accent/20 hover:text-accent"
+                title={t("Regenerate track")}
+                onClick={e => { e.stopPropagation(); onRegen(track.id); }}
+              >↺</button>
+            )}
             <button
               className="w-6 h-6 rounded text-xs font-bold transition-colors bg-primary/10 text-primary hover:bg-primary/20"
               title={t("Open Piano Roll")}
@@ -330,6 +338,7 @@ export default function ProjectStudio() {
   const [showMockBanner, setShowMockBanner] = useState(false);
   const [showCorrections, setShowCorrections] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState("pop");
+  const [selectedPersona, setSelectedPersona] = useState<string | null>(null);
   const [selectedTrack, setSelectedTrack] = useState<any | null>(null);
   // Lock/unlock system (Step 19): locked fields won't be regenerated during re-arrangement
   const [lockedFields, setLockedFields] = useState<Set<string>>(new Set());
@@ -369,6 +378,12 @@ export default function ProjectStudio() {
   });
   const isMockMode = modeData?.isMock ?? false;
   const modelVersions = modeData?.modelVersions ?? {};
+
+  const { data: personas = [] } = useQuery<any[]>({
+    queryKey: ["/api/styles/personas"],
+    queryFn: () => fetch("/api/styles/personas").then(r => r.json()),
+    staleTime: 5 * 60 * 1000,
+  });
 
   // ─ Mutations
   const uploadMut = useUploadAudio();
@@ -454,12 +469,35 @@ export default function ProjectStudio() {
           density: 0.8,
           humanize: true,
           lockedFields: Array.from(lockedFields),
+          personaId: selectedPersona ?? undefined,
         }
       });
       startJob(res.jobId);
     } catch (err) {
       console.error(err);
     }
+  };
+
+  const handleRegenSection = async (sectionLabel: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/arrangement/section/${encodeURIComponent(sectionLabel)}/regenerate`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ styleId: selectedStyle, personaId: selectedPersona }),
+      });
+      const data = await res.json();
+      if (data.jobId) startJob(data.jobId);
+    } catch (err) { console.error(err); }
+  };
+
+  const handleRegenTrack = async (trackId: string) => {
+    try {
+      const res = await fetch(`/api/projects/${projectId}/arrangement/track/${encodeURIComponent(trackId)}/regenerate`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ styleId: selectedStyle, personaId: selectedPersona }),
+      });
+      const data = await res.json();
+      if (data.jobId) startJob(data.jobId);
+    } catch (err) { console.error(err); }
   };
 
   const handleExport = () => {
@@ -566,6 +604,7 @@ export default function ProjectStudio() {
                     track={track}
                     isSelected={selectedTrack?.id === track.id}
                     onSelect={() => setSelectedTrack(prev => prev?.id === track.id ? null : track)}
+                    onRegen={arrangement ? handleRegenTrack : undefined}
                   />
                 ))}
               </div>
@@ -577,8 +616,9 @@ export default function ProjectStudio() {
         <div className="w-[340px] border-l border-white/10 bg-card flex flex-col z-20 shadow-2xl relative">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
             <div className="p-4 border-b border-white/5">
-              <TabsList className="w-full grid grid-cols-3">
+              <TabsList className="w-full grid grid-cols-4 text-[11px]">
                 <TabsTrigger value="analysis">{t("Analyze")}</TabsTrigger>
+                <TabsTrigger value="inspect">{t("Inspect")}</TabsTrigger>
                 <TabsTrigger value="arrange">{t("Arrange")}</TabsTrigger>
                 <TabsTrigger value="export">{t("Export")}</TabsTrigger>
               </TabsList>
@@ -832,6 +872,11 @@ export default function ProjectStudio() {
                 )}
               </TabsContent>
 
+              {/* ── INSPECT TAB ── */}
+              <TabsContent value="inspect" className="mt-0">
+                <AnalysisInspector analysis={analysis} />
+              </TabsContent>
+
               {/* ── ARRANGE TAB ── */}
               <TabsContent value="arrange" className="space-y-4 mt-0">
                 <div className="daw-panel p-4">
@@ -854,6 +899,42 @@ export default function ProjectStudio() {
                     ))}
                   </div>
                 </div>
+
+                {/* Persona Picker */}
+                {personas.length > 0 && (
+                  <div className="daw-panel p-4">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Persona")}</h4>
+                      {selectedPersona && (
+                        <button onClick={() => setSelectedPersona(null)} className="text-[10px] text-muted-foreground hover:text-white transition-colors">{t("ביטול")}</button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
+                      {personas.map((persona: any) => (
+                        <button
+                          key={persona.id}
+                          onClick={() => setSelectedPersona(prev => prev === persona.id ? null : persona.id)}
+                          className={cn(
+                            "p-2.5 text-right rounded border transition-all text-xs",
+                            selectedPersona === persona.id
+                              ? "border-accent/70 bg-accent/15 shadow-[0_0_10px_rgba(255,160,80,0.15)]"
+                              : "border-white/10 bg-white/5 hover:bg-accent/10 hover:border-accent/30"
+                          )}
+                        >
+                          <div className={cn("font-bold text-[11px] truncate", selectedPersona === persona.id ? "text-accent" : "text-white")}>{persona.name}</div>
+                          <div className="text-[9px] text-muted-foreground truncate">{persona.nameEn}</div>
+                          {persona.tags?.length > 0 && (
+                            <div className="flex gap-0.5 mt-1 flex-wrap">
+                              {persona.tags.slice(0, 2).map((tag: string) => (
+                                <span key={tag} className="px-1 py-0 rounded-full bg-white/5 text-[8px] text-muted-foreground">{tag}</span>
+                              ))}
+                            </div>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="daw-panel p-4 space-y-4">
                   <div>

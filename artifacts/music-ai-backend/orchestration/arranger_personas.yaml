@@ -1,0 +1,198 @@
+# Arranger Personas — abstract production personalities
+# Each persona is an overlay on top of style profiles.
+# Personas control: instrument weights, density curve shape, register policy,
+# transition vocabulary, humanization intensity, and articulation tendencies.
+# They do NOT clone any specific artist — they describe production behaviors.
+
+personas:
+
+  - id: hasidic-wedding
+    name: "חתונה חסידית / Hasidic Wedding"
+    name_en: "Hasidic Wedding"
+    description: "High-energy celebratory feel with Eastern European melodic sensibility. Big violin, accordion, brass punches, and driving bass."
+    preferred_styles: [hasidic, wedding]
+    instrumentation_weights:
+      violin: 1.4
+      accordion: 1.3
+      clarinet: 1.2
+      brass: 1.1
+      drums: 0.9
+      piano: 0.7
+      strings: 1.0
+      bass: 1.0
+    density_curve:
+      intro: 0.5
+      verse: 0.75
+      chorus: 1.0
+      bridge: 0.6
+      outro: 0.4
+    register_policy:
+      bass_register: "mid"        # keep bass punchy, not too low
+      melody_register: "high"     # lead melody stays bright
+      pad_register: "mid-high"
+    transition_vocabulary: [build, punch, stop, riser]
+    humanization: 0.85           # high — loose, live feel
+    swing: 0.0
+    fills_density: 0.9
+    articulation_bias: "staccato-accented"
+    dynamics_shape: "crescendo-to-chorus"
+    tags: ["energetic", "celebratory", "ethnic", "he"]
+
+  - id: cinematic
+    name: "קולנועי / Cinematic"
+    name_en: "Cinematic / Orchestral"
+    description: "Epic orchestral energy with dynamic swells, rich string pads, brass hits, and dramatic transitions. Designed for maximum emotional impact."
+    preferred_styles: [cinematic, ballad]
+    instrumentation_weights:
+      strings: 1.5
+      brass: 1.4
+      piano: 1.2
+      drums: 0.8        # epic, not busy
+      bass: 0.9
+      pad: 1.3
+      lead_synth: 0.4
+    density_curve:
+      intro: 0.3
+      verse: 0.55
+      chorus: 1.0
+      bridge: 0.7
+      outro: 0.35
+    register_policy:
+      bass_register: "low"
+      melody_register: "high"
+      pad_register: "full"
+    transition_vocabulary: [swell, riser, drop, fade, modulation]
+    humanization: 0.6
+    swing: 0.0
+    fills_density: 0.5
+    articulation_bias: "legato-flowing"
+    dynamics_shape: "arch-climax"
+    tags: ["dramatic", "epic", "orchestral"]
+
+  - id: modern-pop
+    name: "פופ מודרני / Modern Pop"
+    name_en: "Modern Pop Producer"
+    description: "Tight, polished pop production. Punchy drums, clean bass, piano chops, and layered synth pads. Verse is sparse, chorus is full."
+    preferred_styles: [pop, electronic]
+    instrumentation_weights:
+      drums: 1.2
+      bass: 1.1
+      piano: 1.0
+      pad: 1.1
+      lead_synth: 1.0
+      strings: 0.6
+      brass: 0.4
+      guitar: 0.8
+    density_curve:
+      intro: 0.4
+      verse: 0.55
+      chorus: 0.95
+      bridge: 0.5
+      outro: 0.3
+    register_policy:
+      bass_register: "mid-low"
+      melody_register: "mid-high"
+      pad_register: "mid"
+    transition_vocabulary: [build, drop, crossfade, riser]
+    humanization: 0.4
+    swing: 0.0
+    fills_density: 0.65
+    articulation_bias: "rhythmic-punchy"
+    dynamics_shape: "drop-at-chorus"
+    tags: ["polished", "commercial", "contemporary"]
+
+  - id: live-band
+    name: "להקה חיה / Live Band"
+    name_en: "Warm Live Band"
+    description: "Organic, acoustic live-band feel. Guitar strumming, upright bass or electric bass, real-sounding piano, light strings. Loose and breathing."
+    preferred_styles: [pop, ballad, jazz]
+    instrumentation_weights:
+      guitar: 1.3
+      piano: 1.2
+      bass: 1.0
+      drums: 1.0
+      strings: 0.8
+      brass: 0.5
+      pad: 0.3
+      lead_synth: 0.2
+    density_curve:
+      intro: 0.5
+      verse: 0.65
+      chorus: 0.85
+      bridge: 0.6
+      outro: 0.4
+    register_policy:
+      bass_register: "mid"
+      melody_register: "mid"
+      pad_register: "low-mid"
+    transition_vocabulary: [lift, crossfade, fill, pickup]
+    humanization: 0.9
+    swing: 0.15
+    fills_density: 0.55
+    articulation_bias: "natural-expressive"
+    dynamics_shape: "gradual-build"
+    tags: ["organic", "warm", "acoustic", "live"]
+
+  - id: jazz-quartet
+    name: "קוורטט ג'אז / Jazz Quartet"
+    name_en: "Jazz Quartet"
+    description: "Sophisticated jazz feel. Piano comping with extended voicings, walking bass, brush/swing drums, and space for improvisation. Sparse and sophisticated."
+    preferred_styles: [jazz]
+    instrumentation_weights:
+      piano: 1.3
+      bass: 1.2
+      drums: 1.0
+      strings: 0.3
+      brass: 0.8        # light trumpet/sax accent
+      pad: 0.0
+      lead_synth: 0.0
+      guitar: 0.4
+    density_curve:
+      intro: 0.45
+      verse: 0.6
+      chorus: 0.75
+      bridge: 0.85       # bridge = solo
+      outro: 0.35
+    register_policy:
+      bass_register: "low-mid"
+      melody_register: "mid-high"
+      pad_register: "off"
+    transition_vocabulary: [tag, pickup, vamp, modulation]
+    humanization: 0.95
+    swing: 0.45
+    fills_density: 0.4
+    articulation_bias: "jazz-comp-legato"
+    dynamics_shape: "conversational"
+    tags: ["sophisticated", "jazz", "improvised"]
+
+  - id: electronic-producer
+    name: "מפיק אלקטרוני / Electronic Producer"
+    name_en: "Electronic Producer"
+    description: "Modern electronic arrangement with tight quantized drums, synth bass, pads, arpeggios, and aggressive drops. No organic instruments needed."
+    preferred_styles: [electronic, ambient]
+    instrumentation_weights:
+      drums: 1.3
+      bass: 1.0
+      lead_synth: 1.4
+      pad: 1.3
+      piano: 0.4
+      strings: 0.2
+      brass: 0.0
+      guitar: 0.2
+    density_curve:
+      intro: 0.3
+      verse: 0.6
+      chorus: 1.0
+      bridge: 0.4         # breakdown
+      outro: 0.2
+    register_policy:
+      bass_register: "low"
+      melody_register: "high"
+      pad_register: "mid"
+    transition_vocabulary: [drop, riser, filter-sweep, sidechain, silence]
+    humanization: 0.1
+    swing: 0.0
+    fills_density: 0.3
+    articulation_bias: "quantized-tight"
+    dynamics_shape: "drop-focused"
+    tags: ["electronic", "modern", "quantized", "EDM"]

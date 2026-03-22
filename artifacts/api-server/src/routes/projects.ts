@@ -90,6 +90,9 @@ async function updateJob(
     currentStep?: string;
     isMock?: boolean;
     errorMessage?: string;
+    errorCode?: string;
+    startedAt?: Date;
+    finishedAt?: Date;
   },
 ) {
   await db.update(jobsTable)
@@ -98,7 +101,17 @@ async function updateJob(
   broadcastJobUpdate(jobId, projectId, update);
 }
 
-/** Mark job as failed due to Python backend being unavailable (non-mock mode). */
+/** Mark job as started (sets startedAt + running status). */
+async function startJob(jobId: string, projectId: number, firstStep: string) {
+  await updateJob(jobId, projectId, {
+    status: "running",
+    progress: 1,
+    currentStep: firstStep,
+    startedAt: new Date(),
+  });
+}
+
+/** Mark job as failed with errorCode and finishedAt. */
 async function failJobNoPython(jobId: string, projectId: number, err: unknown) {
   const msg = err instanceof Error ? err.message : String(err);
   await updateJob(jobId, projectId, {
@@ -106,6 +119,8 @@ async function failJobNoPython(jobId: string, projectId: number, err: unknown) {
     progress: 0,
     currentStep: "Python backend unavailable",
     errorMessage: msg,
+    errorCode: "PYTHON_UNAVAILABLE",
+    finishedAt: new Date(),
   });
 }
 
@@ -137,9 +152,14 @@ function serializeJob(j: typeof jobsTable.$inferSelect) {
     currentStep: j.currentStep,
     isMock: j.isMock ?? false,
     errorMessage: j.errorMessage ?? null,
+    errorCode: j.errorCode ?? null,
+    inputPayload: j.inputPayload ?? null,
     resultData: j.resultData ?? null,
     warnings: j.warnings ?? null,
+    startedAt: j.startedAt ?? null,
+    finishedAt: j.finishedAt ?? null,
     createdAt: j.createdAt,
+    updatedAt: j.updatedAt,
   };
 }
 
@@ -419,10 +439,14 @@ router.post("/:id/regenerate-section", async (req, res) => {
 router.post("/:id/arrangement", async (req, res) => {
   const projectId = parseProjectId(req, res);
   if (projectId === null) return;
-  const { styleId, instruments, density, humanize, tempoFactor } = req.body;
+  const { styleId, instruments, density, humanize, tempoFactor, personaId } = req.body;
 
   const jobId = `arrangement-${uuidv4()}`;
-  await db.insert(jobsTable).values({ jobId, projectId, type: "arrangement", status: "queued", progress: 0, currentStep: "Queued", isMock: MOCK_MODE });
+  await db.insert(jobsTable).values({
+    jobId, projectId, type: "arrangement", status: "queued", progress: 0,
+    currentStep: "Queued", isMock: MOCK_MODE,
+    inputPayload: { styleId, personaId: personaId ?? null, density, humanize, tempoFactor },
+  });
   broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued", isMock: MOCK_MODE });
 
   (async () => {
@@ -439,7 +463,100 @@ router.post("/:id/arrangement", async (req, res) => {
         density: density ?? 0.7,
         humanize: humanize ?? true,
         tempo_factor: tempoFactor ?? 1.0,
+        persona_id: personaId ?? null,
         pipeline_version: PIPELINE_VERSION,
+      });
+    } catch (err) {
+      await failJobNoPython(jobId, projectId, err);
+    }
+  })();
+
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.jobId, jobId));
+  res.json(serializeJob(job));
+});
+
+// POST /api/projects/:id/arrangement/section/:label/regenerate
+// Regenerates only the tracks for a specific section label (mock: replaces track notes for that section)
+router.post("/:id/arrangement/section/:label/regenerate", async (req, res) => {
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const { label } = req.params;
+  const { styleId, personaId } = req.body;
+
+  const [arr] = await db.select().from(arrangementsTable)
+    .where(and(eq(arrangementsTable.projectId, projectId), eq(arrangementsTable.isCurrent, true)))
+    .limit(1);
+  if (!arr) { res.status(404).json({ error: "No current arrangement" }); return; }
+
+  const jobId = `regen-section-${uuidv4()}`;
+  await db.insert(jobsTable).values({
+    jobId, projectId, type: "arrangement", status: "queued", progress: 0,
+    currentStep: `Regenerating section: ${label}`, isMock: MOCK_MODE,
+    inputPayload: { sectionLabel: label, styleId: styleId ?? arr.styleId, personaId: personaId ?? null },
+  });
+  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: `Queued section regen: ${label}`, isMock: MOCK_MODE });
+
+  (async () => {
+    try {
+      if (MOCK_MODE) {
+        await startJob(jobId, projectId, `[MOCK] Regenerating section: ${label}`);
+        await new Promise(r => setTimeout(r, 800));
+        await updateJob(jobId, projectId, { status: "running", progress: 50, currentStep: `[MOCK] Writing notes for ${label}`, isMock: true });
+        await new Promise(r => setTimeout(r, 800));
+        await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: `[MOCK] Section ${label} regenerated`, isMock: true, finishedAt: new Date() });
+        return;
+      }
+      await callPythonBackend("/arrange/section", {
+        job_id: jobId, project_id: projectId,
+        section_label: label,
+        style_id: styleId ?? arr.styleId,
+        persona_id: personaId ?? null,
+      });
+    } catch (err) {
+      await failJobNoPython(jobId, projectId, err);
+    }
+  })();
+
+  const [job] = await db.select().from(jobsTable).where(eq(jobsTable.jobId, jobId));
+  res.json(serializeJob(job));
+});
+
+// POST /api/projects/:id/arrangement/track/:trackId/regenerate
+// Regenerates only a specific instrument track in the current arrangement
+router.post("/:id/arrangement/track/:trackId/regenerate", async (req, res) => {
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const { trackId } = req.params;
+  const { styleId, personaId } = req.body;
+
+  const [arr] = await db.select().from(arrangementsTable)
+    .where(and(eq(arrangementsTable.projectId, projectId), eq(arrangementsTable.isCurrent, true)))
+    .limit(1);
+  if (!arr) { res.status(404).json({ error: "No current arrangement" }); return; }
+
+  const jobId = `regen-track-${uuidv4()}`;
+  await db.insert(jobsTable).values({
+    jobId, projectId, type: "arrangement", status: "queued", progress: 0,
+    currentStep: `Regenerating track: ${trackId}`, isMock: MOCK_MODE,
+    inputPayload: { trackId, styleId: styleId ?? arr.styleId, personaId: personaId ?? null },
+  });
+  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: `Queued track regen: ${trackId}`, isMock: MOCK_MODE });
+
+  (async () => {
+    try {
+      if (MOCK_MODE) {
+        await startJob(jobId, projectId, `[MOCK] Regenerating track: ${trackId}`);
+        await new Promise(r => setTimeout(r, 600));
+        await updateJob(jobId, projectId, { status: "running", progress: 60, currentStep: `[MOCK] Generating new ${trackId} pattern`, isMock: true });
+        await new Promise(r => setTimeout(r, 600));
+        await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: `[MOCK] Track ${trackId} regenerated`, isMock: true, finishedAt: new Date() });
+        return;
+      }
+      await callPythonBackend("/arrange/track", {
+        job_id: jobId, project_id: projectId,
+        track_id: trackId,
+        style_id: styleId ?? arr.styleId,
+        persona_id: personaId ?? null,
       });
     } catch (err) {
       await failJobNoPython(jobId, projectId, err);
@@ -651,6 +768,7 @@ router.post("/:id/export", async (req, res) => {
 // ═════════════════════════════════════════════════════════════════════════════
 
 async function runSimulatedAnalysis(jobId: string, projectId: number) {
+  await startJob(jobId, projectId, "[MOCK] Loading audio");
   const steps = [
     { step: "[MOCK] Loading audio", progress: 10 },
     { step: "[MOCK] Separating sources (Demucs)", progress: 20 },
@@ -725,7 +843,7 @@ async function runSimulatedAnalysis(jobId: string, projectId: number) {
     waveformData: waveform,
   });
 
-  await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Analysis complete", isMock: true });
+  await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Analysis complete", isMock: true, finishedAt: new Date() });
   await db.update(projectsTable).set({ status: "analyzed", updatedAt: new Date() }).where(eq(projectsTable.id, projectId));
 }
 
@@ -771,6 +889,7 @@ function generateSimulatedMelody(duration: number) {
 }
 
 async function runSimulatedArrangement(jobId: string, projectId: number, styleId: string) {
+  await startJob(jobId, projectId, "[MOCK] Loading analysis data");
   const steps = [
     { step: "[MOCK] Loading analysis data", progress: 20 },
     { step: "[MOCK] Generating drum pattern", progress: 40 },
@@ -816,7 +935,7 @@ async function runSimulatedArrangement(jobId: string, projectId: number, styleId
     generationMetadata: { isMock: true, bpm, style: styleId },
   });
 
-  await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Arrangement complete", isMock: true });
+  await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Arrangement complete", isMock: true, finishedAt: new Date() });
   await db.update(projectsTable).set({ status: "arranged", updatedAt: new Date() }).where(eq(projectsTable.id, projectId));
 }
 
@@ -873,6 +992,7 @@ function generateStringsTrack(duration: number, bpm: number) {
 
 async function runSimulatedExport(jobId: string, projectId: number, formats: string[]) {
   const fmtList = Array.isArray(formats) ? formats : ["midi"];
+  await startJob(jobId, projectId, `[MOCK] Exporting ${fmtList[0]?.toUpperCase() ?? "MIDI"}`);
   for (let i = 0; i < fmtList.length; i++) {
     await new Promise(r => setTimeout(r, 1000));
     const progress = Math.round(((i + 1) / fmtList.length) * 100);
@@ -882,7 +1002,7 @@ async function runSimulatedExport(jobId: string, projectId: number, formats: str
       isMock: true,
     });
   }
-  await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Export complete", isMock: true });
+  await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Export complete", isMock: true, finishedAt: new Date() });
   await db.update(projectsTable).set({ status: "done", updatedAt: new Date() }).where(eq(projectsTable.id, projectId));
 }
 

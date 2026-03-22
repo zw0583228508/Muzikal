@@ -74,9 +74,71 @@ router.get("/", (_req, res) => {
   );
 });
 
+// GET /api/styles/personas
+// Returns all arranger persona definitions loaded from arranger_personas.yaml
+const PERSONAS_YAML_PATH = path.join(
+  WORKSPACE_ROOT, "artifacts", "music-ai-backend", "orchestration", "arranger_personas.yaml"
+);
+
+let _cachedPersonas: PersonaConfig[] | null = null;
+
+interface PersonaConfig {
+  id: string;
+  name: string;
+  name_en: string;
+  description: string;
+  preferred_styles: string[];
+  instrumentation_weights: Record<string, number>;
+  density_curve: Record<string, number>;
+  humanization: number;
+  swing: number;
+  fills_density: number;
+  articulation_bias: string;
+  dynamics_shape: string;
+  transition_vocabulary: string[];
+  tags: string[];
+}
+
+function loadPersonasFromYaml(): PersonaConfig[] {
+  if (_cachedPersonas) return _cachedPersonas;
+  try {
+    const raw = fs.readFileSync(PERSONAS_YAML_PATH, "utf-8");
+    const parsed = yaml.load(raw) as { personas: PersonaConfig[] };
+    _cachedPersonas = parsed?.personas ?? [];
+    console.log(`[styles] Loaded ${_cachedPersonas.length} personas from YAML`);
+    return _cachedPersonas;
+  } catch (err) {
+    console.warn(`[styles] Could not load personas YAML (${err})`);
+    return FALLBACK_PERSONAS;
+  }
+}
+
+router.get("/personas", (_req, res) => {
+  const personas = loadPersonasFromYaml();
+  res.json(personas.map(p => ({
+    id: p.id,
+    name: p.name,
+    nameEn: p.name_en,
+    description: p.description,
+    preferredStyles: p.preferred_styles ?? [],
+    humanization: p.humanization ?? 0.5,
+    swing: p.swing ?? 0.0,
+    transitionVocabulary: p.transition_vocabulary ?? [],
+    articulationBias: p.articulation_bias ?? "natural",
+    dynamicsShape: p.dynamics_shape ?? "linear",
+    tags: p.tags ?? [],
+  })));
+});
+
 export default router;
 
-// ─── Fallback — used if YAML file is unavailable ──────────────────────────────
+// ─── Fallbacks — used if YAML files are unavailable ──────────────────────────
+const FALLBACK_PERSONAS: PersonaConfig[] = [
+  { id: "modern-pop", name: "פופ מודרני", name_en: "Modern Pop Producer", description: "Tight, polished pop production", preferred_styles: ["pop"], instrumentation_weights: { drums: 1.2, bass: 1.1 }, density_curve: { intro: 0.4, verse: 0.55, chorus: 0.95, outro: 0.3 }, humanization: 0.4, swing: 0.0, fills_density: 0.65, articulation_bias: "rhythmic-punchy", dynamics_shape: "drop-at-chorus", transition_vocabulary: ["build", "drop"], tags: ["polished", "commercial"] },
+  { id: "hasidic-wedding", name: "חתונה חסידית", name_en: "Hasidic Wedding", description: "High-energy celebratory", preferred_styles: ["hasidic"], instrumentation_weights: { violin: 1.4, accordion: 1.3, brass: 1.1 }, density_curve: { intro: 0.5, verse: 0.75, chorus: 1.0, outro: 0.4 }, humanization: 0.85, swing: 0.0, fills_density: 0.9, articulation_bias: "staccato-accented", dynamics_shape: "crescendo-to-chorus", transition_vocabulary: ["build", "punch"], tags: ["energetic", "ethnic"] },
+  { id: "cinematic", name: "קולנועי", name_en: "Cinematic", description: "Epic orchestral energy", preferred_styles: ["cinematic"], instrumentation_weights: { strings: 1.5, brass: 1.4, piano: 1.2 }, density_curve: { intro: 0.3, verse: 0.55, chorus: 1.0, outro: 0.35 }, humanization: 0.6, swing: 0.0, fills_density: 0.5, articulation_bias: "legato-flowing", dynamics_shape: "arch-climax", transition_vocabulary: ["swell", "riser"], tags: ["dramatic", "epic"] },
+];
+
 const FALLBACK_STYLES: StyleConfig[] = [
   { id: "pop", name: "Pop", genre: "Pop" },
   { id: "jazz", name: "Jazz", genre: "Jazz" },

@@ -356,9 +356,16 @@ def generate_arrangement(
     density: float,
     do_humanize: bool,
     tempo_factor: float,
+    persona_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """Generate full multi-track MIDI arrangement with section-aware profiles."""
-    logger.info(f"Generating arrangement: style={style_id}, density={density}")
+    """Generate full multi-track MIDI arrangement with section-aware profiles.
+
+    Args:
+        persona_id: Optional arranger persona ID (e.g. 'hasidic-wedding').
+                    When provided, persona weights are applied to instrument volumes
+                    and persona metadata is embedded in the result.
+    """
+    logger.info(f"Generating arrangement: style={style_id}, density={density}, persona={persona_id}")
 
     style_config = STYLES.get(style_id, STYLES["pop"])
     profile = ARRANGER_PROFILES.get(style_id, {})
@@ -526,7 +533,7 @@ def generate_arrangement(
 
     logger.info(f"Generated {len(tracks)} tracks, {len(harmonic_plan)} section plans, {len(transitions)} transitions")
 
-    return {
+    result = {
         "styleId": style_id,
         "tracks": tracks,
         "totalDurationSeconds": round(total_duration, 2),
@@ -541,5 +548,16 @@ def generate_arrangement(
             "humanize": do_humanize,
             "section_count": len(sections),
             "transition_count": len(transitions),
+            "persona_id": persona_id,
         },
     }
+
+    # Apply persona overlays (volume weights, metadata embedding)
+    if persona_id:
+        try:
+            from orchestration.persona_loader import apply_persona_to_arrangement
+            result = apply_persona_to_arrangement(result, persona_id, style_id)
+        except Exception as pe:
+            logger.warning(f"Could not apply persona '{persona_id}': {pe}")
+
+    return result

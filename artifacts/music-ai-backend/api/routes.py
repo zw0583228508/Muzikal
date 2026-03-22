@@ -75,30 +75,40 @@ async def get_styles_endpoint():
 
 @router.post("/analyze")
 async def start_analysis(request: AnalyzeRequest, background_tasks: BackgroundTasks):
-    """Start audio analysis pipeline in background."""
-    background_tasks.add_task(
-        run_analysis_pipeline,
-        request.job_id,
-        request.project_id,
-        request.audio_file_path,
-    )
-    return {"jobId": request.job_id, "status": "queued"}
+    """Start audio analysis pipeline in background (Celery if available, else in-process)."""
+    from workers.tasks.analysis import dispatch_analysis
+    celery_task_id = dispatch_analysis(request.job_id, request.project_id, request.audio_file_path)
+    if celery_task_id is None:
+        background_tasks.add_task(
+            run_analysis_pipeline,
+            request.job_id,
+            request.project_id,
+            request.audio_file_path,
+        )
+    return {"jobId": request.job_id, "status": "queued", "worker": "celery" if celery_task_id else "inprocess"}
 
 
 @router.post("/arrange")
 async def start_arrangement(request: ArrangeRequest, background_tasks: BackgroundTasks):
-    """Start arrangement generation in background."""
-    background_tasks.add_task(
-        run_arrangement_pipeline,
-        request.job_id,
-        request.project_id,
-        request.style_id,
-        request.instruments,
-        request.density,
-        request.humanize,
-        request.tempo_factor,
+    """Start arrangement generation in background (Celery if available, else in-process)."""
+    from workers.tasks.arrangement import dispatch_arrangement
+    celery_task_id = dispatch_arrangement(
+        request.job_id, request.project_id, request.style_id,
+        request.instruments, request.density, request.humanize,
+        request.tempo_factor, getattr(request, "persona_id", None),
     )
-    return {"jobId": request.job_id, "status": "queued"}
+    if celery_task_id is None:
+        background_tasks.add_task(
+            run_arrangement_pipeline,
+            request.job_id,
+            request.project_id,
+            request.style_id,
+            request.instruments,
+            request.density,
+            request.humanize,
+            request.tempo_factor,
+        )
+    return {"jobId": request.job_id, "status": "queued", "worker": "celery" if celery_task_id else "inprocess"}
 
 
 def run_analysis_pipeline(job_id: str, project_id: int, audio_file_path: str):
@@ -222,15 +232,18 @@ def run_arrangement_pipeline(job_id: str, project_id: int, style_id: str,
 
 @router.post("/export")
 async def start_export(request: ExportRequest, background_tasks: BackgroundTasks):
-    """Start export pipeline in background."""
-    background_tasks.add_task(
-        run_export_pipeline,
-        request.job_id,
-        request.project_id,
-        request.formats,
-        request.output_dir,
-    )
-    return {"jobId": request.job_id, "status": "queued"}
+    """Start export pipeline in background (Celery if available, else in-process)."""
+    from workers.tasks.render import dispatch_export
+    celery_task_id = dispatch_export(request.job_id, request.project_id, request.formats, request.output_dir)
+    if celery_task_id is None:
+        background_tasks.add_task(
+            run_export_pipeline,
+            request.job_id,
+            request.project_id,
+            request.formats,
+            request.output_dir,
+        )
+    return {"jobId": request.job_id, "status": "queued", "worker": "celery" if celery_task_id else "inprocess"}
 
 
 def run_export_pipeline(job_id: str, project_id: int, formats: List[str],
@@ -304,15 +317,61 @@ def run_export_pipeline(job_id: str, project_id: int, formats: List[str],
 
 @router.post("/render")
 async def start_render(request: RenderRequest, background_tasks: BackgroundTasks):
-    """Start audio rendering pipeline in background."""
-    background_tasks.add_task(
-        run_render_pipeline,
-        request.job_id,
-        request.project_id,
-        request.formats,
-        request.output_dir,
-    )
-    return {"jobId": request.job_id, "status": "queued"}
+    """Start audio rendering pipeline in background (Celery if available, else in-process)."""
+    from workers.tasks.render import dispatch_render
+    celery_task_id = dispatch_render(request.job_id, request.project_id, request.formats, request.output_dir)
+    if celery_task_id is None:
+        background_tasks.add_task(
+            run_render_pipeline,
+            request.job_id,
+            request.project_id,
+            request.formats,
+            request.output_dir,
+        )
+    return {"jobId": request.job_id, "status": "queued", "worker": "celery" if celery_task_id else "inprocess"}
+
+
+@router.post("/jobs/{job_id}/cancel")
+async def cancel_job(job_id: str):
+    """
+    Cancel a running or queued job.
+    If the job was dispatched via Celery, revoke the Celery task.
+    Always marks the DB job as 'cancelled'.
+    """
+    from api.database import get_db_connection, update_job
+    import json
+
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT status, result_data FROM jobs WHERE job_id=%s", (job_id,))
+            row = cur.fetchone()
+    finally:
+        conn.close()
+
+    if not row:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    status = row["status"]
+    if status in ("completed", "failed", "cancelled"):
+        return {"jobId": job_id, "status": status, "message": "Already finished"}
+
+    result_data = row["result_data"] or {}
+    if isinstance(result_data, str):
+        try:
+            result_data = json.loads(result_data)
+        except Exception:
+            result_data = {}
+
+    celery_task_id = result_data.get("celery_task_id")
+    revoked = False
+    if celery_task_id:
+        from workers.celery_app import revoke_task
+        revoked = revoke_task(celery_task_id)
+
+    update_job(job_id, "cancelled", None, "Cancelled by user")
+    return {"jobId": job_id, "status": "cancelled", "celeryRevoked": revoked}
 
 
 def run_render_pipeline(job_id: str, project_id: int, formats: List[str],

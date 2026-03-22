@@ -117,6 +117,59 @@ lib/
     schema/projects.ts  # Drizzle schema: projects, jobs, analysis_results, arrangements, project_files
 ```
 
+## Session Progress (Current)
+
+### T002 — Feature Extraction Cache ✅
+- `packages/audio_core/feature_cache.py` — disk JSON cache keyed by SHA-256 checksum, TTL=7d, sharded dirs
+- Integrated into `audio/analyzer.py` — each step (rhythm, key, chords, melody, vocals, structure) checks cache before running ML; writes result on miss
+- `cacheEnabled: true` field in analysis response
+
+### T003 — Job Schema Hardening ✅
+- DB columns: `started_at`, `finished_at`, `error_code`, `error_message`, `input_payload`
+- `startJob()` helper sets `startedAt` atomically; all 3 simulated pipelines call it
+- `finishedAt` set on completion of all 3 simulated job types (analysis, arrangement, export)
+- `POST /api/jobs/:jobId/retry` and `POST /api/jobs/:jobId/cancel` endpoints
+- `inputPayload` stored for arrangement jobs (includes `personaId`)
+
+### T004 — Arranger Personas System ✅
+- `artifacts/music-ai-backend/orchestration/arranger_personas.yaml` — 6 personas: hasidic-wedding, cinematic, modern-pop, live-band, jazz-quartet, electronic-producer
+- `orchestration/persona_loader.py` — YAML loader (LRU cache), `apply_persona_to_arrangement()` adjusts track volumes by instrumentation weights, embeds persona metadata
+- `generate_arrangement()` accepts `persona_id` param; applies persona after generation
+- `GET /api/styles/personas` — returns all 6 personas from YAML
+- `POST /api/projects/:id/arrangement` accepts `personaId` param; stored in `inputPayload`
+- Frontend: Persona picker card grid in Arrange tab (Hebrew name, English name, tags); toggleable; cancel button
+
+### T005 — Regenerate-by-Section and Regenerate-by-Track ✅
+- `POST /api/projects/:id/arrangement/section/:label/regenerate` — creates a regen job for one section
+- `POST /api/projects/:id/arrangement/track/:trackId/regenerate` — creates a regen job for one track
+- Both endpoints: mock simulation path (2 steps, ~1.6s) + real Python backend path
+- `inputPayload` stores `sectionLabel`/`trackId` + `styleId` + `personaId`
+- Frontend: ↺ regen button per track in TrackLane; `handleRegenSection` / `handleRegenTrack` handlers
+
+### T006 — Analysis Inspector Page ✅
+- `artifacts/music-daw/src/components/analysis-inspector.tsx` — full Analysis Inspector component
+- Panels: Warnings, Tempo/Beat, Key+Alternatives, Chord Timeline (colour-coded by confidence), Melody Pitch Range, Section Timeline (coloured by label), Stem Separation status, Confidence Bars
+- New "Inspect" tab added to right panel (4 tabs total: Analyze, Inspect, Arrange, Export)
+
+### T007 — Celery + Redis Async Workers ✅
+- `workers/celery_app.py` — Celery app initialised against `REDIS_URL` (default `redis://localhost:6379/0`); pings Redis on startup, sets `CELERY_AVAILABLE=False` if unreachable; exposes `get_celery_app()` + `revoke_task()`
+- `workers/tasks/analysis.py` — Celery task wrapping `run_analysis_pipeline()`; stores `celery_task_id` in job `result_data`
+- `workers/tasks/arrangement.py` — Celery task wrapping `run_arrangement_pipeline()` (+ `persona_id` param)
+- `workers/tasks/render.py` — Celery export + render tasks; both `dispatch_export()` + `dispatch_render()` helpers
+- All 4 pipeline endpoints (`/analyze`, `/arrange`, `/export`, `/render`) try Celery dispatch first; fall back transparently to FastAPI `BackgroundTasks`
+- Response adds `"worker": "celery" | "inprocess"` field
+- `POST /python-api/jobs/{job_id}/cancel` — revokes Celery task (if `celery_task_id` stored) + marks DB `cancelled`
+- **Run workers**: `celery -A workers.celery_app worker --loglevel=info` (requires Redis)
+
+### T008 — Tests + replit.md Update ✅
+- **39 Python tests, all passing** (`python -m pytest tests/ -v`)
+- `tests/test_feature_cache.py` — 9 tests: miss/hit, TTL expiry, stats, clear, complex JSON
+- `tests/test_personas.py` — 9 tests: all 6 personas present, schema validation, `apply_persona_to_arrangement` metadata + volume weights, LRU cache
+- `tests/test_jobs.py` — 12 tests: Celery fallback (CELERY_AVAILABLE, dispatch returns None), FastAPI health/styles/cancel/422 validation
+- `tests/test_regen_endpoints.py` — 9 integration tests (skip if server down): regen-section, regen-track, inputPayload stored, personas endpoint
+- `tests/conftest.py` — autouse fixture isolates cache per test via temp dir
+- Run: `cd artifacts/music-ai-backend && python -m pytest tests/ -v`
+
 ## Key Features Implemented
 
 ### Audio Analysis (MIR)
@@ -186,7 +239,12 @@ lib/
 | GET | /api/projects/:id/files | List generated files |
 | GET | /api/projects/:id/files/:filename/download | Download file |
 | GET | /api/jobs/:jobId | Get job status |
+| POST | /api/jobs/:jobId/cancel | Cancel a running job |
+| POST | /api/jobs/:jobId/retry | Retry a failed job |
 | GET | /api/styles | List arrangement styles |
+| GET | /api/styles/personas | List all 6 arranger personas |
+| POST | /api/projects/:id/arrangement/section/:label/regenerate | Regenerate one section |
+| POST | /api/projects/:id/arrangement/track/:trackId/regenerate | Regenerate one track |
 
 ## Development Commands
 

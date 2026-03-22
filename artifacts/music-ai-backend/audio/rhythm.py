@@ -31,7 +31,7 @@ def analyze_rhythm(y: np.ndarray, sr: int) -> Dict[str, Any]:
 
     # Also try plp (predominant local pulse) for robust tempo
     pulse = librosa.beat.plp(onset_envelope=onset_env, sr=sr)
-    tempo_plp = float(librosa.tempo(onset_envelope=pulse, sr=sr, aggregate=None).mean())
+    tempo_plp = float(librosa.beat.tempo(onset_envelope=pulse, sr=sr, aggregate=None).mean())
 
     # Use the more confident tempo estimate
     bpm = float(tempo) if float(tempo) > 0 else tempo_plp

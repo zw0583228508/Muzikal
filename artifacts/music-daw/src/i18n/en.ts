@@ -93,6 +93,11 @@ export default {
     "No waveform data": "No waveform data",
     "Generated Files": "Generated Files",
     "Upload audio to enable playback": "Upload audio to enable playback",
-    "Audio playback error": "Audio playback error"
+    "Audio playback error": "Audio playback error",
+    "Open Piano Roll": "Open Piano Roll",
+    "notes": "notes",
+    "Lock field": "Lock (preserve during re-arrangement)",
+    "Unlock field": "Unlock (allow regeneration)",
+    "Log in": "Log in"
   }
 };

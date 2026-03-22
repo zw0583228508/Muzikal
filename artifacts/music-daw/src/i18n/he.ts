@@ -124,6 +124,11 @@ export default {
     "Middle Eastern": "מזרחי",
     "Hip-Hop": "היפ-הופ",
     "Wedding": "חתונה",
-    "Acoustic": "אקוסטי"
+    "Acoustic": "אקוסטי",
+    "Open Piano Roll": "פתח Piano Roll",
+    "notes": "תווים",
+    "Lock field": "נעל (שמור בעיבוד מחדש)",
+    "Unlock field": "בטל נעילה (אפשר שינוי)",
+    "Log in": "התחבר"
   }
 };

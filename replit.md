@@ -194,13 +194,16 @@ pnpm --filter @workspace/api-spec run codegen
 | 10 | Manual correction tools | ✅ BPM/Key/Mode corrections modal |
 | 11 | WebSocket real-time updates | ✅ /api/ws, auto-reconnect, fallback to polling |
 
+## Step 19-20 Features
+
+- **Lock/Unlock system**: Lock icons on Key, Structure, Chords cards — locked fields preserved during re-arrangement
+- **Piano Roll**: Full MIDI editor panel at bottom — click any track lane to open; scrollable with pitch grid, note colors, velocity opacity, zoom 20-240px/beat
+- **Replit Auth (OIDC/PKCE)**: Login/logout in header, sessions in PostgreSQL, openid-client v6
+
 ## Remaining Features (Future)
 
-- Replit Auth (user accounts, project ownership)
 - FluidSynth/soundfont rendering (higher quality audio)
-- Piano roll MIDI editor
 - Real job queue with Redis + Celery (currently PostgreSQL-based)
 - torchcrepe / basic-pitch for more accurate melody extraction
 - Transformer-based chord recognition model
-- Section-by-section arrangement regeneration (lock/unlock)
 - Pipeline versioning for result reproducibility

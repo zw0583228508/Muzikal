@@ -4,17 +4,19 @@ import { useListProjects, useCreateProject, useDeleteProject, Project } from "@w
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, Music2, Clock, Calendar, Activity, Loader2 } from "lucide-react";
+import { Plus, Trash2, Music2, Clock, Calendar, Activity, Loader2, LogIn, LogOut, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "@/components/language-toggle";
+import { useAuth } from "@workspace/replit-auth-web";
 
 export default function Home() {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
   const { data: projects, isLoading } = useListProjects();
+  const { user, isAuthenticated, login, logout } = useAuth();
   
   const createMutation = useCreateProject({
     mutation: {
@@ -75,8 +77,28 @@ export default function Home() {
               <p className="text-muted-foreground mt-1">{t("Intelligence & Generation DAW")}</p>
             </div>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <LanguageToggle />
+            {/* Auth button */}
+            {isAuthenticated ? (
+              <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-white/5 border border-white/10">
+                  {user?.profileImage ? (
+                    <img src={user.profileImage} alt={user.username || ""} className="w-6 h-6 rounded-full" />
+                  ) : (
+                    <User className="w-4 h-4 text-muted-foreground" />
+                  )}
+                  <span className="text-sm text-white/80 max-w-24 truncate">{user?.firstName || user?.username}</span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={logout} className="text-muted-foreground hover:text-white">
+                  <LogOut className="w-4 h-4" />
+                </Button>
+              </div>
+            ) : (
+              <Button variant="outline" size="sm" onClick={login} className="border-primary/30 hover:border-primary text-primary">
+                <LogIn className="w-4 h-4 mr-1.5" /> {t("Log in")}
+              </Button>
+            )}
             <Button size="lg" onClick={handleCreate} disabled={createMutation.isPending} className="group">
               {createMutation.isPending ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : <Plus className="mr-2 h-5 w-5 group-hover:scale-125 transition-transform" />}
               {t("New Project")}

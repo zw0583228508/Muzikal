@@ -21,8 +21,10 @@ import {
   Play, Pause, Square, SkipBack, Search, Volume2, Settings2,
   ChevronLeft, Upload, Zap, Download, Layers, Activity, Music,
   Settings, Loader2, FileMusic, FileAudio, FileText, HardDrive,
-  AlertTriangle, Edit3, CheckCircle2, XCircle
+  AlertTriangle, Edit3, CheckCircle2, XCircle, Lock, Unlock,
+  Piano
 } from "lucide-react";
+import { PianoRoll } from "@/components/piano-roll";
 import { formatTime, cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "@/components/language-toggle";
@@ -108,41 +110,62 @@ function FailedBanner({ message }: { message: string }) {
 
 // ─── Track Lane ───────────────────────────────────────────────────────────────
 
-function TrackLane({ track }: { track: any }) {
+function TrackLane({ track, isSelected, onSelect }: { track: any; isSelected: boolean; onSelect: () => void }) {
   const { t } = useTranslation();
   return (
-    <div className="flex border-b border-white/5 h-24 group relative">
-      <div className="w-64 bg-card border-r border-white/10 flex flex-col justify-center px-3 z-10">
+    <div
+      className={cn("flex border-b border-white/5 h-24 group relative cursor-pointer", isSelected && "ring-1 ring-inset ring-primary/40")}
+      onClick={onSelect}
+    >
+      <div className={cn("w-64 border-r border-white/10 flex flex-col justify-center px-3 z-10 transition-colors", isSelected ? "bg-primary/10" : "bg-card")}>
         <div className="flex justify-between items-center mb-2">
           <span className="font-medium text-sm text-white truncate flex items-center gap-2">
             <div className="w-2 h-2 rounded-full" style={{ backgroundColor: track.color || '#00f0ff' }} />
             {t(track.name)}
           </span>
-          <div className="flex gap-1" dir="ltr">
-            <button className={cn("w-6 h-6 rounded text-xs font-bold transition-colors", track.muted ? "bg-accent/20 text-accent" : "bg-white/5 hover:bg-white/10")}>M</button>
-            <button className={cn("w-6 h-6 rounded text-xs font-bold transition-colors", track.soloed ? "bg-yellow-500/20 text-yellow-500" : "bg-white/5 hover:bg-white/10")}>S</button>
+          <div className="flex gap-1" dir="ltr" onClick={e => e.stopPropagation()}>
+            <button
+              className={cn("w-6 h-6 rounded text-xs font-bold transition-colors", track.muted ? "bg-accent/20 text-accent" : "bg-white/5 hover:bg-white/10")}
+              title={t("Mute")}
+            >M</button>
+            <button
+              className={cn("w-6 h-6 rounded text-xs font-bold transition-colors", track.soloed ? "bg-yellow-500/20 text-yellow-500" : "bg-white/5 hover:bg-white/10")}
+              title={t("Solo")}
+            >S</button>
+            <button
+              className="w-6 h-6 rounded text-xs font-bold transition-colors bg-primary/10 text-primary hover:bg-primary/20"
+              title={t("Open Piano Roll")}
+            ><Piano className="w-3 h-3 mx-auto" /></button>
           </div>
         </div>
-        <div className="flex items-center gap-2" dir="ltr">
+        <div className="flex items-center gap-2" dir="ltr" onClick={e => e.stopPropagation()}>
           <Volume2 className="w-3 h-3 text-muted-foreground" />
           <Slider defaultValue={[track.volume * 100]} max={100} className="w-full" />
         </div>
       </div>
-      <div className="flex-1 bg-[#0a0a0c] relative overflow-hidden flex items-center px-4" dir="ltr">
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:2rem_100%]" />
-        {track.notes?.slice(0, 60).map((note: any, i: number) => (
+
+      {/* Mini piano roll preview */}
+      <div className="flex-1 bg-[#0a0a0c] relative overflow-hidden" dir="ltr">
+        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:2rem_100%]" />
+        {track.notes?.slice(0, 100).map((note: any, i: number) => (
           <div
             key={i}
-            className="absolute h-2 rounded-sm shadow-sm"
+            className="absolute rounded-sm"
             style={{
               left: `${note.startTime * 20}px`,
               width: `${Math.max(note.duration * 20, 2)}px`,
-              bottom: `${(note.pitch % 24) * 4}px`,
+              bottom: `${Math.max(0, (note.pitch - 36) % 52) * 1.7 + 4}px`,
+              height: 3,
               backgroundColor: track.color || '#00f0ff',
-              opacity: note.velocity / 127,
+              opacity: 0.4 + (note.velocity / 127) * 0.6,
             }}
           />
         ))}
+        {isSelected && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="text-xs text-primary/60 bg-black/40 px-2 py-0.5 rounded">{t("Open Piano Roll")} ↓</span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -294,10 +317,22 @@ export default function ProjectStudio() {
   const [showMockBanner, setShowMockBanner] = useState(false);
   const [showCorrections, setShowCorrections] = useState(false);
   const [selectedStyle, setSelectedStyle] = useState("pop");
+  const [selectedTrack, setSelectedTrack] = useState<any | null>(null);
+  // Lock/unlock system (Step 19): locked fields won't be regenerated during re-arrangement
+  const [lockedFields, setLockedFields] = useState<Set<string>>(new Set());
   const [selectedFormats, setSelectedFormats] = useState<Record<string, boolean>>({
     midi: true, musicxml: false, pdf: false,
     wav: true, flac: false, mp3: false, stems: false,
   });
+
+  const toggleLock = useCallback((field: string) => {
+    setLockedFields(prev => {
+      const next = new Set(prev);
+      if (next.has(field)) next.delete(field);
+      else next.add(field);
+      return next;
+    });
+  }, []);
 
   // ─ Data
   const { data: project, isLoading: isProjLoading } = useGetProject(projectId);
@@ -390,7 +425,12 @@ export default function ProjectStudio() {
     try {
       const res = await arrangeMut.mutateAsync({
         projectId,
-        data: { styleId: selectedStyle, density: 0.8, humanize: true }
+        data: {
+          styleId: selectedStyle,
+          density: 0.8,
+          humanize: true,
+          lockedFields: Array.from(lockedFields),
+        }
       });
       startJob(res.jobId);
     } catch (err) {
@@ -497,7 +537,12 @@ export default function ProjectStudio() {
                   </div>
                 )}
                 {arrangement?.tracks?.map((track: any) => (
-                  <TrackLane key={track.id} track={track} />
+                  <TrackLane
+                    key={track.id}
+                    track={track}
+                    isSelected={selectedTrack?.id === track.id}
+                    onSelect={() => setSelectedTrack(prev => prev?.id === track.id ? null : track)}
+                  />
                 ))}
               </div>
             )}
@@ -545,15 +590,25 @@ export default function ProjectStudio() {
                       </div>
                     )}
 
-                    <div className="daw-panel p-4">
+                    {/* Key & Tempo card */}
+                    <div className={cn("daw-panel p-4 transition-all", lockedFields.has("key") && "ring-1 ring-primary/40 shadow-[0_0_10px_rgba(0,240,255,0.08)]")}>
                       <div className="flex items-center justify-between mb-3">
                         <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Key & Tempo")}</h4>
-                        <button
-                          onClick={() => setShowCorrections(true)}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-accent transition-colors"
-                        >
-                          <Edit3 className="w-3 h-3" /> {t("Edit")}
-                        </button>
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => toggleLock("key")}
+                            className={cn("w-6 h-6 rounded flex items-center justify-center transition-colors", lockedFields.has("key") ? "text-primary bg-primary/20" : "text-muted-foreground hover:text-white bg-white/5 hover:bg-white/10")}
+                            title={lockedFields.has("key") ? t("Unlock field") : t("Lock field")}
+                          >
+                            {lockedFields.has("key") ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                          </button>
+                          <button
+                            onClick={() => setShowCorrections(true)}
+                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-accent transition-colors"
+                          >
+                            <Edit3 className="w-3 h-3" /> {t("Edit")}
+                          </button>
+                        </div>
                       </div>
                       <div className="grid grid-cols-2 gap-4" dir="ltr">
                         <div className="bg-black/30 rounded p-3 text-center border border-white/5">
@@ -567,8 +622,18 @@ export default function ProjectStudio() {
                       </div>
                     </div>
 
-                    <div className="daw-panel p-4">
-                      <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-3">{t("Structure")}</h4>
+                    {/* Structure card */}
+                    <div className={cn("daw-panel p-4 transition-all", lockedFields.has("sections") && "ring-1 ring-primary/40 shadow-[0_0_10px_rgba(0,240,255,0.08)]")}>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Structure")}</h4>
+                        <button
+                          onClick={() => toggleLock("sections")}
+                          className={cn("w-6 h-6 rounded flex items-center justify-center transition-colors", lockedFields.has("sections") ? "text-primary bg-primary/20" : "text-muted-foreground hover:text-white bg-white/5 hover:bg-white/10")}
+                          title={lockedFields.has("sections") ? t("Unlock field") : t("Lock field")}
+                        >
+                          {lockedFields.has("sections") ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                        </button>
+                      </div>
                       <div className="space-y-2">
                         {analysis.structure.sections.map((sec: any, i: number) => (
                           <div key={i} className="flex justify-between items-center text-sm p-2 rounded bg-white/5">
@@ -579,8 +644,18 @@ export default function ProjectStudio() {
                       </div>
                     </div>
 
-                    <div className="daw-panel p-4">
-                      <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-3">{t("Chord Progression")}</h4>
+                    {/* Chord Progression card */}
+                    <div className={cn("daw-panel p-4 transition-all", lockedFields.has("chords") && "ring-1 ring-primary/40 shadow-[0_0_10px_rgba(0,240,255,0.08)]")}>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Chord Progression")}</h4>
+                        <button
+                          onClick={() => toggleLock("chords")}
+                          className={cn("w-6 h-6 rounded flex items-center justify-center transition-colors", lockedFields.has("chords") ? "text-primary bg-primary/20" : "text-muted-foreground hover:text-white bg-white/5 hover:bg-white/10")}
+                          title={lockedFields.has("chords") ? t("Unlock field") : t("Lock field")}
+                        >
+                          {lockedFields.has("chords") ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
+                        </button>
+                      </div>
                       <p className="text-sm font-mono text-white/80 leading-relaxed" dir="ltr">
                         {analysis.chords?.leadSheet || analysis.chords?.chords?.slice(0, 8).map((c: any) => c.chord).join(" | ")}
                       </p>
@@ -728,6 +803,16 @@ export default function ProjectStudio() {
           </Tabs>
         </div>
       </div>
+
+      {/* Piano Roll panel — opens at bottom when a track is selected */}
+      {selectedTrack && (
+        <PianoRoll
+          track={selectedTrack}
+          bpm={analysis?.rhythm?.bpm ?? 120}
+          totalDurationSeconds={project?.audioDurationSec ?? 180}
+          onClose={() => setSelectedTrack(null)}
+        />
+      )}
 
       {/* Manual Corrections modal */}
       {showCorrections && (

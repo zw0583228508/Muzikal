@@ -27,13 +27,23 @@ const MOCK_MODE = (process.env.MOCK_MODE ?? "true").toLowerCase() === "true";
 const PIPELINE_VERSION = "1.1.0";
 
 const MODEL_VERSIONS: Record<string, string> = {
-  rhythm: "madmom-0.16.1",
-  key: "essentia-2.1b6",
-  chords: "chord-cnn-0.4.0",
-  melody: "pyin-0.1.1",
-  structure: "msaf-0.5.0",
-  separation: "demucs-htdemucs-4.0",
-  vocals: "crepe-0.0.13",
+  madmom:       "0.16.1",
+  essentia:     "2.1b6",
+  "chord-cnn":  "0.4.0",
+  pyin:         "0.1.1",
+  msaf:         "0.5.0",
+  demucs:       "htdemucs-4.0",
+  crepe:        "0.0.13",
+};
+
+const MODEL_BY_TYPE: Record<string, string> = {
+  rhythm:     `madmom-${MODEL_VERSIONS.madmom}`,
+  key:        `essentia-${MODEL_VERSIONS.essentia}`,
+  chords:     `chord-cnn-${MODEL_VERSIONS["chord-cnn"]}`,
+  melody:     `pyin-${MODEL_VERSIONS.pyin}`,
+  structure:  `msaf-${MODEL_VERSIONS.msaf}`,
+  separation: `demucs-${MODEL_VERSIONS.demucs}`,
+  vocals:     `crepe-${MODEL_VERSIONS.crepe}`,
 };
 
 // ─── Multer ───────────────────────────────────────────────────────────────────
@@ -224,8 +234,8 @@ router.post("/:id/analyze", async (req, res) => {
   if (!project.audioFilePath && !MOCK_MODE) { res.status(400).json({ error: "No audio file uploaded yet" }); return; }
 
   const jobId = `analysis-${uuidv4()}`;
-  await db.insert(jobsTable).values({ jobId, projectId, type: "analysis", status: "queued", progress: 0, currentStep: "Queued" });
-  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued" });
+  await db.insert(jobsTable).values({ jobId, projectId, type: "analysis", status: "queued", progress: 0, currentStep: "Queued", isMock: MOCK_MODE });
+  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued", isMock: MOCK_MODE });
 
   // Fire-and-forget: call Python or simulate
   (async () => {
@@ -680,7 +690,7 @@ async function runSimulatedAnalysis(jobId: string, projectId: number) {
       bpm, timeSignatureNumerator: 4, timeSignatureDenominator: 4,
       beatGrid, downbeats,
       confidence: 0.88, isMock: true,
-      model: MODEL_VERSIONS.rhythm,
+      model: MODEL_BY_TYPE.rhythm,
     },
     keyData: {
       globalKey, mode: keyMode,
@@ -688,19 +698,19 @@ async function runSimulatedAnalysis(jobId: string, projectId: number) {
       alternatives: [{ key: globalKey === "C" ? "Am" : "C", mode: keyMode === "major" ? "minor" : "major", confidence: 0.62 }],
       modulations: [],
       isMock: true,
-      model: MODEL_VERSIONS.key,
+      model: MODEL_BY_TYPE.key,
     },
     chordsData: {
       chords: simChords,
       leadSheet: simChords.slice(0, 8).map((c: {chord: string}) => c.chord).join(" | "),
       isMock: true,
-      model: MODEL_VERSIONS.chords,
+      model: MODEL_BY_TYPE.chords,
     },
     melodyData: {
       notes: generateSimulatedMelody(totalDuration),
       inferredHarmony: ["C - Am - F - G", "C - F - Am - G"],
       isMock: true,
-      model: MODEL_VERSIONS.melody,
+      model: MODEL_BY_TYPE.melody,
     },
     structureData: {
       sections: [
@@ -713,7 +723,7 @@ async function runSimulatedAnalysis(jobId: string, projectId: number) {
         { label: "chorus", startTime: 160, endTime: 180, confidence: 0.89, isMock: true },
       ],
       isMock: true,
-      model: MODEL_VERSIONS.structure,
+      model: MODEL_BY_TYPE.structure,
     },
     waveformData: waveform,
   });

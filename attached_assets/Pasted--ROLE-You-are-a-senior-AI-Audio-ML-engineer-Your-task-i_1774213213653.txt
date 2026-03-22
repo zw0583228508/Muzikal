@@ -1,0 +1,283 @@
+## ROLE
+
+You are a senior AI + Audio ML engineer. Your task is to transform an existing rule-based music analysis and arrangement system into a **state-of-the-art generative music platform (Suno-level)**.
+
+---
+
+## OBJECTIVE
+
+Upgrade the system from:
+
+* Audio analysis + MIDI arrangement
+
+To:
+
+* End-to-end **AI music generation engine with style control and audio output**
+
+---
+
+## PHASE 1 — STANDARDIZED MUSIC REPRESENTATION
+
+### TASK
+
+Create a unified internal music representation layer.
+
+### REQUIREMENTS
+
+* Define a `MusicSequence` schema:
+
+  * tempo (BPM)
+  * time signature
+  * key + mode
+  * chord progression (time-aligned)
+  * melody (note events)
+  * structure (intro/verse/chorus/bridge)
+
+### IMPLEMENTATION
+
+* Use MIDI-like tokenization
+* Create:
+
+  * `music_schema.py`
+  * `tokenizer.py`
+
+### OUTPUT
+
+* JSON + token sequence format
+* Must support conversion:
+
+  * Audio → tokens
+  * Tokens → MIDI
+
+---
+
+## PHASE 2 — AUDIO TOKENIZATION (CRITICAL)
+
+### TASK
+
+Convert audio into discrete tokens for AI models.
+
+### TECHNOLOGY
+
+* Use one of:
+
+  * Meta EnCodec
+  * DAC (Descript Audio Codec)
+
+### IMPLEMENTATION
+
+* Create:
+
+  * `audio_encoder.py`
+  * `audio_decoder.py`
+
+### OUTPUT
+
+* Input: WAV
+* Output: token sequence
+* Must support reconstruction
+
+---
+
+## PHASE 3 — GENERATIVE MODEL INTEGRATION
+
+### TASK
+
+Integrate a generative music model.
+
+### OPTION A (FAST)
+
+* Integrate:
+
+  * MusicGen (Meta AudioCraft)
+
+### OPTION B (ADVANCED)
+
+* Build custom model:
+
+  * Transformer or Diffusion
+  * Input: audio tokens
+  * Output: audio tokens
+
+### IMPLEMENTATION
+
+* Create:
+
+  * `generation_engine.py`
+* Support:
+
+  * prompt-based generation
+  * continuation from input audio
+
+---
+
+## PHASE 4 — STYLE CONDITIONING (VERY IMPORTANT)
+
+### TASK
+
+Enable precise control over musical style.
+
+### IMPLEMENTATION
+
+* Define style embeddings:
+
+  * Hasidic
+  * Pop
+  * Orchestral
+  * Jazz
+
+* Add conditioning input:
+
+  ```
+  {
+    "style": "Hasidic",
+    "tempo": 120,
+    "mood": "happy"
+  }
+  ```
+
+* Create:
+
+  * `style_engine.py`
+
+### ADVANCED
+
+* Add composer profiles (fine-tuned or prompt-conditioned)
+
+---
+
+## PHASE 5 — STEM SEPARATION
+
+### TASK
+
+Split audio into components.
+
+### TECHNOLOGY
+
+* Use:
+
+  * HTDemucs (preferred)
+
+### OUTPUT
+
+* vocals.wav
+* drums.wav
+* bass.wav
+* other.wav
+
+### IMPLEMENTATION
+
+* Create:
+
+  * `stem_separator.py`
+
+---
+
+## PHASE 6 — HYBRID GENERATION (KEY DIFFERENTIATOR)
+
+### TASK
+
+Combine analysis + generation.
+
+### FLOW
+
+* Analyze input audio
+
+* Extract:
+
+  * chords
+  * tempo
+  * structure
+
+* Feed into generative model as constraints
+
+### RESULT
+
+* Generate new arrangement based on original song
+
+---
+
+## PHASE 7 — AUDIO RENDERING (HIGH QUALITY)
+
+### TASK
+
+Replace MIDI rendering with high-quality audio synthesis.
+
+### OPTIONS
+
+* Neural audio generation (preferred)
+* OR:
+
+  * Integrate VST rendering (Kontakt, Spitfire)
+
+### IMPLEMENTATION
+
+* Create:
+
+  * `audio_render_engine.py`
+
+---
+
+## PHASE 8 — API LAYER
+
+### TASK
+
+Expose system via API.
+
+### ENDPOINTS
+
+* POST /generate
+* POST /analyze
+* POST /transform
+
+### INPUT
+
+* audio file OR prompt
+
+### OUTPUT
+
+* generated audio
+* stems
+* metadata
+
+---
+
+## PHASE 9 — ASYNC PROCESSING
+
+### TASK
+
+Support long-running jobs.
+
+### TECHNOLOGY
+
+* Celery or FastAPI background workers
+
+---
+
+## PHASE 10 — PERFORMANCE
+
+### REQUIREMENTS
+
+* GPU support (mandatory)
+* batching
+* caching
+
+---
+
+## FINAL RESULT
+
+System must support:
+
+1. Prompt → full song generation
+2. Audio → transformed version
+3. Style-controlled output
+4. Stem export
+5. High-quality audio output
+
+---
+
+## IMPORTANT
+
+* Avoid rule-based orchestration
+* Prefer neural generation wherever possible
+* Focus on audio quality and style realism

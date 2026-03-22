@@ -1,0 +1,21 @@
+packages:
+  "framer-motion": "For cinematic UI transitions and smooth layout animations in the DAW"
+  "clsx": "For conditional class name merging"
+  "tailwind-merge": "For merging tailwind classes safely"
+  "@radix-ui/react-slider": "For high-quality accessible mixer faders and timeline scrubbers"
+  "@radix-ui/react-tabs": "For the DAW right panel tab system"
+  "@radix-ui/react-dialog": "For project creation and export modals"
+  "lucide-react": "For beautiful consistent studio icons"
+
+images:
+  - path: "artifacts/music-daw/public/images/studio-bg.png"
+    description: "Dark, cinematic recording studio background with subtle neon cyan and magenta LED accents, out of focus, hyper-realistic, dark mode"
+    aspect_ratio: "16:9"
+  - path: "artifacts/music-daw/public/images/logo-icon.png"
+    description: "Abstract minimal logo of a glowing soundwave intersecting a geometric artificial intelligence brain, cyan and magenta gradient on dark background"
+    aspect_ratio: "1:1"
+
+notes:
+  - Using provided API hooks from @workspace/api-client-react
+  - Inferring polling logic via useGetJobStatus with refetchInterval
+  - Handling file uploads using native File/Blob APIs with the generated useUploadAudio hook

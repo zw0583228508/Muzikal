@@ -1,96 +1,140 @@
-# Workspace
+# MusicAI Studio
 
 ## Overview
 
-pnpm workspace monorepo using TypeScript. Each package manages its own dependencies.
+Production-grade AI-powered music intelligence and generation system.
+Full-stack web application with Python audio processing backend and React DAW frontend.
 
 ## Stack
 
-- **Monorepo tool**: pnpm workspaces
-- **Node.js version**: 24
-- **Package manager**: pnpm
-- **TypeScript version**: 5.9
-- **API framework**: Express 5
+### Frontend
+- **Framework**: React + Vite (TypeScript)
+- **UI**: Tailwind CSS, shadcn/ui, Framer Motion, Lucide Icons
+- **State**: React Query for server state, polling for async jobs
+- **Preview path**: `/` (root)
+
+### Node.js API Server
+- **Framework**: Express 5
+- **Port**: 8080 (exposed at `/api`)
 - **Database**: PostgreSQL + Drizzle ORM
-- **Validation**: Zod (`zod/v4`), `drizzle-zod`
-- **API codegen**: Orval (from OpenAPI spec)
-- **Build**: esbuild (CJS bundle)
+- **Validation**: Zod (generated from OpenAPI spec)
+- **File uploads**: multer (200MB limit)
 
-## Structure
+### Python Audio Processing Backend
+- **Framework**: FastAPI + Uvicorn
+- **Port**: 8001 (internal, not exposed to proxy)
+- **Called by**: Node.js api-server at `http://localhost:8001`
 
-```text
-artifacts-monorepo/
-├── artifacts/              # Deployable applications
-│   └── api-server/         # Express API server
-├── lib/                    # Shared libraries
-│   ├── api-spec/           # OpenAPI spec + Orval codegen config
-│   ├── api-client-react/   # Generated React Query hooks
-│   ├── api-zod/            # Generated Zod schemas from OpenAPI
-│   └── db/                 # Drizzle ORM schema + DB connection
-├── scripts/                # Utility scripts (single workspace package)
-│   └── src/                # Individual .ts scripts, run via `pnpm --filter @workspace/scripts run <script>`
-├── pnpm-workspace.yaml     # pnpm workspace (artifacts/*, lib/*, lib/integrations/*, scripts)
-├── tsconfig.base.json      # Shared TS options (composite, bundler resolution, es2022)
-├── tsconfig.json           # Root TS project references
-└── package.json            # Root package with hoisted devDeps
+### Database
+- **PostgreSQL** via Drizzle ORM
+- **Tables**: projects, jobs, analysis_results, arrangements
+
+## Architecture
+
+```
+Browser → [Proxy :80]
+  ├── /         → music-daw frontend (React, :19270)
+  └── /api      → api-server (Express, :8080)
+                    └── localhost:8001 → Python audio backend (FastAPI)
 ```
 
-## TypeScript & Composite Projects
+## Services / Workflows
 
-Every package extends `tsconfig.base.json` which sets `composite: true`. The root `tsconfig.json` lists all packages as project references. This means:
+| Workflow | Port | Description |
+|----------|------|-------------|
+| `artifacts/music-daw: web` | 19270 | React DAW frontend |
+| `artifacts/api-server: API Server` | 8080 | Node.js REST API |
+| `Python Audio Backend` | 8001 | FastAPI audio processing |
+| `artifacts/mockup-sandbox: Component Preview Server` | 8081 | Design sandbox |
 
-- **Always typecheck from the root** — run `pnpm run typecheck` (which runs `tsc --build --emitDeclarationOnly`). This builds the full dependency graph so that cross-package imports resolve correctly. Running `tsc` inside a single package will fail if its dependencies haven't been built yet.
-- **`emitDeclarationOnly`** — we only emit `.d.ts` files during typecheck; actual JS bundling is handled by esbuild/tsx/vite...etc, not `tsc`.
-- **Project references** — when package A depends on package B, A's `tsconfig.json` must list B in its `references` array. `tsc --build` uses this to determine build order and skip up-to-date packages.
+## Processing Pipeline
 
-## Root Scripts
+```
+Audio Upload → Ingestion → Source Separation → Rhythm Analysis
+→ Key/Mode Detection → Chord Analysis → Melody Extraction
+→ Structure Detection → Arrangement Generation → Export
+```
 
-- `pnpm run build` — runs `typecheck` first, then recursively runs `build` in all packages that define it
-- `pnpm run typecheck` — runs `tsc --build --emitDeclarationOnly` using project references
+## Module Structure
 
-## Packages
+```
+artifacts/
+  music-daw/          # React frontend DAW
+  api-server/         # Node.js Express backend
+    src/routes/
+      projects.ts     # CRUD + upload + analyze + arrange + export
+      jobs.ts         # Job status polling
+      styles.ts       # Musical style list
+  music-ai-backend/   # Python FastAPI audio backend
+    audio/
+      analyzer.py     # Main pipeline orchestrator
+      rhythm.py       # BPM, beat grid, time signature (librosa)
+      key_mode.py     # Key, mode, modulations (HPCP/chroma)
+      chords.py       # Chord detection (template matching)
+      melody.py       # Melody extraction (pyin F0)
+      structure.py    # Section detection (SSM + novelty)
+    orchestration/
+      arranger.py     # Arrangement & MIDI generation
+    api/
+      routes.py       # FastAPI routes (analyze, arrange)
+      database.py     # DB connection helpers
+      schemas.py      # Pydantic schemas
 
-### `artifacts/api-server` (`@workspace/api-server`)
+lib/
+  api-spec/           # OpenAPI 3.1 spec (source of truth)
+  api-client-react/   # Generated React Query hooks
+  api-zod/            # Generated Zod schemas
+  db/
+    schema/projects.ts  # Drizzle schema: projects, jobs, analysis_results, arrangements
+```
 
-Express 5 API server. Routes live in `src/routes/` and use `@workspace/api-zod` for request and response validation and `@workspace/db` for persistence.
+## Key Features Implemented
 
-- Entry: `src/index.ts` — reads `PORT`, starts Express
-- App setup: `src/app.ts` — mounts CORS, JSON/urlencoded parsing, routes at `/api`
-- Routes: `src/routes/index.ts` mounts sub-routers; `src/routes/health.ts` exposes `GET /health` (full path: `/api/health`)
-- Depends on: `@workspace/db`, `@workspace/api-zod`
-- `pnpm --filter @workspace/api-server run dev` — run the dev server
-- `pnpm --filter @workspace/api-server run build` — production esbuild bundle (`dist/index.cjs`)
-- Build bundles an allowlist of deps (express, cors, pg, drizzle-orm, zod, etc.) and externalizes the rest
+### Audio Analysis
+- Rhythm: BPM, beat grid, downbeats, time signature (madmom + librosa)
+- Key: Global key + modulations (HPCP chroma + Krumhansl-Schmuckler profiles)
+- Chords: Extended chord vocabulary, template matching, Roman numerals
+- Melody: F0 extraction (pyin), note segmentation, harmony inference
+- Structure: Self-similarity matrix + novelty detection, section labels
 
-### `lib/db` (`@workspace/db`)
+### Arrangement Engine
+- 8 musical styles: Pop, Jazz, R&B, Orchestral, Electronic, Rock, Bossa Nova, Ambient
+- Multi-track MIDI: drums, bass, piano, guitar, strings, pad, brass, lead
+- Performance humanization: timing jitter, velocity shaping
 
-Database layer using Drizzle ORM with PostgreSQL. Exports a Drizzle client instance and schema models.
+### Web Interface (DAW)
+- Projects dashboard with status badges
+- Audio upload with drag & drop
+- Analysis progress with step-by-step indicators
+- Timeline with waveform, chord labels, section markers
+- Track lanes with MIDI note display
+- Style selector for arrangement generation
+- Export panel: MIDI, MusicXML, PDF, WAV, FLAC, MP3, Stems
+- Mixer with volume/pan per track
 
-- `src/index.ts` — creates a `Pool` + Drizzle instance, exports schema
-- `src/schema/index.ts` — barrel re-export of all models
-- `src/schema/<modelname>.ts` — table definitions with `drizzle-zod` insert schemas (no models definitions exist right now)
-- `drizzle.config.ts` — Drizzle Kit config (requires `DATABASE_URL`, automatically provided by Replit)
-- Exports: `.` (pool, db, schema), `./schema` (schema only)
+## Development Commands
 
-Production migrations are handled by Replit when publishing. In development, we just use `pnpm --filter @workspace/db run push`, and we fallback to `pnpm --filter @workspace/db run push-force`.
+```bash
+# Start all services
+# Done automatically via workflows
 
-### `lib/api-spec` (`@workspace/api-spec`)
+# Push DB schema changes
+pnpm --filter @workspace/db run push-force
 
-Owns the OpenAPI 3.1 spec (`openapi.yaml`) and the Orval config (`orval.config.ts`). Running codegen produces output into two sibling packages:
+# Regenerate API types from OpenAPI spec
+pnpm --filter @workspace/api-spec run codegen
 
-1. `lib/api-client-react/src/generated/` — React Query hooks + fetch client
-2. `lib/api-zod/src/generated/` — Zod schemas
+# Install Python packages
+# Use code_execution with installLanguagePackages
+```
 
-Run codegen: `pnpm --filter @workspace/api-spec run codegen`
+## Future Enhancements
 
-### `lib/api-zod` (`@workspace/api-zod`)
-
-Generated Zod schemas from the OpenAPI spec (e.g. `HealthCheckResponse`). Used by `api-server` for response validation.
-
-### `lib/api-client-react` (`@workspace/api-client-react`)
-
-Generated React Query hooks and fetch client from the OpenAPI spec (e.g. `useHealthCheck`, `healthCheck`).
-
-### `scripts` (`@workspace/scripts`)
-
-Utility scripts package. Each script is a `.ts` file in `src/` with a corresponding npm script in `package.json`. Run scripts via `pnpm --filter @workspace/scripts run <script>`. Scripts can import any workspace package (e.g., `@workspace/db`) by adding it as a dependency in `scripts/package.json`.
+- Demucs source separation (vocal, drums, bass, other stems)
+- torchcrepe / basic-pitch for more accurate melody extraction
+- Transformer-based chord recognition model
+- NVIDIA Triton for GPU-accelerated inference
+- Real MIDI/MusicXML/PDF export
+- Audio rendering with sample libraries
+- WebSocket real-time updates
+- User authentication (Replit Auth)

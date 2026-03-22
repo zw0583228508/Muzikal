@@ -1,0 +1,88 @@
+@import url('https://fonts.googleapis.com/css2?family=Figtree:wght@300;400;500;600;700&family=Rajdhani:wght@400;500;600;700&display=swap');
+@import "tailwindcss";
+
+@theme inline {
+  --font-sans: 'Figtree', sans-serif;
+  --font-display: 'Rajdhani', sans-serif;
+
+  --color-background: hsl(240 10% 4%);
+  --color-foreground: hsl(0 0% 95%);
+  
+  --color-card: hsl(240 10% 6%);
+  --color-card-foreground: hsl(0 0% 95%);
+  
+  --color-popover: hsl(240 10% 6%);
+  --color-popover-foreground: hsl(0 0% 95%);
+  
+  --color-primary: hsl(186 100% 50%);
+  --color-primary-foreground: hsl(240 10% 4%);
+  
+  --color-secondary: hsl(240 10% 12%);
+  --color-secondary-foreground: hsl(0 0% 95%);
+  
+  --color-muted: hsl(240 10% 12%);
+  --color-muted-foreground: hsl(240 5% 60%);
+  
+  --color-accent: hsl(330 100% 50%);
+  --color-accent-foreground: hsl(0 0% 95%);
+  
+  --color-destructive: hsl(0 84% 60%);
+  --color-destructive-foreground: hsl(0 0% 95%);
+  
+  --color-border: hsl(240 10% 16%);
+  --color-input: hsl(240 10% 16%);
+  --color-ring: hsl(186 100% 50%);
+
+  --radius-lg: 0.75rem;
+  --radius-md: 0.5rem;
+  --radius-sm: 0.25rem;
+
+  --animate-pulse-slow: pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground font-sans antialiased overflow-hidden selection:bg-primary/30 selection:text-primary;
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: var(--font-display);
+    @apply font-semibold tracking-wide uppercase;
+  }
+}
+
+@layer utilities {
+  .glass-panel {
+    @apply bg-background/60 backdrop-blur-xl border border-white/5 shadow-2xl;
+  }
+  .daw-panel {
+    @apply bg-[#0c0d10] border border-white/5 rounded-xl overflow-hidden shadow-inner relative;
+  }
+  .daw-panel::before {
+    content: '';
+    @apply absolute inset-0 bg-gradient-to-b from-white/[0.02] to-transparent pointer-events-none rounded-xl;
+  }
+  .text-glow {
+    text-shadow: 0 0 10px currentColor;
+  }
+  .text-glow-primary {
+    text-shadow: 0 0 10px hsl(var(--color-primary) / 0.5);
+  }
+  .text-glow-accent {
+    text-shadow: 0 0 10px hsl(var(--color-accent) / 0.5);
+  }
+  
+  /* Custom Scrollbar for DAW panels */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-background/50;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-white/10 rounded-full hover:bg-white/20 transition-colors;
+  }
+}

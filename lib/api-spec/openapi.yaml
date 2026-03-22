@@ -1,22 +1,29 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: MusicAI Studio - AI-powered music intelligence and generation API
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: projects
+    description: Music project management
+  - name: analysis
+    description: Audio analysis and MIR pipeline
+  - name: arrangement
+    description: AI arrangement generation
+  - name: export
+    description: Export to MIDI, MusicXML, audio
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
       responses:
         "200":
           description: Healthy
@@ -24,6 +31,245 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /projects:
+    get:
+      operationId: listProjects
+      tags: [projects]
+      summary: List all projects
+      responses:
+        "200":
+          description: List of projects
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Project"
+    post:
+      operationId: createProject
+      tags: [projects]
+      summary: Create a new project
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateProjectRequest"
+      responses:
+        "201":
+          description: Created project
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+
+  /projects/{projectId}:
+    get:
+      operationId: getProject
+      tags: [projects]
+      summary: Get project details
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Project details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Project"
+        "404":
+          description: Not found
+    delete:
+      operationId: deleteProject
+      tags: [projects]
+      summary: Delete a project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "204":
+          description: Deleted
+
+  /projects/{projectId}/upload:
+    post:
+      operationId: uploadAudio
+      tags: [analysis]
+      summary: Upload audio file for analysis
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+                - file
+      responses:
+        "200":
+          description: Upload started, returns job id
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+
+  /projects/{projectId}/analyze:
+    post:
+      operationId: startAnalysis
+      tags: [analysis]
+      summary: Start full audio analysis pipeline
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Analysis job started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+
+  /projects/{projectId}/analysis:
+    get:
+      operationId: getAnalysisResults
+      tags: [analysis]
+      summary: Get full analysis results for a project
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Analysis results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AnalysisResult"
+        "404":
+          description: Analysis not ready yet
+
+  /projects/{projectId}/arrangement:
+    post:
+      operationId: generateArrangement
+      tags: [arrangement]
+      summary: Generate AI arrangement from analysis
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArrangementRequest"
+      responses:
+        "200":
+          description: Arrangement generation started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+    get:
+      operationId: getArrangement
+      tags: [arrangement]
+      summary: Get generated arrangement
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        "200":
+          description: Arrangement data
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Arrangement"
+
+  /projects/{projectId}/export:
+    post:
+      operationId: exportProject
+      tags: [export]
+      summary: Export project to selected formats
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ExportRequest"
+      responses:
+        "200":
+          description: Export job started
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+
+  /jobs/{jobId}:
+    get:
+      operationId: getJobStatus
+      tags: [analysis]
+      summary: Get job status and progress
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Job status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Job"
+
+  /styles:
+    get:
+      operationId: listStyles
+      tags: [arrangement]
+      summary: List available musical styles and genres
+      responses:
+        "200":
+          description: Available styles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Style"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +280,401 @@ components:
       required:
         - status
 
+    Project:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [created, uploading, analyzing, analyzed, arranging, arranged, exporting, done, error]
+        audioFileName:
+          type: string
+        audioDurationSeconds:
+          type: number
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+      required:
+        - id
+        - name
+        - status
+        - createdAt
+        - updatedAt
+
+    CreateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+      required:
+        - name
+
+    Job:
+      type: object
+      properties:
+        jobId:
+          type: string
+        projectId:
+          type: integer
+        type:
+          type: string
+          enum: [upload, analysis, arrangement, export]
+        status:
+          type: string
+          enum: [queued, running, completed, failed]
+        progress:
+          type: number
+          minimum: 0
+          maximum: 100
+        currentStep:
+          type: string
+        errorMessage:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+      required:
+        - jobId
+        - projectId
+        - type
+        - status
+        - progress
+        - createdAt
+
+    AnalysisResult:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        rhythm:
+          $ref: "#/components/schemas/RhythmAnalysis"
+        key:
+          $ref: "#/components/schemas/KeyAnalysis"
+        chords:
+          $ref: "#/components/schemas/ChordAnalysis"
+        melody:
+          $ref: "#/components/schemas/MelodyAnalysis"
+        structure:
+          $ref: "#/components/schemas/StructureAnalysis"
+        waveformData:
+          type: array
+          items:
+            type: number
+          description: Downsampled waveform for display
+      required:
+        - projectId
+        - rhythm
+        - key
+        - chords
+        - melody
+        - structure
+
+    RhythmAnalysis:
+      type: object
+      properties:
+        bpm:
+          type: number
+        timeSignatureNumerator:
+          type: integer
+        timeSignatureDenominator:
+          type: integer
+        beatGrid:
+          type: array
+          items:
+            type: number
+          description: Beat timestamps in seconds
+        downbeats:
+          type: array
+          items:
+            type: number
+          description: Downbeat timestamps in seconds
+      required:
+        - bpm
+        - timeSignatureNumerator
+        - timeSignatureDenominator
+        - beatGrid
+        - downbeats
+
+    KeyAnalysis:
+      type: object
+      properties:
+        globalKey:
+          type: string
+          description: "e.g. C, Am, F#m"
+        mode:
+          type: string
+          enum: [major, minor, dorian, mixolydian, phrygian, lydian, locrian]
+        confidence:
+          type: number
+        modulations:
+          type: array
+          items:
+            $ref: "#/components/schemas/Modulation"
+      required:
+        - globalKey
+        - mode
+        - confidence
+
+    Modulation:
+      type: object
+      properties:
+        timeSeconds:
+          type: number
+        fromKey:
+          type: string
+        toKey:
+          type: string
+      required:
+        - timeSeconds
+        - fromKey
+        - toKey
+
+    ChordAnalysis:
+      type: object
+      properties:
+        chords:
+          type: array
+          items:
+            $ref: "#/components/schemas/ChordEvent"
+        leadSheet:
+          type: string
+          description: Chord chart in text format
+      required:
+        - chords
+
+    ChordEvent:
+      type: object
+      properties:
+        startTime:
+          type: number
+        endTime:
+          type: number
+        chord:
+          type: string
+          description: "e.g. Cmaj7, Am, G7/B"
+        romanNumeral:
+          type: string
+        confidence:
+          type: number
+        alternatives:
+          type: array
+          items:
+            type: string
+      required:
+        - startTime
+        - endTime
+        - chord
+        - romanNumeral
+        - confidence
+
+    MelodyAnalysis:
+      type: object
+      properties:
+        notes:
+          type: array
+          items:
+            $ref: "#/components/schemas/MelodyNote"
+        inferredHarmony:
+          type: array
+          items:
+            type: string
+          description: Top 3 inferred chord progressions from melody
+      required:
+        - notes
+
+    MelodyNote:
+      type: object
+      properties:
+        startTime:
+          type: number
+        endTime:
+          type: number
+        pitch:
+          type: number
+          description: MIDI note number
+        frequency:
+          type: number
+        velocity:
+          type: integer
+      required:
+        - startTime
+        - endTime
+        - pitch
+        - frequency
+        - velocity
+
+    StructureAnalysis:
+      type: object
+      properties:
+        sections:
+          type: array
+          items:
+            $ref: "#/components/schemas/Section"
+      required:
+        - sections
+
+    Section:
+      type: object
+      properties:
+        label:
+          type: string
+          enum: [intro, verse, pre-chorus, chorus, bridge, outro, solo, instrumental, break]
+        startTime:
+          type: number
+        endTime:
+          type: number
+        confidence:
+          type: number
+      required:
+        - label
+        - startTime
+        - endTime
+        - confidence
+
+    ArrangementRequest:
+      type: object
+      properties:
+        styleId:
+          type: string
+        instruments:
+          type: array
+          items:
+            type: string
+          description: List of instruments to include
+        density:
+          type: number
+          minimum: 0
+          maximum: 1
+          description: Arrangement density 0=sparse, 1=full
+        humanize:
+          type: boolean
+          default: true
+        tempoFactor:
+          type: number
+          description: Multiply original tempo by this factor
+          default: 1.0
+      required:
+        - styleId
+
+    Arrangement:
+      type: object
+      properties:
+        projectId:
+          type: integer
+        styleId:
+          type: string
+        tracks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Track"
+        totalDurationSeconds:
+          type: number
+      required:
+        - projectId
+        - styleId
+        - tracks
+        - totalDurationSeconds
+
+    Track:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        instrument:
+          type: string
+        channel:
+          type: integer
+        color:
+          type: string
+        notes:
+          type: array
+          items:
+            $ref: "#/components/schemas/TrackNote"
+        volume:
+          type: number
+          minimum: 0
+          maximum: 1
+        pan:
+          type: number
+          minimum: -1
+          maximum: 1
+        muted:
+          type: boolean
+        soloed:
+          type: boolean
+      required:
+        - id
+        - name
+        - instrument
+        - channel
+        - color
+        - notes
+        - volume
+        - pan
+        - muted
+        - soloed
+
+    TrackNote:
+      type: object
+      properties:
+        startTime:
+          type: number
+        duration:
+          type: number
+        pitch:
+          type: integer
+        velocity:
+          type: integer
+      required:
+        - startTime
+        - duration
+        - pitch
+        - velocity
+
+    ExportRequest:
+      type: object
+      properties:
+        formats:
+          type: array
+          items:
+            type: string
+            enum: [midi, musicxml, pdf, wav, flac, mp3, stems]
+          minItems: 1
+      required:
+        - formats
+
+    Style:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        genre:
+          type: string
+        description:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        previewUrl:
+          type: string
+      required:
+        - id
+        - name
+        - genre
+        - description
+        - tags

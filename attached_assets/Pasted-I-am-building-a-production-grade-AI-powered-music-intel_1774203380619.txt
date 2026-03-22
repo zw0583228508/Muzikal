@@ -1,0 +1,490 @@
+I am building a production-grade, AI-powered music intelligence and generation system.
+
+This is NOT a prototype.
+This must be designed as a **commercial, scalable, modular, high-performance system**, using **state-of-the-art (SOTA) technologies and models** wherever applicable.
+
+Do NOT simplify anything.
+Do NOT skip components.
+Design everything end-to-end with clear architecture, strict module boundaries, and extensibility.
+
+====================================================
+GLOBAL OBJECTIVE
+================
+
+Build a system that can:
+
+1. Ingest audio (full mix OR vocal-only).
+2. Extract deep musical intelligence:
+
+   * Tempo, beat grid, downbeats
+   * Time signature
+   * Key, mode, modulations
+   * Chords (advanced harmony)
+   * Melody (note-level)
+   * Bass movement
+   * Structure (sections)
+   * Dynamics, energy, groove
+3. Work robustly even on monophonic vocal input.
+4. Generate full professional arrangements.
+5. Orchestrate using high-end instrument modeling.
+6. Apply style (genre + arranger profile).
+7. Render final production-quality audio.
+8. Export:
+
+   * MIDI
+   * MusicXML
+   * PDF (notation)
+   * Stems
+   * Final audio (WAV/FLAC/MP3)
+9. Provide a premium DAW-like GUI.
+
+====================================================
+CORE ARCHITECTURE
+=================
+
+Design a hybrid multi-stage pipeline:
+
+[1] Audio Ingestion
+[2] Source Separation
+[3] MIR (Music Information Retrieval)
+[4] Vocal Analysis
+[5] Harmony Engine
+[6] Structure Engine
+[7] Style Engine
+[8] Arrangement Engine
+[9] Orchestration Engine
+[10] Performance Engine
+[11] Rendering Engine
+[12] Mixing & Mastering Engine
+[13] Export Engine
+[14] GUI + Backend + Model Serving
+
+Each module must be independently testable and replaceable.
+
+====================================================
+TECH STACK (STRICT REQUIREMENTS)
+================================
+
+Language:
+
+* Python 3.11+
+
+Core Libraries:
+
+* Essentia (primary DSP + MIR backbone)
+* librosa
+* madmom
+* numpy, scipy
+* soundfile, ffmpeg
+
+ML Framework:
+
+* PyTorch (mandatory)
+* HuggingFace Transformers (for sequence models)
+* PyTorch Lightning (training abstraction)
+
+Inference:
+
+* NVIDIA Triton Inference Server (GPU serving)
+* ONNX Runtime (CPU fallback)
+
+Audio Models:
+
+* Demucs (source separation)
+* Basic Pitch (audio→MIDI baseline)
+* torchcrepe (F0 detection)
+
+Symbolic:
+
+* music21 (harmony, notation, MusicXML)
+
+Backend:
+
+* FastAPI
+* WebSockets (real-time updates)
+* Redis (queue + cache)
+* Celery or Arq (jobs)
+* PostgreSQL
+* Object Storage (S3-compatible)
+
+Frontend:
+
+* PySide6 + Qt/QML (desktop DAW UI)
+
+DevOps:
+
+* Docker + Docker Compose
+* GPU/CPU job separation
+* Structured logging + monitoring
+
+====================================================
+PROJECT STRUCTURE
+=================
+
+backend/
+api/
+services/
+schemas/
+workers/
+
+audio/
+preprocessing/
+separation/
+features/
+
+models/
+chord_model/
+melody_model/
+structure_model/
+style_model/
+harmony_model/
+
+orchestration/
+arrangement/
+rendering/
+mixing/
+
+gui/
+configs/
+tests/
+data/
+
+====================================================
+DATA FLOW (PIPELINE)
+====================
+
+INPUT → normalize → separate → analyze → structure → harmony → style → arrange → orchestrate → humanize → render → mix → export
+
+All intermediate results must be cached and reusable.
+
+====================================================
+MODULE SPECIFICATIONS
+=====================
+
+1. AUDIO INGESTION
+
+Input:
+
+* wav, mp3, flac, aiff, m4a
+
+Process:
+
+* resample
+* normalize loudness (LUFS)
+* trim silence
+* generate waveform + spectrogram
+
+Output:
+
+* canonical audio
+* metadata JSON
+
+---
+
+2. SOURCE SEPARATION
+
+Use:
+
+* Demucs (latest version)
+
+Output:
+
+* vocals.wav
+* drums.wav
+* bass.wav
+* other.wav
+
+Add:
+
+* quality scoring
+* fallback logic
+
+---
+
+3. RHYTHM ENGINE
+
+Use:
+
+* madmom
+* librosa onset detection
+
+Output:
+
+* BPM
+* beat grid
+* downbeats
+* time signature
+* tempo map
+
+---
+
+4. KEY & MODE ENGINE
+
+Use:
+
+* HPCP/chroma (Essentia + librosa)
+* sliding window analysis
+
+Output:
+
+* global key
+* local key changes
+* modulation timeline
+
+---
+
+5. CHORD ENGINE (HIGH PRIORITY)
+
+Build hybrid model:
+
+Features:
+
+* chroma
+* bass line
+* meter alignment
+
+Model:
+
+* Transformer-based sequence model (SOTA)
+* fallback HMM
+
+Post-process:
+
+* music21
+
+Output:
+
+* chord timeline
+* Roman numerals
+* lead sheet
+* alternatives with confidence
+
+---
+
+6. VOCAL ENGINE
+
+Use:
+
+* torchcrepe (F0)
+* Basic Pitch
+
+Detect:
+
+* pitch
+* notes
+* vibrato
+* phrasing
+
+Build model:
+
+* melody → chord inference model
+
+Output:
+
+* melody MIDI
+* inferred harmony (top 3 options)
+
+---
+
+7. STRUCTURE ENGINE
+
+Use:
+
+* self-similarity matrices
+* novelty detection
+* transformer classifier (optional)
+
+Output:
+
+* sections (intro, verse, chorus, etc.)
+
+---
+
+8. STYLE ENGINE
+
+Two layers:
+
+A. Genre model
+B. Arranger profile model
+
+Each style defines:
+
+* rhythm patterns
+* harmony tendencies
+* instrumentation
+* density
+* articulation
+
+Use:
+
+* embedding-based style representation
+* clustering + learned embeddings
+
+---
+
+9. ARRANGEMENT ENGINE
+
+Generate:
+
+* chord progression refinement
+* structure-aware arrangement
+* intros, transitions, endings
+* modulations
+
+Approach:
+
+* hybrid rule-based + ML
+
+---
+
+10. ORCHESTRATION ENGINE
+
+Assign:
+
+* drums, bass, piano, guitars
+* strings, brass, woodwinds
+
+Generate:
+
+* MIDI per instrument
+* voicings
+* register-aware writing
+
+---
+
+11. PERFORMANCE ENGINE
+
+Humanization:
+
+* timing deviations
+* velocity shaping
+* articulation
+
+---
+
+12. SOUND ENGINE
+
+Use:
+
+* high-end sample libraries
+* velocity layers
+* articulation switching
+
+Support:
+
+* realistic orchestral playback
+
+---
+
+13. RENDERING ENGINE
+
+Render:
+
+* full mix audio
+* stems
+
+Pipeline:
+
+* offline rendering
+* DAW-like engine
+
+---
+
+14. MIXING ENGINE
+
+Apply:
+
+* EQ
+* compression
+* reverb
+* stereo imaging
+
+Style-based presets
+
+---
+
+15. EXPORT ENGINE
+
+Must export:
+
+* MIDI
+* MusicXML
+* PDF sheet music (lead sheet + full score)
+* Multi-track stems
+* Final audio (WAV / FLAC / MP3)
+
+Ensure:
+
+* notation correctness
+* timing accuracy
+* high audio fidelity
+
+---
+
+16. GUI (PREMIUM DAW STYLE)
+
+Build:
+
+* timeline editor
+* track lanes
+* piano roll
+* chord view
+* mixer
+* style selector
+* export panel
+
+Features:
+
+* drag & drop
+* real-time preview
+* advanced animations
+
+====================================================
+ML TRAINING REQUIREMENTS
+========================
+
+Datasets:
+
+* aligned audio + MIDI
+* chord annotations
+* structure annotations
+
+Tasks:
+
+* chord recognition
+* melody extraction
+* structure classification
+* melody→harmony generation
+* style embeddings
+
+Metrics:
+
+* chord accuracy
+* key accuracy
+* tempo accuracy
+* structural segmentation score
+
+====================================================
+QUALITY REQUIREMENTS
+====================
+
+System must achieve:
+
+* high musical correctness
+* stable inference
+* low failure rate
+* consistent rendering quality
+
+====================================================
+FINAL REQUIREMENT
+=================
+
+This system must be:
+
+* production-ready
+* scalable
+* modular
+* state-of-the-art
+* musically intelligent
+
+Build it as a real product — not a demo.

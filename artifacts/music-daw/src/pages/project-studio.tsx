@@ -35,6 +35,7 @@ import { AudioPlayer } from "@/components/audio-player";
 function TransportBar({ project, analysis }: { project: any; analysis: any }) {
   const { t } = useTranslation();
   const hasAudio = !!(project?.audioFilePath || project?.audioFileName);
+  const isMock = !!(analysis?.isMock || analysis?.rhythm?.isMock);
 
   return (
     <div className="border-b border-white/10 bg-background/95 backdrop-blur sticky top-0 z-40">
@@ -45,6 +46,12 @@ function TransportBar({ project, analysis }: { project: any; analysis: any }) {
             <Link href="/"><ChevronLeft className="w-4 h-4" /></Link>
           </Button>
           <h2 className="font-display font-semibold text-base text-white/80 truncate max-w-[200px]">{project?.name}</h2>
+          {isMock && (
+            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-[10px] font-bold tracking-widest uppercase">
+              <AlertTriangle className="w-3 h-3" />
+              {t("MOCK")}
+            </span>
+          )}
         </div>
 
         <div className="flex items-center gap-5 text-xs font-display uppercase tracking-widest text-muted-foreground" dir="ltr">
@@ -60,6 +67,12 @@ function TransportBar({ project, analysis }: { project: any; analysis: any }) {
             <span className="text-accent font-bold text-sm">{analysis?.key?.globalKey ? `${analysis.key.globalKey} ${analysis.key.mode || 'Maj'}` : '—'}</span>
             <span className="text-[9px]">{t("Key")}</span>
           </div>
+          {analysis?.pipelineVersion && (
+            <div className="flex flex-col items-center" title={t("Pipeline version")}>
+              <span className="text-white/40 font-mono text-[9px]">v{analysis.pipelineVersion}</span>
+              <span className="text-[9px]">{t("ENGINE")}</span>
+            </div>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -635,15 +648,71 @@ export default function ProjectStudio() {
                           {lockedFields.has("sections") ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
                         </button>
                       </div>
-                      <div className="space-y-2">
+                      <div className="space-y-1">
                         {analysis.structure.sections.map((sec: any, i: number) => (
-                          <div key={i} className="flex justify-between items-center text-sm p-2 rounded bg-white/5">
-                            <span className="capitalize text-white/80">{t(sec.label)}</span>
-                            <span className="text-muted-foreground font-mono text-xs" dir="ltr">{formatTime(sec.startTime)}</span>
+                          <div key={i} className={cn(
+                            "flex justify-between items-center text-sm px-2 py-1.5 rounded group",
+                            sec.regenerate ? "bg-accent/10 border border-accent/30" : "bg-white/5 hover:bg-white/8"
+                          )}>
+                            <div className="flex items-center gap-2">
+                              {sec.locked
+                                ? <Lock className="w-3 h-3 text-primary flex-shrink-0" />
+                                : <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: sec.label === "chorus" ? "#00f0ff" : sec.label === "verse" ? "#a855f7" : "#888" }} />
+                              }
+                              <span className="capitalize text-white/80 text-xs">{t(sec.label)}</span>
+                              {sec.regenerate && <span className="text-[9px] text-accent uppercase">{t("Queued")}</span>}
+                            </div>
+                            <div className="flex items-center gap-2" dir="ltr">
+                              <span className="text-muted-foreground font-mono text-[10px]">{formatTime(sec.startTime)}</span>
+                              {sec.confidence !== undefined && (
+                                <span className={cn("text-[9px] font-mono", sec.confidence > 0.75 ? "text-green-400" : sec.confidence > 0.5 ? "text-yellow-400" : "text-red-400")}>
+                                  {Math.round(sec.confidence * 100)}%
+                                </span>
+                              )}
+                              <button
+                                className="opacity-0 group-hover:opacity-100 transition-opacity text-accent/70 hover:text-accent"
+                                title={t("Regenerate this section")}
+                                onClick={() => {
+                                  fetch(`/api/projects/${projectId}/regenerate-section`, {
+                                    method: "POST",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ sectionIndex: i }),
+                                  }).then(() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/analysis`] }));
+                                }}
+                              >
+                                <Zap className="w-3 h-3" />
+                              </button>
+                            </div>
                           </div>
                         ))}
                       </div>
                     </div>
+
+                    {/* Confidence overview */}
+                    {analysis.confidenceData && (
+                      <div className="daw-panel p-4">
+                        <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-3">{t("Analysis Confidence")}</h4>
+                        <div className="space-y-1.5">
+                          {(["rhythm", "key", "chords", "melody", "structure"] as const).map(mod => {
+                            const val = analysis.confidenceData[mod];
+                            if (val === undefined) return null;
+                            const pct = Math.round(val * 100);
+                            return (
+                              <div key={mod} className="flex items-center gap-2 text-xs">
+                                <span className="w-16 text-muted-foreground capitalize">{t(mod)}</span>
+                                <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
+                                  <div
+                                    className={cn("h-full rounded-full transition-all", pct > 75 ? "bg-green-500" : pct > 50 ? "bg-yellow-500" : "bg-red-500")}
+                                    style={{ width: `${pct}%` }}
+                                  />
+                                </div>
+                                <span className="w-8 text-right font-mono text-white/50" dir="ltr">{pct}%</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
 
                     {/* Chord Progression card */}
                     <div className={cn("daw-panel p-4 transition-all", lockedFields.has("chords") && "ring-1 ring-primary/40 shadow-[0_0_10px_rgba(0,240,255,0.08)]")}>

@@ -1,0 +1,426 @@
+You are now operating in STRICT EXECUTION MODE.
+
+You are working on an existing repository called Muzikal.
+
+You must NOT respond with explanations.
+You must NOT redesign conceptually.
+You must NOT skip steps.
+
+You must:
+- create files
+- modify files
+- enforce architecture
+- fix real issues
+- implement missing systems
+
+Work exactly in the order below.
+
+====================================================
+GLOBAL RULES
+====================================================
+
+1. Never fake success.
+2. Never silently fall back to mock data.
+3. Never mix mock and real results.
+4. Never store results in error fields.
+5. Never duplicate styles in multiple services.
+6. Never leave DB mismatch with code.
+7. Always version outputs.
+8. Every module must be replaceable.
+
+====================================================
+STEP 1 — CREATE SHARED SCHEMA LAYER
+====================================================
+
+Create new package:
+
+packages/common-schemas/
+
+Create files:
+
+packages/common-schemas/job.schema.ts
+packages/common-schemas/project.schema.ts
+packages/common-schemas/analysis.schema.ts
+packages/common-schemas/arrangement.schema.ts
+packages/common-schemas/export.schema.ts
+packages/common-schemas/style.schema.ts
+
+Define:
+
+Job:
+- id
+- projectId
+- type
+- status
+- step
+- progress
+- resultData
+- warnings
+- errorMessage
+- processingMetadata
+- pipelineVersion
+- modelVersions
+- createdAt
+- updatedAt
+
+Project:
+- id
+- name
+- audioFileId
+- audioDuration
+- sampleRate
+- channels
+- status
+- createdAt
+- updatedAt
+
+AnalysisResult:
+- id
+- projectId
+- rhythmData
+- keyData
+- chordData
+- melodyData
+- vocalsData
+- structureData
+- separationData
+- confidenceData
+- pipelineVersion
+- modelVersions
+
+====================================================
+STEP 2 — FIX DATABASE STRUCTURE
+====================================================
+
+Modify DB schema:
+
+1. Add JSONB fields to jobs table:
+- result_data
+- warnings
+- artifacts_data
+- processing_metadata
+
+2. Remove any usage of error_message for result storage.
+
+3. Fix arrangements table:
+- remove ON CONFLICT(project_id)
+- add arrangement versions:
+  - id
+  - projectId
+  - version
+  - data
+  - createdAt
+
+4. Add to analysis_results:
+- vocals_data
+- separation_data
+- tonal_timeline_data
+- confidence_data
+- pipeline_version
+- model_versions
+
+5. Add index on projectId where needed.
+
+====================================================
+STEP 3 — FIX API VALIDATION
+====================================================
+
+In Express API:
+
+- Replace all parseInt(req.params.id) with validated parsing
+- Reject invalid IDs with 400
+- Add validation layer for:
+  - body
+  - params
+  - query
+
+Create:
+
+services/api/src/validation/
+
+====================================================
+STEP 4 — REMOVE SILENT MOCK BEHAVIOR
+====================================================
+
+Find:
+- runSimulatedAnalysis
+- runSimulatedArrangement
+- any fallback simulation
+
+Modify:
+
+IF mock mode:
+- mark job as mock
+- store mock flag in DB
+- return mock flag in API
+
+IF not mock mode:
+- NEVER simulate
+- return error if backend fails
+
+Update frontend:
+- show "MOCK MODE" badge clearly
+
+====================================================
+STEP 5 — CREATE REAL JOB QUEUE
+====================================================
+
+Create:
+
+services/worker/
+
+Add:
+- job consumer
+- job processor
+- retry logic
+- timeout logic
+
+Remove:
+- reliance on FastAPI BackgroundTasks
+
+Flow:
+
+API:
+- create job
+- push to queue
+
+Worker:
+- pull job
+- process step by step
+- update DB
+
+Add job steps:
+- preprocessing
+- separation
+- rhythm
+- key
+- chords
+- melody
+- structure
+- arrangement
+- orchestration
+- rendering
+- export
+
+====================================================
+STEP 6 — AUDIO INGESTION MODULE
+====================================================
+
+Create:
+
+packages/audio-core/ingestion.py
+
+Implement:
+
+- validate file
+- ffprobe metadata
+- normalize
+- resample
+- trim silence
+- generate waveform
+- generate spectrogram
+- compute checksum
+
+Store:
+- duration
+- sample rate
+- channels
+- hash
+
+====================================================
+STEP 7 — SOURCE SEPARATION
+====================================================
+
+Create:
+
+packages/audio-core/separation.py
+
+Use Demucs.
+
+Return:
+- stems paths
+- confidence
+- warnings
+
+Persist:
+- separation_data in DB
+
+====================================================
+STEP 8 — ANALYSIS ENGINE REFACTOR
+====================================================
+
+Refactor:
+
+packages/analysis-engine/
+
+Split into:
+
+- rhythm.py
+- key.py
+- chords.py
+- melody.py
+- vocals.py
+- structure.py
+
+Each must return:
+- result
+- confidence
+- warnings
+- alternatives
+
+====================================================
+STEP 9 — VERSIONING SYSTEM
+====================================================
+
+Create:
+
+packages/common-schemas/versioning.ts
+
+Every result must include:
+- pipeline_version
+- model_versions
+- created_from_audio_hash
+
+====================================================
+STEP 10 — STYLE SYSTEM
+====================================================
+
+Create:
+
+configs/styles/genres.yaml
+configs/styles/arranger_profiles.yaml
+
+Remove all duplicated style definitions.
+
+Load styles from config in both:
+- Node API
+- Python backend
+
+Expose styles via API.
+
+====================================================
+STEP 11 — ARRANGEMENT ENGINE
+====================================================
+
+Create:
+
+packages/arrangement-engine/engine.py
+
+Output:
+
+- section map
+- harmonic plan
+- instrumentation plan
+- transitions
+- intro
+- outro
+- modulation
+
+Store structured arrangement, not only MIDI.
+
+====================================================
+STEP 12 — ORCHESTRATION ENGINE
+====================================================
+
+Create:
+
+packages/orchestration-engine/engine.py
+
+Generate:
+- per-track MIDI
+- instrument roles
+- velocity maps
+- articulation placeholders
+
+====================================================
+STEP 13 — RENDER ENGINE SPLIT
+====================================================
+
+Rename current rendering:
+
+render_preview.py
+
+Create:
+
+render_high_quality.py (empty scaffold)
+
+Mark preview renders explicitly.
+
+====================================================
+STEP 14 — EXPORT ENGINE FIX
+====================================================
+
+Fix:
+
+- proper quantization
+- measure alignment
+- chord symbols
+- lead sheet export
+- full score export
+
+Separate:
+- lead sheet
+- full score
+- MIDI
+- audio
+
+====================================================
+STEP 15 — MANUAL CORRECTION SYSTEM
+====================================================
+
+Add endpoints:
+
+- edit chords
+- edit sections
+- edit key
+- regenerate section
+- regenerate track
+
+Add lock system:
+- lock harmony
+- lock structure
+- lock melody
+- lock tracks
+
+====================================================
+STEP 16 — FRONTEND UPGRADE
+====================================================
+
+Update UI:
+
+- show job steps
+- show mock mode clearly
+- allow editing chords
+- allow editing sections
+- allow regeneration by section
+- add track-level controls
+
+====================================================
+STEP 17 — TESTS
+====================================================
+
+Create:
+
+tests/
+
+Add:
+- ingestion tests
+- rhythm tests
+- chord tests
+- export tests
+- API tests
+
+====================================================
+FINAL RULE
+====================================================
+
+Do NOT add new features before fixing:
+- DB correctness
+- job system
+- real analysis persistence
+- style unification
+
+After fixing those, continue with deeper music intelligence.
+
+Execute step-by-step.
+Do not skip.

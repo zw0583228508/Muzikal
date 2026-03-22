@@ -58,7 +58,23 @@ def analyze_rhythm(y: np.ndarray, sr: int) -> Dict[str, Any]:
     # Build downbeats from beats and time signature
     downbeats = [beat_grid[i] for i in range(0, len(beat_grid), time_sig_num)]
 
-    logger.info(f"Rhythm: {bpm} BPM, {time_sig_num}/{time_sig_den}, {len(beat_grid)} beats")
+    # Confidence: agreement between beat-tracker tempo and PLP tempo
+    tempo_delta = abs(bpm_bt - tempo_plp) / max(bpm_bt, 1)
+    confidence = round(max(0.3, 1.0 - tempo_delta), 3)
+
+    warnings = []
+    if bpm < 40 or bpm > 220:
+        warnings.append(f"Unusual BPM detected ({bpm}) — may be an octave error; check manually")
+    if len(beat_grid) < 8:
+        warnings.append("Too few beats detected — audio may be too short or percussive content too sparse")
+
+    # Alternatives: half-time and double-time
+    alternatives = [
+        {"bpm": round(bpm / 2, 2), "label": "half-time"},
+        {"bpm": round(bpm * 2, 2), "label": "double-time"},
+    ]
+
+    logger.info(f"Rhythm: {bpm} BPM, {time_sig_num}/{time_sig_den}, {len(beat_grid)} beats, confidence={confidence}")
 
     return {
         "bpm": bpm,
@@ -66,6 +82,9 @@ def analyze_rhythm(y: np.ndarray, sr: int) -> Dict[str, Any]:
         "timeSignatureDenominator": time_sig_den,
         "beatGrid": beat_grid,
         "downbeats": downbeats,
+        "confidence": confidence,
+        "alternatives": alternatives,
+        "warnings": warnings,
     }
 
 

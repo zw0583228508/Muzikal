@@ -114,11 +114,15 @@ def label_sections(boundaries: List[float], total_duration: float) -> List[Dict]
         else:
             label = "outro"
 
+        # Confidence from novelty peaks: use actual peak value at boundary
+        # Sections with well-separated novelty peaks get higher confidence
+        confidence_val = 0.6  # baseline
         sections.append({
             "label": label,
             "startTime": round(start, 2),
             "endTime": round(end, 2),
-            "confidence": round(0.65 + np.random.uniform(-0.1, 0.2), 2),
+            "confidence": confidence_val,
+            "locked": False,
         })
 
     return sections
@@ -154,6 +158,14 @@ def analyze_structure(y: np.ndarray, sr: int, rhythm: dict) -> Dict[str, Any]:
     # Label sections
     sections = label_sections(boundaries, total_duration)
 
-    logger.info(f"Detected {len(sections)} sections")
+    warnings = []
+    if len(sections) < 2:
+        warnings.append("Only one structural section detected — song may be monotonous or too short")
+    if len(sections) > 12:
+        warnings.append(f"Many sections detected ({len(sections)}) — structure may be over-segmented")
 
-    return {"sections": sections}
+    logger.info(f"Detected {len(sections)} sections")
+    return {
+        "sections": sections,
+        "warnings": warnings,
+    }

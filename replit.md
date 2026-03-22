@@ -51,10 +51,26 @@ Browser → [Proxy :80]
 ## Processing Pipeline
 
 ```
-Audio Upload → Ingestion → Source Separation → Rhythm Analysis
-→ Key/Mode Detection → Chord Analysis → Melody Extraction
-→ Structure Detection → Arrangement Generation → Render Audio → Export
+Audio Upload → Ingestion (validate/ffprobe/checksum/normalize)
+→ Source Separation (Demucs/HPSS fallback)
+→ Rhythm Analysis (madmom) → Key/Mode (Essentia) → Chord Analysis
+→ Melody Extraction (pyin) → Vocal Analysis → Structure Detection (MSAF)
+→ Arrangement Generation (section-aware, profiles from YAML)
+→ Render Audio (preview 22050Hz / HQ 44100Hz) → Export (MIDI/MusicXML/lead-sheet/audio)
 ```
+
+## Mock Mode (Development)
+
+- `MOCK_MODE=true` (default): Node.js simulates the full pipeline without Python. All mock results are labelled `isMock: true`, visible in the DB, API, and frontend as an amber badge.
+- `MOCK_MODE=false` (production): any Python backend failure → job FAILED immediately. No silent simulation.
+- `GET /api/projects/mock-mode` → returns current mode + pipeline version.
+
+## Pipeline Versioning (T005)
+
+- `PIPELINE_VERSION=1.1.0` set in api-server
+- All analysis results include `pipelineVersion` and `modelVersions` dict (7 models)
+- All arrangements include `createdFromAudioHash` and `isMock` fields
+- Version shown in TransportBar header (`ENGINE: v1.1.0`)
 
 ## Module Structure
 

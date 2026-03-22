@@ -1,0 +1,22 @@
+{
+  "name": "@workspace/common-schemas",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./job": "./src/job.schema.ts",
+    "./project": "./src/project.schema.ts",
+    "./analysis": "./src/analysis.schema.ts",
+    "./arrangement": "./src/arrangement.schema.ts",
+    "./export": "./src/export.schema.ts",
+    "./style": "./src/style.schema.ts",
+    "./versioning": "./src/versioning.ts"
+  },
+  "dependencies": {
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

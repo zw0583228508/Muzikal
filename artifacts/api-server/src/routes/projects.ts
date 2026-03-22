@@ -24,7 +24,17 @@ const PYTHON_BACKEND = process.env.PYTHON_BACKEND_URL || "http://localhost:8001"
  * — no silent fake success. Set this to "false" in production.
  */
 const MOCK_MODE = (process.env.MOCK_MODE ?? "true").toLowerCase() === "true";
-const PIPELINE_VERSION = "1.0.0";
+const PIPELINE_VERSION = "1.1.0";
+
+const MODEL_VERSIONS: Record<string, string> = {
+  rhythm: "madmom-0.16.1",
+  key: "essentia-2.1b6",
+  chords: "chord-cnn-0.4.0",
+  melody: "pyin-0.1.1",
+  structure: "msaf-0.5.0",
+  separation: "demucs-htdemucs-4.0",
+  vocals: "crepe-0.0.13",
+};
 
 // ─── Multer ───────────────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
@@ -122,6 +132,21 @@ function serializeJob(j: typeof jobsTable.$inferSelect) {
     createdAt: j.createdAt,
   };
 }
+
+// ─── Mock Mode Endpoint ───────────────────────────────────────────────────────
+
+// GET /api/projects/mock-mode
+// Returns the current MOCK_MODE flag so the frontend can display a banner on load.
+router.get("/mock-mode", (_req, res) => {
+  res.json({
+    mockMode: MOCK_MODE,
+    pipelineVersion: PIPELINE_VERSION,
+    modelVersions: MOCK_MODE ? null : MODEL_VERSIONS,
+    message: MOCK_MODE
+      ? "Running in MOCK MODE — results are simulated (dev only)"
+      : "Running against live Python backend",
+  });
+});
 
 // ─── Projects CRUD ────────────────────────────────────────────────────────────
 
@@ -230,6 +255,8 @@ router.get("/:id/analysis", async (req, res) => {
   if (projectId === null) return;
   const [result] = await db.select().from(analysisResultsTable).where(eq(analysisResultsTable.projectId, projectId));
   if (!result) { res.status(404).json({ error: "Analysis not ready" }); return; }
+  const rhythmData = result.rhythmData as Record<string, unknown> | null;
+  const analysisIsMock = !!(rhythmData?.isMock);
   res.json({
     projectId: result.projectId,
     rhythm: result.rhythmData,
@@ -243,6 +270,8 @@ router.get("/:id/analysis", async (req, res) => {
     tonalTimeline: result.tonalTimelineData,
     confidenceData: result.confidenceData,
     pipelineVersion: result.pipelineVersion ?? PIPELINE_VERSION,
+    modelVersions: analysisIsMock ? null : MODEL_VERSIONS,
+    isMock: analysisIsMock,
     createdAt: result.createdAt,
     updatedAt: result.updatedAt,
   });
@@ -287,6 +316,86 @@ router.post("/:id/corrections", async (req, res) => {
   );
 
   res.json({ ok: true, corrections, appliedToAnalysis: !!analysis });
+});
+
+// ─── Lock System ─────────────────────────────────────────────────────────────
+// STEP 15: Lock individual components to prevent regeneration.
+// Lock keys: harmony, structure, melody, tracks, key, chords, bpm
+
+// GET /api/projects/:id/locks
+router.get("/:id/locks", async (req, res) => {
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  res.json({ locks: (project as any).locks ?? {} });
+});
+
+// PUT /api/projects/:id/locks  — replace the full lock state
+router.put("/:id/locks", async (req, res) => {
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const allowed = new Set(["harmony", "structure", "melody", "tracks", "key", "chords", "bpm"]);
+  const body = req.body as Record<string, boolean>;
+  const locks: Record<string, boolean> = {};
+  for (const [k, v] of Object.entries(body)) {
+    if (allowed.has(k) && typeof v === "boolean") locks[k] = v;
+  }
+
+  await db.update(projectsTable).set({ userCorrections: { ...(project.userCorrections as object ?? {}), locks }, updatedAt: new Date() }).where(eq(projectsTable.id, projectId));
+  res.json({ locks });
+});
+
+// PATCH /api/projects/:id/locks/:component — toggle a single lock
+router.patch("/:id/locks/:component", async (req, res) => {
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const { component } = req.params;
+  const allowed = new Set(["harmony", "structure", "melody", "tracks", "key", "chords", "bpm"]);
+  if (!allowed.has(component)) { res.status(400).json({ error: `Unknown lock component: ${component}` }); return; }
+
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  const { locked } = req.body as { locked: boolean };
+  if (typeof locked !== "boolean") { res.status(400).json({ error: "locked must be boolean" }); return; }
+
+  const currentCorrections = (project.userCorrections as Record<string, unknown>) ?? {};
+  const currentLocks = (currentCorrections.locks as Record<string, boolean>) ?? {};
+  const newLocks = { ...currentLocks, [component]: locked };
+
+  await db.update(projectsTable).set({ userCorrections: { ...currentCorrections, locks: newLocks }, updatedAt: new Date() }).where(eq(projectsTable.id, projectId));
+  res.json({ component, locked, locks: newLocks });
+});
+
+// POST /api/projects/:id/regenerate-section — mark section for regeneration
+router.post("/:id/regenerate-section", async (req, res) => {
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const { sectionLabel, sectionIndex } = req.body as { sectionLabel?: string; sectionIndex?: number };
+  if (!sectionLabel && sectionIndex === undefined) {
+    res.status(400).json({ error: "sectionLabel or sectionIndex required" });
+    return;
+  }
+
+  const [analysis] = await db.select().from(analysisResultsTable).where(eq(analysisResultsTable.projectId, projectId));
+  if (!analysis) { res.status(404).json({ error: "Analysis not ready" }); return; }
+
+  const structureData = analysis.structureData as Record<string, unknown> | null;
+  const sections: unknown[] = (structureData?.sections as unknown[]) ?? [];
+  const updated = sections.map((s: any, i: number) => {
+    const match = sectionIndex !== undefined ? i === sectionIndex : s.label === sectionLabel;
+    return match ? { ...s, regenerate: true } : s;
+  });
+
+  await db.update(analysisResultsTable)
+    .set({ structureData: { ...structureData, sections: updated }, updatedAt: new Date() })
+    .where(eq(analysisResultsTable.projectId, projectId));
+
+  res.json({ ok: true, markedSections: updated.filter((s: any) => s.regenerate).length });
 });
 
 // ─── Arrangement ──────────────────────────────────────────────────────────────
@@ -336,6 +445,8 @@ router.get("/:id/arrangement", async (req, res) => {
     .orderBy(desc(arrangementsTable.versionNumber))
     .limit(1);
   if (!result) { res.status(404).json({ error: "Arrangement not ready" }); return; }
+  const arrMeta = result.generationMetadata as Record<string, unknown> | null;
+  const arrIsMock = !!(arrMeta?.isMock);
   res.json({
     projectId: result.projectId,
     versionNumber: result.versionNumber,
@@ -344,6 +455,9 @@ router.get("/:id/arrangement", async (req, res) => {
     totalDurationSeconds: result.totalDurationSeconds,
     arrangementPlan: result.arrangementPlan,
     generationMetadata: result.generationMetadata,
+    isMock: arrIsMock,
+    pipelineVersion: PIPELINE_VERSION,
+    createdFromAudioHash: (arrMeta?.createdFromAudioHash as string | undefined) ?? null,
     createdAt: result.createdAt,
   });
 });
@@ -549,30 +663,52 @@ async function runSimulatedAnalysis(jobId: string, projectId: number) {
   const beatGrid = Array.from({ length: Math.floor(totalDuration / beatDuration) }, (_, i) => parseFloat((i * beatDuration).toFixed(3)));
   const downbeats = beatGrid.filter((_, i) => i % 4 === 0);
 
+  const globalKey = ["C", "Am", "G", "F", "D", "Em"][Math.floor(Math.random() * 6)];
+  const keyMode = Math.random() > 0.4 ? "major" : "minor";
+  const simChords = generateSimulatedChords(totalDuration, beatDuration);
+
   await db.delete(analysisResultsTable).where(eq(analysisResultsTable.projectId, projectId));
   await db.insert(analysisResultsTable).values({
     projectId,
-    rhythmData: { bpm, timeSignatureNumerator: 4, timeSignatureDenominator: 4, beatGrid, downbeats, isMock: true },
+    pipelineVersion: PIPELINE_VERSION,
+    rhythmData: {
+      bpm, timeSignatureNumerator: 4, timeSignatureDenominator: 4,
+      beatGrid, downbeats,
+      confidence: 0.88, isMock: true,
+      model: MODEL_VERSIONS.rhythm,
+    },
     keyData: {
-      globalKey: ["C", "Am", "G", "F", "D", "Em"][Math.floor(Math.random() * 6)],
-      mode: Math.random() > 0.4 ? "major" : "minor",
+      globalKey, mode: keyMode,
       confidence: 0.85 + Math.random() * 0.1,
+      alternatives: [{ key: globalKey === "C" ? "Am" : "C", mode: keyMode === "major" ? "minor" : "major", confidence: 0.62 }],
       modulations: [],
       isMock: true,
+      model: MODEL_VERSIONS.key,
     },
-    chordsData: { chords: generateSimulatedChords(totalDuration, beatDuration), leadSheet: "C | Am | F | G | C | Am | F | G", isMock: true },
-    melodyData: { notes: generateSimulatedMelody(totalDuration), inferredHarmony: ["C - Am - F - G", "C - F - Am - G"], isMock: true },
+    chordsData: {
+      chords: simChords,
+      leadSheet: simChords.slice(0, 8).map((c: {chord: string}) => c.chord).join(" | "),
+      isMock: true,
+      model: MODEL_VERSIONS.chords,
+    },
+    melodyData: {
+      notes: generateSimulatedMelody(totalDuration),
+      inferredHarmony: ["C - Am - F - G", "C - F - Am - G"],
+      isMock: true,
+      model: MODEL_VERSIONS.melody,
+    },
     structureData: {
       sections: [
-        { label: "intro", startTime: 0, endTime: 16, confidence: 0.88 },
-        { label: "verse", startTime: 16, endTime: 48, confidence: 0.82 },
-        { label: "chorus", startTime: 48, endTime: 80, confidence: 0.91 },
-        { label: "verse", startTime: 80, endTime: 112, confidence: 0.79 },
-        { label: "chorus", startTime: 112, endTime: 144, confidence: 0.93 },
-        { label: "bridge", startTime: 144, endTime: 160, confidence: 0.75 },
-        { label: "chorus", startTime: 160, endTime: 180, confidence: 0.89 },
+        { label: "intro",  startTime: 0,   endTime: 16,  confidence: 0.88, isMock: true },
+        { label: "verse",  startTime: 16,  endTime: 48,  confidence: 0.82, isMock: true },
+        { label: "chorus", startTime: 48,  endTime: 80,  confidence: 0.91, isMock: true },
+        { label: "verse",  startTime: 80,  endTime: 112, confidence: 0.79, isMock: true },
+        { label: "chorus", startTime: 112, endTime: 144, confidence: 0.93, isMock: true },
+        { label: "bridge", startTime: 144, endTime: 160, confidence: 0.75, isMock: true },
+        { label: "chorus", startTime: 160, endTime: 180, confidence: 0.89, isMock: true },
       ],
       isMock: true,
+      model: MODEL_VERSIONS.structure,
     },
     waveformData: waveform,
   });
@@ -646,8 +782,27 @@ async function runSimulatedArrangement(jobId: string, projectId: number, styleId
     generateStringsTrack(totalDuration, bpm),
   ];
 
-  await db.delete(arrangementsTable).where(eq(arrangementsTable.projectId, projectId));
-  await db.insert(arrangementsTable).values({ projectId, styleId, tracksData: tracks, totalDurationSeconds: totalDuration });
+  // Versioning: mark previous versions as not current
+  await db.update(arrangementsTable)
+    .set({ isCurrent: false })
+    .where(eq(arrangementsTable.projectId, projectId));
+
+  // Get next version number
+  const existing = await db.select().from(arrangementsTable)
+    .where(eq(arrangementsTable.projectId, projectId))
+    .orderBy(desc(arrangementsTable.versionNumber))
+    .limit(1);
+  const nextVersion = (existing[0]?.versionNumber ?? 0) + 1;
+
+  await db.insert(arrangementsTable).values({
+    projectId,
+    styleId,
+    tracksData: tracks,
+    totalDurationSeconds: totalDuration,
+    isCurrent: true,
+    versionNumber: nextVersion,
+    generationMetadata: { isMock: true, bpm: totalDuration, style: styleId },
+  });
 
   await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Arrangement complete", isMock: true });
   await db.update(projectsTable).set({ status: "arranged", updatedAt: new Date() }).where(eq(projectsTable.id, projectId));

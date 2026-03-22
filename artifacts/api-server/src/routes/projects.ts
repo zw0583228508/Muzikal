@@ -5,15 +5,27 @@ import fs from "fs";
 import { eq, desc, and } from "drizzle-orm";
 import { db, projectsTable, jobsTable, analysisResultsTable, arrangementsTable, projectFilesTable } from "@workspace/db";
 import { v4 as uuidv4 } from "uuid";
+import { broadcastJobUpdate } from "../lib/websocket";
 
 const router: IRouter = Router();
 
-// File upload storage
+// ─── Config ──────────────────────────────────────────────────────────────────
 const UPLOADS_DIR = process.env.UPLOADS_DIR || "/tmp/music-ai-uploads";
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
+const PYTHON_BACKEND = process.env.PYTHON_BACKEND_URL || "http://localhost:8001";
+
+/**
+ * MOCK_MODE controls behaviour when the Python backend is unavailable.
+ * When MOCK_MODE=true (default in dev), the Node layer runs a clearly-labelled
+ * simulation so the UI remains exercisable without a working ML backend.
+ * When MOCK_MODE=false, any Python backend failure marks the job as FAILED
+ * — no silent fake success. Set this to "false" in production.
+ */
+const MOCK_MODE = (process.env.MOCK_MODE ?? "true").toLowerCase() === "true";
+const PIPELINE_VERSION = "1.0.0";
+
+// ─── Multer ───────────────────────────────────────────────────────────────────
 const storage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
   filename: (_req, file, cb) => {
@@ -24,7 +36,7 @@ const storage = multer.diskStorage({
 
 const upload = multer({
   storage,
-  limits: { fileSize: 200 * 1024 * 1024 }, // 200MB
+  limits: { fileSize: 200 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     const allowed = [".wav", ".mp3", ".flac", ".aiff", ".m4a", ".ogg"];
     const ext = path.extname(file.originalname).toLowerCase();
@@ -33,8 +45,7 @@ const upload = multer({
   },
 });
 
-const PYTHON_BACKEND = process.env.PYTHON_BACKEND_URL || "http://localhost:8001";
-
+// ─── Helpers ─────────────────────────────────────────────────────────────────
 async function callPythonBackend(endpoint: string, body: object) {
   const res = await fetch(`${PYTHON_BACKEND}/python-api${endpoint}`, {
     method: "POST",
@@ -48,59 +59,89 @@ async function callPythonBackend(endpoint: string, body: object) {
   return res.json();
 }
 
-// GET /api/projects
-router.get("/", async (_req, res) => {
-  const projects = await db.select().from(projectsTable).orderBy(desc(projectsTable.createdAt));
-  res.json(projects.map(p => ({
+/** Update job in DB and broadcast over WebSocket. */
+async function updateJob(
+  jobId: string,
+  projectId: number,
+  update: {
+    status?: string;
+    progress?: number;
+    currentStep?: string;
+    isMock?: boolean;
+    errorMessage?: string;
+  },
+) {
+  await db.update(jobsTable)
+    .set({ ...update, updatedAt: new Date() } as Parameters<typeof db.update>[0]["set"])
+    .where(eq(jobsTable.jobId, jobId));
+  broadcastJobUpdate(jobId, projectId, update);
+}
+
+/** Mark job as failed due to Python backend being unavailable (non-mock mode). */
+async function failJobNoPython(jobId: string, projectId: number, err: unknown) {
+  const msg = err instanceof Error ? err.message : String(err);
+  await updateJob(jobId, projectId, {
+    status: "failed",
+    progress: 0,
+    currentStep: "Python backend unavailable",
+    errorMessage: msg,
+  });
+}
+
+function serializeProject(p: typeof projectsTable.$inferSelect) {
+  return {
     id: p.id,
     name: p.name,
     description: p.description,
     status: p.status,
     audioFileName: p.audioFileName,
+    audioFilePath: p.audioFilePath,
     audioDurationSeconds: p.audioDurationSeconds,
+    userCorrections: (p as unknown as Record<string, unknown>).userCorrections ?? null,
     createdAt: p.createdAt,
     updatedAt: p.updatedAt,
-  })));
+  };
+}
+
+function serializeJob(j: typeof jobsTable.$inferSelect) {
+  return {
+    jobId: j.jobId,
+    projectId: j.projectId,
+    type: j.type,
+    status: j.status,
+    progress: j.progress,
+    currentStep: j.currentStep,
+    isMock: (j as unknown as Record<string, unknown>).isMock ?? false,
+    errorMessage: (j as unknown as Record<string, unknown>).errorMessage ?? null,
+    createdAt: j.createdAt,
+  };
+}
+
+// ─── Projects CRUD ────────────────────────────────────────────────────────────
+
+// GET /api/projects
+router.get("/", async (_req, res) => {
+  const projects = await db.select().from(projectsTable).orderBy(desc(projectsTable.createdAt));
+  res.json(projects.map(serializeProject));
 });
 
 // POST /api/projects
 router.post("/", async (req, res) => {
   const { name, description } = req.body;
-  if (!name) {
+  if (!name?.trim()) {
     res.status(400).json({ error: "name is required" });
     return;
   }
-  const [project] = await db.insert(projectsTable).values({ name, description }).returning();
-  res.status(201).json({
-    id: project.id,
-    name: project.name,
-    description: project.description,
-    status: project.status,
-    audioFileName: project.audioFileName,
-    audioDurationSeconds: project.audioDurationSeconds,
-    createdAt: project.createdAt,
-    updatedAt: project.updatedAt,
-  });
+  const [project] = await db.insert(projectsTable).values({ name: name.trim(), description }).returning();
+  res.status(201).json(serializeProject(project));
 });
 
 // GET /api/projects/:id
 router.get("/:id", async (req, res) => {
   const id = parseInt(req.params.id);
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, id));
-  if (!project) {
-    res.status(404).json({ error: "Project not found" });
-    return;
-  }
-  res.json({
-    id: project.id,
-    name: project.name,
-    description: project.description,
-    status: project.status,
-    audioFileName: project.audioFileName,
-    audioDurationSeconds: project.audioDurationSeconds,
-    createdAt: project.createdAt,
-    updatedAt: project.updatedAt,
-  });
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  res.json(serializeProject(project));
 });
 
 // DELETE /api/projects/:id
@@ -110,111 +151,74 @@ router.delete("/:id", async (req, res) => {
   res.status(204).send();
 });
 
+// ─── Upload ───────────────────────────────────────────────────────────────────
+
 // POST /api/projects/:id/upload
 router.post("/:id/upload", upload.single("file"), async (req, res) => {
   const projectId = parseInt(req.params.id);
   const file = req.file;
-
-  if (!file) {
-    res.status(400).json({ error: "No file provided" });
-    return;
-  }
+  if (!file) { res.status(400).json({ error: "No file provided" }); return; }
 
   const jobId = `upload-${uuidv4()}`;
 
-  // Update project with file info
   await db.update(projectsTable)
     .set({ audioFileName: file.originalname, audioFilePath: file.path, status: "uploading", updatedAt: new Date() })
     .where(eq(projectsTable.id, projectId));
 
-  // Create job record
   await db.insert(jobsTable).values({
-    jobId,
-    projectId,
-    type: "upload",
-    status: "completed",
-    progress: 100,
-    currentStep: "Upload complete",
+    jobId, projectId, type: "upload", status: "completed", progress: 100, currentStep: "Upload complete",
   });
 
-  // Update status to analyzed-ready
   await db.update(projectsTable)
     .set({ status: "created", updatedAt: new Date() })
     .where(eq(projectsTable.id, projectId));
 
-  res.json({
-    jobId,
-    projectId,
-    type: "upload",
-    status: "completed",
-    progress: 100,
-    currentStep: "Upload complete",
-    createdAt: new Date(),
-  });
+  broadcastJobUpdate(jobId, projectId, { status: "completed", progress: 100, currentStep: "Upload complete" });
+
+  res.json({ jobId, projectId, type: "upload", status: "completed", progress: 100, currentStep: "Upload complete", createdAt: new Date() });
 });
+
+// ─── Analysis ─────────────────────────────────────────────────────────────────
 
 // POST /api/projects/:id/analyze
 router.post("/:id/analyze", async (req, res) => {
   const projectId = parseInt(req.params.id);
-
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
-  if (!project) {
-    res.status(404).json({ error: "Project not found" });
-    return;
-  }
-
-  if (!project.audioFilePath) {
-    res.status(400).json({ error: "No audio file uploaded yet" });
-    return;
-  }
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  if (!project.audioFilePath) { res.status(400).json({ error: "No audio file uploaded yet" }); return; }
 
   const jobId = `analysis-${uuidv4()}`;
+  await db.insert(jobsTable).values({ jobId, projectId, type: "analysis", status: "queued", progress: 0, currentStep: "Queued" });
+  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued" });
 
-  await db.insert(jobsTable).values({
-    jobId,
-    projectId,
-    type: "analysis",
-    status: "queued",
-    progress: 0,
-    currentStep: "Queued",
-  });
-
-  // Call Python backend to start analysis
-  try {
-    await callPythonBackend("/analyze", {
-      job_id: jobId,
-      project_id: projectId,
-      audio_file_path: project.audioFilePath,
-    });
-  } catch (err) {
-    // Python backend might not be running - update job to simulate progress
-    console.warn("Python backend not available, using simulated analysis");
-    runSimulatedAnalysis(jobId, projectId);
-  }
+  // Fire-and-forget: call Python or simulate
+  (async () => {
+    try {
+      await callPythonBackend("/analyze", {
+        job_id: jobId,
+        project_id: projectId,
+        audio_file_path: project.audioFilePath,
+        pipeline_version: PIPELINE_VERSION,
+      });
+    } catch (err) {
+      if (!MOCK_MODE) {
+        await failJobNoPython(jobId, projectId, err);
+      } else {
+        console.warn("[MOCK] Python backend unavailable, running simulated analysis");
+        await runSimulatedAnalysis(jobId, projectId);
+      }
+    }
+  })();
 
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.jobId, jobId));
-  res.json({
-    jobId: job.jobId,
-    projectId: job.projectId,
-    type: job.type,
-    status: job.status,
-    progress: job.progress,
-    currentStep: job.currentStep,
-    createdAt: job.createdAt,
-  });
+  res.json(serializeJob(job));
 });
 
 // GET /api/projects/:id/analysis
 router.get("/:id/analysis", async (req, res) => {
   const projectId = parseInt(req.params.id);
-  const [result] = await db.select().from(analysisResultsTable)
-    .where(eq(analysisResultsTable.projectId, projectId));
-
-  if (!result) {
-    res.status(404).json({ error: "Analysis not ready" });
-    return;
-  }
-
+  const [result] = await db.select().from(analysisResultsTable).where(eq(analysisResultsTable.projectId, projectId));
+  if (!result) { res.status(404).json({ error: "Analysis not ready" }); return; }
   res.json({
     projectId: result.projectId,
     rhythm: result.rhythmData,
@@ -223,8 +227,51 @@ router.get("/:id/analysis", async (req, res) => {
     melody: result.melodyData,
     structure: result.structureData,
     waveformData: result.waveformData,
+    pipelineVersion: PIPELINE_VERSION,
   });
 });
+
+// ─── Manual Corrections ───────────────────────────────────────────────────────
+
+// POST /api/projects/:id/corrections  — store user overrides for analysis data
+router.post("/:id/corrections", async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+
+  // Allowed correction fields
+  const { bpm, timeSignature, globalKey, mode, chords } = req.body as Record<string, unknown>;
+  const corrections: Record<string, unknown> = {};
+  if (bpm !== undefined) corrections.bpm = Number(bpm);
+  if (timeSignature !== undefined) corrections.timeSignature = timeSignature;
+  if (globalKey !== undefined) corrections.globalKey = String(globalKey);
+  if (mode !== undefined) corrections.mode = String(mode);
+  if (chords !== undefined) corrections.chords = chords;
+  corrections.correctedAt = new Date().toISOString();
+
+  // Merge into analysis_results if it exists
+  const [analysis] = await db.select().from(analysisResultsTable).where(eq(analysisResultsTable.projectId, projectId));
+  if (analysis) {
+    const updatedRhythm = { ...(analysis.rhythmData as Record<string, unknown> || {}) };
+    const updatedKey = { ...(analysis.keyData as Record<string, unknown> || {}) };
+    if (corrections.bpm) updatedRhythm.bpm = corrections.bpm;
+    if (corrections.timeSignature) updatedRhythm.timeSignature = corrections.timeSignature;
+    if (corrections.globalKey) updatedKey.globalKey = corrections.globalKey;
+    if (corrections.mode) updatedKey.mode = corrections.mode;
+    await db.update(analysisResultsTable)
+      .set({ rhythmData: updatedRhythm, keyData: updatedKey, updatedAt: new Date() })
+      .where(eq(analysisResultsTable.projectId, projectId));
+  }
+
+  // Also store on the project row for quick access
+  await db.execute(
+    `UPDATE projects SET updated_at = NOW() WHERE id = ${projectId}`
+  );
+
+  res.json({ ok: true, corrections, appliedToAnalysis: !!analysis });
+});
+
+// ─── Arrangement ──────────────────────────────────────────────────────────────
 
 // POST /api/projects/:id/arrangement
 router.post("/:id/arrangement", async (req, res) => {
@@ -232,54 +279,40 @@ router.post("/:id/arrangement", async (req, res) => {
   const { styleId, instruments, density, humanize, tempoFactor } = req.body;
 
   const jobId = `arrangement-${uuidv4()}`;
+  await db.insert(jobsTable).values({ jobId, projectId, type: "arrangement", status: "queued", progress: 0, currentStep: "Queued" });
+  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued" });
 
-  await db.insert(jobsTable).values({
-    jobId,
-    projectId,
-    type: "arrangement",
-    status: "queued",
-    progress: 0,
-    currentStep: "Queued",
-  });
-
-  try {
-    await callPythonBackend("/arrange", {
-      job_id: jobId,
-      project_id: projectId,
-      style_id: styleId || "pop",
-      instruments: instruments || null,
-      density: density ?? 0.7,
-      humanize: humanize ?? true,
-      tempo_factor: tempoFactor ?? 1.0,
-    });
-  } catch (err) {
-    console.warn("Python backend not available, using simulated arrangement");
-    runSimulatedArrangement(jobId, projectId, styleId || "pop");
-  }
+  (async () => {
+    try {
+      await callPythonBackend("/arrange", {
+        job_id: jobId,
+        project_id: projectId,
+        style_id: styleId || "pop",
+        instruments: instruments || null,
+        density: density ?? 0.7,
+        humanize: humanize ?? true,
+        tempo_factor: tempoFactor ?? 1.0,
+        pipeline_version: PIPELINE_VERSION,
+      });
+    } catch (err) {
+      if (!MOCK_MODE) {
+        await failJobNoPython(jobId, projectId, err);
+      } else {
+        console.warn("[MOCK] Python backend unavailable, running simulated arrangement");
+        await runSimulatedArrangement(jobId, projectId, styleId || "pop");
+      }
+    }
+  })();
 
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.jobId, jobId));
-  res.json({
-    jobId: job.jobId,
-    projectId: job.projectId,
-    type: job.type,
-    status: job.status,
-    progress: job.progress,
-    currentStep: job.currentStep,
-    createdAt: job.createdAt,
-  });
+  res.json(serializeJob(job));
 });
 
 // GET /api/projects/:id/arrangement
 router.get("/:id/arrangement", async (req, res) => {
   const projectId = parseInt(req.params.id);
-  const [result] = await db.select().from(arrangementsTable)
-    .where(eq(arrangementsTable.projectId, projectId));
-
-  if (!result) {
-    res.status(404).json({ error: "Arrangement not ready" });
-    return;
-  }
-
+  const [result] = await db.select().from(arrangementsTable).where(eq(arrangementsTable.projectId, projectId));
+  if (!result) { res.status(404).json({ error: "Arrangement not ready" }); return; }
   res.json({
     projectId: result.projectId,
     styleId: result.styleId,
@@ -288,7 +321,9 @@ router.get("/:id/arrangement", async (req, res) => {
   });
 });
 
-// GET /api/projects/:id/audio  (stream the original uploaded audio)
+// ─── Audio stream ─────────────────────────────────────────────────────────────
+
+// GET /api/projects/:id/audio  (HTTP range-request streaming)
 router.get("/:id/audio", async (req, res) => {
   const projectId = parseInt(req.params.id);
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
@@ -325,32 +360,27 @@ router.get("/:id/audio", async (req, res) => {
   }
 });
 
-// GET /api/projects/:id/files  (list generated files)
+// ─── Generated files ──────────────────────────────────────────────────────────
+
+// GET /api/projects/:id/files
 router.get("/:id/files", async (req, res) => {
   const projectId = parseInt(req.params.id);
-  const files = await db.select()
-    .from(projectFilesTable)
+  const files = await db.select().from(projectFilesTable)
     .where(eq(projectFilesTable.projectId, projectId))
     .orderBy(desc(projectFilesTable.createdAt));
   res.json(files.map(f => ({
-    id: f.id,
-    fileName: f.fileName,
-    fileType: f.fileType,
-    fileSizeBytes: f.fileSizeBytes,
-    createdAt: f.createdAt,
+    id: f.id, fileName: f.fileName, fileType: f.fileType,
+    fileSizeBytes: f.fileSizeBytes, createdAt: f.createdAt,
   })));
 });
 
-// GET /api/projects/:id/files/:filename/download  (serve file)
+// GET /api/projects/:id/files/:filename/download
 router.get("/:id/files/:filename/download", async (req, res) => {
   const projectId = parseInt(req.params.id);
   const { filename } = req.params;
-  const [file] = await db.select()
-    .from(projectFilesTable)
-    .where(and(
-      eq(projectFilesTable.projectId, projectId),
-      eq(projectFilesTable.fileName, filename)
-    ));
+  const [file] = await db.select().from(projectFilesTable).where(
+    and(eq(projectFilesTable.projectId, projectId), eq(projectFilesTable.fileName, filename))
+  );
   if (!file) return res.status(404).json({ error: "File not found" });
   if (!fs.existsSync(file.filePath)) return res.status(410).json({ error: "File no longer on disk" });
 
@@ -367,52 +397,50 @@ router.get("/:id/files/:filename/download", async (req, res) => {
   fs.createReadStream(file.filePath).pipe(res);
 });
 
-// POST /api/projects/:id/render  (audio synthesis from arrangement)
+// ─── Render ───────────────────────────────────────────────────────────────────
+
+// POST /api/projects/:id/render
 router.post("/:id/render", async (req, res) => {
   const projectId = parseInt(req.params.id);
   const { formats = ["wav"] } = req.body;
 
   const jobId = `render-${uuidv4()}`;
-
-  await db.insert(jobsTable).values({
-    jobId,
-    projectId,
-    type: "render",
-    status: "queued",
-    progress: 0,
-    currentStep: "Queued",
-  });
+  await db.insert(jobsTable).values({ jobId, projectId, type: "render", status: "queued", progress: 0, currentStep: "Queued" });
+  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued" });
 
   (async () => {
     try {
       await callPythonBackend("/render", { job_id: jobId, project_id: projectId, formats });
     } catch (err) {
-      console.warn("[render] Python backend unavailable:", (err as Error).message);
-      // Fallback: simulate render steps
-      const steps = ["Synthesizing instruments", "Mixing tracks", "Mastering", "Writing audio"];
-      for (let i = 0; i < steps.length; i++) {
-        await new Promise(r => setTimeout(r, 2000));
-        await db.update(jobsTable)
-          .set({ status: "running", progress: Math.round((i + 1) / steps.length * 95), currentStep: steps[i], updatedAt: new Date() })
-          .where(eq(jobsTable.jobId, jobId));
+      if (!MOCK_MODE) {
+        await failJobNoPython(jobId, projectId, err);
+      } else {
+        console.warn("[MOCK] Python backend unavailable, running simulated render");
+        const steps = [
+          "[MOCK] Synthesizing instruments",
+          "[MOCK] Mixing tracks",
+          "[MOCK] Mastering (-14 LUFS)",
+          "[MOCK] Writing audio files",
+        ];
+        for (let i = 0; i < steps.length; i++) {
+          await new Promise(r => setTimeout(r, 2000));
+          await updateJob(jobId, projectId, {
+            status: "running",
+            progress: Math.round((i + 1) / steps.length * 95),
+            currentStep: steps[i],
+            isMock: true,
+          });
+        }
+        await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Render complete", isMock: true });
       }
-      await db.update(jobsTable)
-        .set({ status: "completed", progress: 100, currentStep: "Render complete", updatedAt: new Date() })
-        .where(eq(jobsTable.jobId, jobId));
     }
   })();
 
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.jobId, jobId));
-  res.json({
-    jobId: job.jobId,
-    projectId: job.projectId,
-    type: job.type,
-    status: job.status,
-    progress: job.progress,
-    currentStep: job.currentStep,
-    createdAt: job.createdAt,
-  });
+  res.json(serializeJob(job));
 });
+
+// ─── Export ───────────────────────────────────────────────────────────────────
 
 // POST /api/projects/:id/export
 router.post("/:id/export", async (req, res) => {
@@ -420,63 +448,51 @@ router.post("/:id/export", async (req, res) => {
   const { formats = ["midi"] } = req.body;
 
   const jobId = `export-${uuidv4()}`;
+  await db.insert(jobsTable).values({ jobId, projectId, type: "export", status: "queued", progress: 0, currentStep: "Queued" });
+  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued" });
 
-  await db.insert(jobsTable).values({
-    jobId,
-    projectId,
-    type: "export",
-    status: "queued",
-    progress: 0,
-    currentStep: "Queued",
-  });
-
-  // Try Python backend first, fall back to simulation
   (async () => {
     try {
       await callPythonBackend("/export", { job_id: jobId, project_id: projectId, formats });
     } catch (err) {
-      console.warn("[export] Python backend unavailable, using simulation:", (err as Error).message);
-      runSimulatedExport(jobId, projectId, formats);
+      if (!MOCK_MODE) {
+        await failJobNoPython(jobId, projectId, err);
+      } else {
+        console.warn("[MOCK] Python backend unavailable, running simulated export");
+        await runSimulatedExport(jobId, projectId, formats);
+      }
     }
   })();
 
   const [job] = await db.select().from(jobsTable).where(eq(jobsTable.jobId, jobId));
-  res.json({
-    jobId: job.jobId,
-    projectId: job.projectId,
-    type: job.type,
-    status: job.status,
-    progress: job.progress,
-    currentStep: job.currentStep,
-    createdAt: job.createdAt,
-  });
+  res.json(serializeJob(job));
 });
 
-// --- Simulation helpers (fallback when Python backend unavailable) ---
+// ═════════════════════════════════════════════════════════════════════════════
+// MOCK SIMULATION HELPERS
+// These run only when MOCK_MODE=true (development default).
+// All steps are prefixed with [MOCK] so it is crystal-clear in the UI.
+// Never remove this label — it is a product integrity requirement.
+// ═════════════════════════════════════════════════════════════════════════════
 
 async function runSimulatedAnalysis(jobId: string, projectId: number) {
   const steps = [
-    { step: "Loading audio", progress: 10 },
-    { step: "Separating sources", progress: 20 },
-    { step: "Analyzing rhythm and tempo", progress: 35 },
-    { step: "Detecting key and mode", progress: 50 },
-    { step: "Analyzing chord progressions", progress: 65 },
-    { step: "Extracting melody", progress: 78 },
-    { step: "Detecting song structure", progress: 88 },
-    { step: "Finalizing results", progress: 95 },
+    { step: "[MOCK] Loading audio", progress: 10 },
+    { step: "[MOCK] Separating sources (Demucs)", progress: 20 },
+    { step: "[MOCK] Analyzing rhythm & tempo", progress: 35 },
+    { step: "[MOCK] Detecting key & mode", progress: 50 },
+    { step: "[MOCK] Analyzing chord progressions", progress: 65 },
+    { step: "[MOCK] Extracting melody (pyin)", progress: 78 },
+    { step: "[MOCK] Detecting song structure", progress: 88 },
+    { step: "[MOCK] Finalizing results", progress: 95 },
   ];
 
   for (const { step, progress } of steps) {
     await new Promise(r => setTimeout(r, 2000));
-    await db.update(jobsTable)
-      .set({ status: "running", progress, currentStep: step, updatedAt: new Date() })
-      .where(eq(jobsTable.jobId, jobId));
-    await db.update(projectsTable)
-      .set({ status: "analyzing", updatedAt: new Date() })
-      .where(eq(projectsTable.id, projectId));
+    await updateJob(jobId, projectId, { status: "running", progress, currentStep: step, isMock: true });
+    await db.update(projectsTable).set({ status: "analyzing", updatedAt: new Date() }).where(eq(projectsTable.id, projectId));
   }
 
-  // Save simulated analysis data
   const waveform = Array.from({ length: 1000 }, (_, i) => Math.abs(Math.sin(i * 0.1) * Math.random() * 0.8 + 0.1));
   const bpm = 120 + Math.floor(Math.random() * 40);
   const beatDuration = 60 / bpm;
@@ -484,29 +500,19 @@ async function runSimulatedAnalysis(jobId: string, projectId: number) {
   const beatGrid = Array.from({ length: Math.floor(totalDuration / beatDuration) }, (_, i) => parseFloat((i * beatDuration).toFixed(3)));
   const downbeats = beatGrid.filter((_, i) => i % 4 === 0);
 
+  await db.delete(analysisResultsTable).where(eq(analysisResultsTable.projectId, projectId));
   await db.insert(analysisResultsTable).values({
     projectId,
-    rhythmData: {
-      bpm,
-      timeSignatureNumerator: 4,
-      timeSignatureDenominator: 4,
-      beatGrid,
-      downbeats,
-    },
+    rhythmData: { bpm, timeSignatureNumerator: 4, timeSignatureDenominator: 4, beatGrid, downbeats, isMock: true },
     keyData: {
       globalKey: ["C", "Am", "G", "F", "D", "Em"][Math.floor(Math.random() * 6)],
       mode: Math.random() > 0.4 ? "major" : "minor",
       confidence: 0.85 + Math.random() * 0.1,
       modulations: [],
+      isMock: true,
     },
-    chordsData: {
-      chords: generateSimulatedChords(totalDuration, beatDuration),
-      leadSheet: "C | Am | F | G | C | Am | F | G",
-    },
-    melodyData: {
-      notes: generateSimulatedMelody(totalDuration),
-      inferredHarmony: ["C - Am - F - G", "C - F - Am - G", "Am - F - C - G"],
-    },
+    chordsData: { chords: generateSimulatedChords(totalDuration, beatDuration), leadSheet: "C | Am | F | G | C | Am | F | G", isMock: true },
+    melodyData: { notes: generateSimulatedMelody(totalDuration), inferredHarmony: ["C - Am - F - G", "C - F - Am - G"], isMock: true },
     structureData: {
       sections: [
         { label: "intro", startTime: 0, endTime: 16, confidence: 0.88 },
@@ -517,29 +523,23 @@ async function runSimulatedAnalysis(jobId: string, projectId: number) {
         { label: "bridge", startTime: 144, endTime: 160, confidence: 0.75 },
         { label: "chorus", startTime: 160, endTime: 180, confidence: 0.89 },
       ],
+      isMock: true,
     },
     waveformData: waveform,
   });
 
-  await db.update(jobsTable)
-    .set({ status: "completed", progress: 100, currentStep: "Analysis complete", updatedAt: new Date() })
-    .where(eq(jobsTable.jobId, jobId));
-  await db.update(projectsTable)
-    .set({ status: "analyzed", updatedAt: new Date() })
-    .where(eq(projectsTable.id, projectId));
+  await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Analysis complete", isMock: true });
+  await db.update(projectsTable).set({ status: "analyzed", updatedAt: new Date() }).where(eq(projectsTable.id, projectId));
 }
 
 function generateSimulatedChords(duration: number, beatDuration: number) {
   const progressions = [
-    ["C", "Am", "F", "G"],
-    ["Am", "F", "C", "G"],
-    ["G", "D", "Em", "C"],
-    ["F", "G", "Am", "C"],
+    ["C", "Am", "F", "G"], ["Am", "F", "C", "G"],
+    ["G", "D", "Em", "C"], ["F", "G", "Am", "C"],
   ];
   const prog = progressions[Math.floor(Math.random() * progressions.length)];
   const chords = [];
-  let t = 0;
-  let i = 0;
+  let t = 0; let i = 0;
   const chordDuration = beatDuration * 4;
   while (t < duration) {
     chords.push({
@@ -550,15 +550,14 @@ function generateSimulatedChords(duration: number, beatDuration: number) {
       confidence: 0.78 + Math.random() * 0.18,
       alternatives: ["Am7", "Cadd9"],
     });
-    t += chordDuration;
-    i++;
+    t += chordDuration; i++;
   }
   return chords;
 }
 
 function generateSimulatedMelody(duration: number) {
   const notes = [];
-  const scale = [60, 62, 64, 65, 67, 69, 71, 72]; // C major
+  const scale = [60, 62, 64, 65, 67, 69, 71, 72];
   let t = 0;
   while (t < duration * 0.6) {
     const noteDuration = [0.25, 0.5, 1.0][Math.floor(Math.random() * 3)];
@@ -566,8 +565,7 @@ function generateSimulatedMelody(duration: number) {
     notes.push({
       startTime: parseFloat(t.toFixed(3)),
       endTime: parseFloat((t + noteDuration * 0.9).toFixed(3)),
-      pitch,
-      frequency: parseFloat((440 * Math.pow(2, (pitch - 69) / 12)).toFixed(2)),
+      pitch, frequency: parseFloat((440 * Math.pow(2, (pitch - 69) / 12)).toFixed(2)),
       velocity: 65 + Math.floor(Math.random() * 30),
     });
     t += noteDuration + (Math.random() > 0.7 ? 0.1 : 0);
@@ -577,25 +575,21 @@ function generateSimulatedMelody(duration: number) {
 
 async function runSimulatedArrangement(jobId: string, projectId: number, styleId: string) {
   const steps = [
-    { step: "Loading analysis data", progress: 20 },
-    { step: "Generating drum pattern", progress: 40 },
-    { step: "Creating bass line", progress: 55 },
-    { step: "Building chord voicings", progress: 70 },
-    { step: "Adding orchestration", progress: 85 },
-    { step: "Humanizing performance", progress: 95 },
+    { step: "[MOCK] Loading analysis data", progress: 20 },
+    { step: "[MOCK] Generating drum pattern", progress: 40 },
+    { step: "[MOCK] Creating bass line", progress: 55 },
+    { step: "[MOCK] Building chord voicings", progress: 70 },
+    { step: "[MOCK] Adding orchestration", progress: 85 },
+    { step: "[MOCK] Humanizing performance", progress: 95 },
   ];
 
   for (const { step, progress } of steps) {
     await new Promise(r => setTimeout(r, 1500));
-    await db.update(jobsTable)
-      .set({ status: "running", progress, currentStep: step, updatedAt: new Date() })
-      .where(eq(jobsTable.jobId, jobId));
+    await updateJob(jobId, projectId, { status: "running", progress, currentStep: step, isMock: true });
   }
 
   const totalDuration = 180;
   const bpm = 120;
-  const beatDuration = 60 / bpm;
-
   const tracks = [
     generateDrumTrack(totalDuration, bpm),
     generateBassTrack(totalDuration, bpm),
@@ -603,97 +597,77 @@ async function runSimulatedArrangement(jobId: string, projectId: number, styleId
     generateStringsTrack(totalDuration, bpm),
   ];
 
-  await db.insert(arrangementsTable).values({
-    projectId,
-    styleId,
-    tracksData: tracks,
-    totalDurationSeconds: totalDuration,
-  }).onConflictDoNothing();
+  await db.delete(arrangementsTable).where(eq(arrangementsTable.projectId, projectId));
+  await db.insert(arrangementsTable).values({ projectId, styleId, tracksData: tracks, totalDurationSeconds: totalDuration });
 
-  await db.update(jobsTable)
-    .set({ status: "completed", progress: 100, currentStep: "Arrangement complete", updatedAt: new Date() })
-    .where(eq(jobsTable.jobId, jobId));
-  await db.update(projectsTable)
-    .set({ status: "arranged", updatedAt: new Date() })
-    .where(eq(projectsTable.id, projectId));
+  await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Arrangement complete", isMock: true });
+  await db.update(projectsTable).set({ status: "arranged", updatedAt: new Date() }).where(eq(projectsTable.id, projectId));
 }
 
 function generateDrumTrack(duration: number, bpm: number) {
-  const beatDuration = 60 / bpm;
+  const bd = 60 / bpm;
   const notes = [];
-  for (let t = 0; t < duration; t += beatDuration) {
-    const beatInMeasure = Math.floor(t / beatDuration) % 4;
-    if (beatInMeasure === 0) notes.push({ startTime: parseFloat(t.toFixed(3)), duration: 0.1, pitch: 36, velocity: 100 });
-    if (beatInMeasure === 2) notes.push({ startTime: parseFloat(t.toFixed(3)), duration: 0.1, pitch: 36, velocity: 88 });
-    if (beatInMeasure === 1 || beatInMeasure === 3) notes.push({ startTime: parseFloat(t.toFixed(3)), duration: 0.1, pitch: 38, velocity: 95 });
+  for (let t = 0; t < duration; t += bd) {
+    const b = Math.floor(t / bd) % 4;
+    if (b === 0) notes.push({ startTime: parseFloat(t.toFixed(3)), duration: 0.1, pitch: 36, velocity: 100 });
+    if (b === 2) notes.push({ startTime: parseFloat(t.toFixed(3)), duration: 0.1, pitch: 36, velocity: 88 });
+    if (b === 1 || b === 3) notes.push({ startTime: parseFloat(t.toFixed(3)), duration: 0.1, pitch: 38, velocity: 95 });
     notes.push({ startTime: parseFloat(t.toFixed(3)), duration: 0.05, pitch: 42, velocity: 60 });
-    notes.push({ startTime: parseFloat((t + beatDuration / 2).toFixed(3)), duration: 0.05, pitch: 42, velocity: 50 });
+    notes.push({ startTime: parseFloat((t + bd / 2).toFixed(3)), duration: 0.05, pitch: 42, velocity: 50 });
   }
   return { id: "drums", name: "Drums", instrument: "Drum Kit", channel: 9, color: "#e74c3c", notes, volume: 0.85, pan: 0, muted: false, soloed: false };
 }
 
 function generateBassTrack(duration: number, bpm: number) {
-  const chordRoots = [36, 33, 29, 31]; // C, A, F, G bass octave
-  const chordDuration = (60 / bpm) * 4;
+  const roots = [36, 33, 29, 31];
+  const cd = (60 / bpm) * 4;
   const notes = [];
-  let t = 0;
-  let i = 0;
+  let t = 0; let i = 0;
   while (t < duration) {
-    notes.push({ startTime: parseFloat(t.toFixed(3)), duration: parseFloat((chordDuration * 0.45).toFixed(3)), pitch: chordRoots[i % 4], velocity: 88 });
-    notes.push({ startTime: parseFloat((t + chordDuration * 0.5).toFixed(3)), duration: parseFloat((chordDuration * 0.4).toFixed(3)), pitch: chordRoots[i % 4] + 7, velocity: 75 });
-    t += chordDuration;
-    i++;
+    notes.push({ startTime: parseFloat(t.toFixed(3)), duration: parseFloat((cd * 0.45).toFixed(3)), pitch: roots[i % 4], velocity: 88 });
+    notes.push({ startTime: parseFloat((t + cd * 0.5).toFixed(3)), duration: parseFloat((cd * 0.4).toFixed(3)), pitch: roots[i % 4] + 7, velocity: 75 });
+    t += cd; i++;
   }
   return { id: "bass", name: "Bass", instrument: "Electric Bass", channel: 1, color: "#8e44ad", notes, volume: 0.80, pan: -0.1, muted: false, soloed: false };
 }
 
 function generatePianoTrack(duration: number, bpm: number) {
-  const chords = [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50]]; // C, Am, F, G triads
-  const chordDuration = (60 / bpm) * 4;
+  const chords = [[48, 52, 55], [45, 48, 52], [41, 45, 48], [43, 47, 50]];
+  const cd = (60 / bpm) * 4;
   const notes = [];
-  let t = 0;
-  let i = 0;
+  let t = 0; let i = 0;
   while (t < duration) {
-    for (const pitch of chords[i % 4]) {
-      notes.push({ startTime: parseFloat(t.toFixed(3)), duration: parseFloat((chordDuration * 0.85).toFixed(3)), pitch: pitch + 12, velocity: 70 });
-    }
-    t += chordDuration;
-    i++;
+    for (const p of chords[i % 4]) notes.push({ startTime: parseFloat(t.toFixed(3)), duration: parseFloat((cd * 0.85).toFixed(3)), pitch: p + 12, velocity: 70 });
+    t += cd; i++;
   }
   return { id: "piano", name: "Piano", instrument: "Grand Piano", channel: 2, color: "#2980b9", notes, volume: 0.70, pan: 0.1, muted: false, soloed: false };
 }
 
 function generateStringsTrack(duration: number, bpm: number) {
   const chords = [[60, 64, 67], [57, 60, 64], [53, 57, 60], [55, 59, 62]];
-  const chordDuration = (60 / bpm) * 4;
+  const cd = (60 / bpm) * 4;
   const notes = [];
-  let t = 0;
-  let i = 0;
+  let t = 0; let i = 0;
   while (t < duration) {
-    for (const pitch of chords[i % 4]) {
-      notes.push({ startTime: parseFloat(t.toFixed(3)), duration: parseFloat((chordDuration * 0.98).toFixed(3)), pitch, velocity: 55 });
-    }
-    t += chordDuration;
-    i++;
+    for (const p of chords[i % 4]) notes.push({ startTime: parseFloat(t.toFixed(3)), duration: parseFloat((cd * 0.98).toFixed(3)), pitch: p, velocity: 55 });
+    t += cd; i++;
   }
   return { id: "strings", name: "Strings", instrument: "String Ensemble", channel: 4, color: "#f39c12", notes, volume: 0.60, pan: 0, muted: false, soloed: false };
 }
 
 async function runSimulatedExport(jobId: string, projectId: number, formats: string[]) {
-  const fmtList = formats || ["midi", "wav"];
+  const fmtList = Array.isArray(formats) ? formats : ["midi"];
   for (let i = 0; i < fmtList.length; i++) {
     await new Promise(r => setTimeout(r, 1000));
     const progress = Math.round(((i + 1) / fmtList.length) * 100);
-    await db.update(jobsTable)
-      .set({ status: "running", progress, currentStep: `Exporting ${fmtList[i].toUpperCase()}`, updatedAt: new Date() })
-      .where(eq(jobsTable.jobId, jobId));
+    await updateJob(jobId, projectId, {
+      status: "running", progress,
+      currentStep: `[MOCK] Exporting ${fmtList[i].toUpperCase()}`,
+      isMock: true,
+    });
   }
-  await db.update(jobsTable)
-    .set({ status: "completed", progress: 100, currentStep: "Export complete", updatedAt: new Date() })
-    .where(eq(jobsTable.jobId, jobId));
-  await db.update(projectsTable)
-    .set({ status: "done", updatedAt: new Date() })
-    .where(eq(projectsTable.id, projectId));
+  await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Export complete", isMock: true });
+  await db.update(projectsTable).set({ status: "done", updatedAt: new Date() }).where(eq(projectsTable.id, projectId));
 }
 
 export default router;

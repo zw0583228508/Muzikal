@@ -1,0 +1,1228 @@
+MASTER BUILD INSTRUCTIONS FOR OUR AI MUSIC PLATFORM
+
+Build a production-grade, commercial-quality AI music intelligence, arrangement, orchestration, rendering, and export platform.
+
+This is not a prototype and not a demo.
+This must be built as a real flagship product with clean architecture, reliable backend services, advanced audio intelligence, premium UI, and a modular pipeline that can grow into a world-class music platform.
+
+The system must be capable of:
+
+ingesting full songs or vocal-only recordings
+analyzing all core musical elements
+inferring harmony at a high musical level
+arranging and orchestrating in multiple genres
+supporting arranger-style profiles
+generating intros, endings, transitions, and modulations
+rendering audio
+exporting notation and production assets
+providing a premium DAW-like user experience
+
+Do not skip steps.
+Do not collapse everything into one service.
+Do not hide fake simulation behind real processing.
+Build the system in the exact order below.
+
+PART 1 — PRODUCT RULES
+1.1 Product goal
+
+Create a software platform that can take an input audio file and produce:
+
+deep music analysis
+chord and key detection
+vocal melody extraction
+section detection
+style-aware arrangement
+orchestration for multiple instruments
+expressive playback
+export to audio, MIDI, MusicXML, PDF sheet music, and stems
+1.2 Core product principles
+
+The platform must be:
+
+modular
+testable
+replaceable by component
+production-ready
+transparent in failure modes
+musically intelligent
+visually premium
+1.3 Non-negotiable rules
+
+Never do the following:
+
+never silently replace failed real analysis with fake data
+never mix mock results into production results
+never let UI claim a job succeeded when the core engine failed
+never hardcode style logic in multiple places
+never store important job results inside error fields
+never build the music engine as one giant file
+never treat preview rendering as final professional rendering
+PART 2 — TARGET SYSTEM ARCHITECTURE
+
+Build the system as the following layers:
+
+Desktop premium application
+API orchestration layer
+Job queue layer
+Python music intelligence backend
+Model inference layer
+Persistence layer
+Asset storage layer
+Export/render layer
+2.1 Required stack
+
+Use these technologies unless there is a very strong technical reason not to:
+
+Core language
+Python 3.11+
+Audio and MIR
+Essentia
+librosa
+madmom
+numpy
+scipy
+soundfile
+ffmpeg
+soxr
+Machine learning
+PyTorch
+PyTorch Lightning
+Hugging Face Transformers
+Inference
+ONNX Runtime
+NVIDIA Triton Inference Server for scalable GPU inference
+Pitch and transcription
+torchcrepe
+Basic Pitch
+music21
+Source separation
+Demucs
+Backend
+FastAPI
+Redis
+Celery or Arq
+PostgreSQL
+S3-compatible object storage
+Frontend / Desktop UI
+PySide6
+Qt/QML
+DevOps
+Docker
+Docker Compose
+structured logging
+monitoring
+crash reporting
+PART 3 — PROJECT STRUCTURE
+
+Create a clean monorepo with strict module boundaries.
+
+3.1 Root structure
+apps/desktop/
+services/api/
+services/worker/
+services/model-serving/
+packages/audio-core/
+packages/music-theory/
+packages/analysis-engine/
+packages/arrangement-engine/
+packages/orchestration-engine/
+packages/render-engine/
+packages/export-engine/
+packages/common-schemas/
+configs/
+scripts/
+docker/
+tests/
+docs/
+3.2 Shared schema package
+
+Create one shared schema package that defines:
+
+job states
+project states
+analysis result schemas
+arrangement result schemas
+orchestration result schemas
+export result schemas
+style profile schemas
+API request and response schemas
+
+This shared schema package must be the source of truth across all services.
+
+PART 4 — BUILD ORDER
+
+Build the system in the exact order below.
+
+STEP 1 — FOUNDATION LAYER
+4.1 Create the repository skeleton
+
+Set up the full folder structure first.
+
+4.2 Create common schema definitions
+
+Define strict schemas for:
+
+Project
+UploadedAudio
+AnalysisJob
+ArrangementJob
+RenderJob
+ExportJob
+AnalysisResult
+ArrangementResult
+OrchestrationResult
+ExportArtifacts
+StyleProfile
+ArrangerProfile
+
+Use versioned schemas from the start.
+
+4.3 Create configuration system
+
+Create environment-aware config loading for:
+
+development
+staging
+production
+
+Config must include:
+
+database URL
+Redis URL
+object storage config
+model-serving endpoints
+file paths
+audio temp directories
+feature flags
+mock mode flag
+model version mapping
+4.4 Logging and observability
+
+Add structured logging immediately.
+
+Every service must log:
+
+job id
+project id
+user id if available
+processing step
+status
+duration
+failure reason
+model versions used
+
+Do this first, not later.
+
+STEP 2 — DATABASE AND STORAGE LAYER
+5.1 PostgreSQL schema
+
+Design normalized tables for:
+
+users
+projects
+uploaded_assets
+analysis_jobs
+arrangement_jobs
+render_jobs
+export_jobs
+analysis_results
+arrangement_results
+orchestration_results
+export_artifacts
+style_profiles
+arranger_profiles
+model_versions
+project_revisions
+5.2 Important DB rules
+add proper foreign keys
+add proper indexes
+add uniqueness only where truly intended
+do not use ON CONFLICT unless a matching unique constraint actually exists
+store structured results in JSONB where appropriate
+add created_at, updated_at, version, and status fields everywhere useful
+5.3 Store result data properly
+
+Create dedicated fields for:
+
+result_data
+warnings
+artifacts_data
+processing_metadata
+
+Never store result JSON inside error_message.
+
+5.4 Object storage
+
+Use object storage for:
+
+uploaded raw audio
+normalized audio
+stems
+preview audio
+final renders
+MIDI
+MusicXML
+PDFs
+waveform previews
+spectrogram previews
+
+Store only references in the DB.
+
+STEP 3 — REAL JOB SYSTEM
+6.1 Queue architecture
+
+Build a real queue system.
+
+API service responsibilities:
+
+accept requests
+validate input
+create job records
+enqueue jobs
+return job ids
+
+Worker responsibilities:
+
+claim jobs
+run tasks
+update states
+write results
+retry on recoverable failure
+6.2 Job states
+
+Use explicit states:
+
+pending
+queued
+running
+completed
+failed
+cancelled
+
+Optional sub-states:
+
+preprocessing
+separating
+analyzing
+arranging
+orchestrating
+rendering
+exporting
+6.3 Retry policy
+
+Add retries only for recoverable failures such as:
+
+temporary model server issues
+temporary storage issues
+temporary DB issues
+
+Do not blindly retry corrupted audio or invalid requests.
+
+6.4 No fake success
+
+If a real analysis fails, mark it failed.
+Only use mock mode if explicitly enabled and clearly labeled throughout the entire stack.
+
+STEP 4 — AUDIO INGESTION ENGINE
+7.1 Input support
+
+Support:
+
+WAV
+MP3
+FLAC
+AIFF
+M4A
+7.2 Preprocessing pipeline
+
+Build a reusable preprocessing module that:
+
+validates file integrity
+probes file metadata
+converts to canonical internal format
+resamples to target sample rate
+normalizes loudness
+trims leading and trailing silence
+creates mono and stereo working variants where needed
+computes checksum and audio fingerprint
+7.3 Output artifacts
+
+Generate and store:
+
+normalized master audio
+metadata JSON
+duration
+sample rate
+channels
+waveform peaks
+preview spectrogram image or data
+7.4 Validation rules
+
+Reject or flag:
+
+empty files
+corrupted files
+unsupported codecs
+ultra-short files
+files with severe clipping or unreadable headers
+STEP 5 — SOURCE SEPARATION ENGINE
+8.1 Build separation as a separate module
+
+Use Demucs as the baseline separation engine.
+
+8.2 Output stems
+
+Generate:
+
+vocals
+drums
+bass
+other
+
+Optionally prepare for:
+
+piano
+guitar
+strings
+accompaniment
+8.3 Quality scoring
+
+Add post-separation diagnostics:
+
+stem energy balance
+bleed estimation
+silence detection
+clipping detection
+confidence score
+8.4 Store all separation metadata
+
+Persist:
+
+stem paths
+separation engine version
+confidence
+warnings
+timing information
+
+Do not compute separation and then discard the metadata.
+
+STEP 6 — RHYTHM, BEAT, AND METER ENGINE
+9.1 Build rhythm analysis as a dedicated engine
+
+Use a fused approach, not a single heuristic.
+
+Use:
+
+madmom beat tracking
+librosa onset analysis
+temporal smoothing
+confidence voting
+9.2 Detect
+BPM
+beat grid
+downbeats
+bars
+time signature candidates
+tempo changes
+tempo drift
+rubato sections
+9.3 Output format
+
+Return:
+
+global tempo
+beat timestamps
+bar boundaries
+time signature candidates with confidence
+tempo map across time
+9.4 Quality controls
+
+Detect when:
+
+beat tracking is unstable
+multiple tempo hypotheses exist
+meter is ambiguous
+
+Expose that ambiguity rather than pretending certainty.
+
+STEP 7 — KEY, MODE, AND TONAL ENGINE
+10.1 Tonal analysis requirements
+
+Use Essentia HPCP plus librosa chroma and a sliding-window approach.
+
+10.2 Detect
+global key
+local key by section
+mode
+modulations
+ambiguous tonal centers
+borrowed tonal material if possible
+10.3 Output
+
+Return:
+
+tonic
+scale type
+local key map
+modulation timeline
+confidence per segment
+10.4 Important rule
+
+Do not only output major/minor if the evidence supports modal interpretation.
+
+STEP 8 — CHORD RECOGNITION ENGINE
+
+This is a high-priority intelligence module.
+
+11.1 Required harmony depth
+
+Support at minimum:
+
+major
+minor
+diminished
+augmented
+suspended chords
+sixth chords
+seventh chords
+slash chords
+inversions
+added tones
+extensions where justified
+secondary dominants where inferable
+modal interchange candidates where inferable
+11.2 Architecture
+
+Build a hybrid system:
+
+Baseline layer
+chroma features
+HPCP features
+bass-informed chord candidates
+harmonic segmentation
+Sequence layer
+
+Build a sequence model using:
+
+Transformer encoder or equivalent
+fallback HMM for robust baseline inference
+Post-processing layer
+
+Use music21 and explicit music-theory cleanup to:
+
+improve spelling
+clean inversions
+remove impossible transitions where clearly erroneous
+generate Roman numeral interpretation when possible
+11.3 Two output modes
+
+Return both:
+
+as-played chord interpretation
+musically optimized interpretation
+11.4 Output
+
+Return:
+
+chord timeline
+bar-aligned chord chart
+lead sheet symbols
+Roman numeral analysis
+confidence
+top alternatives for ambiguous segments
+11.5 Important correction
+
+Do not oversimplify rich harmony into only major/minor triads.
+
+STEP 9 — VOCAL ANALYSIS ENGINE
+
+The system must work on vocal-only input.
+
+12.1 Build dedicated vocal analysis
+
+Use:
+
+torchcrepe for F0
+Basic Pitch as supporting baseline
+note segmentation logic
+phrase segmentation
+12.2 Detect
+pitch contour
+notes
+sustained tones
+vibrato
+pitch drift
+phrase boundaries
+breath gaps
+vocal range
+possible ornamentation
+12.3 Vocal-to-harmony inference
+
+Build a dedicated melody-to-harmony inference layer.
+
+This should not pretend certainty when only monophonic vocal exists.
+
+Return:
+
+top harmony interpretation
+top 3 progression candidates
+confidence by section
+12.4 Output
+
+Store:
+
+note events
+melody MIDI
+phrase segmentation
+inferred harmony candidates
+confidence metadata
+STEP 10 — SONG STRUCTURE ENGINE
+13.1 Detect form
+
+Identify:
+
+intro
+verse
+pre-chorus
+chorus
+bridge
+solo
+modulation section
+outro
+tags
+repeated regions
+13.2 Method
+
+Use:
+
+novelty curve analysis
+self-similarity matrix
+segment clustering
+optional learned classifier for common song-section labels
+13.3 Output
+
+Return:
+
+section list
+section boundaries
+repeated section relationships
+confidence
+structure summary
+
+This structure engine will later drive the arrangement engine.
+
+STEP 11 — STYLE SYSTEM
+14.1 Single source of truth
+
+Create one unified style system.
+Do not define styles separately in multiple services.
+
+14.2 Style hierarchy
+
+Build two layers:
+
+Genre layer
+
+Examples:
+
+Hasidic
+Middle Eastern
+Pop
+Rock
+Jazz
+Hip-Hop
+Ballad
+Cinematic
+EDM
+Wedding band
+Acoustic
+Arranger profile layer
+
+Each arranger profile must define:
+
+harmonic tendencies
+preferred instrumentation
+density curves
+intro style
+ending style
+transition style
+rhythm style
+voicing behavior
+modulation tendencies
+articulation and dynamic tendencies
+14.3 Profile implementation
+
+Represent style profiles as structured data plus learned embeddings where useful.
+
+Each style profile should contain:
+
+metadata
+tags
+instrumentation defaults
+voicing rules
+role priorities
+orchestration density rules
+mixing defaults
+export defaults
+STEP 12 — ARRANGEMENT ENGINE
+15.1 Purpose
+
+Transform analysis plus style into an actual musical arrangement plan.
+
+15.2 Must generate
+section-by-section arrangement map
+chord progression refinement where appropriate
+intros
+interludes
+transitions
+endings
+modulations
+build-ups
+drop-downs
+texture changes
+15.3 Arrangement logic
+
+Use a hybrid approach:
+
+explicit music rules
+style profile rules
+structural cues
+ML-assisted suggestion layer
+15.4 Arrangement output
+
+Produce a structured plan, not only raw MIDI.
+
+Return:
+
+section arrangement map
+instrumentation per section
+harmonic plan
+transition plan
+modulation plan
+intensity curve
+register and density guidance
+15.5 Important rule
+
+Arrangement must be editable and regeneratable by section.
+
+STEP 13 — ORCHESTRATION ENGINE
+16.1 Purpose
+
+Convert arrangement plan into instrument-level performance instructions.
+
+16.2 Instrument families
+
+Support at minimum:
+
+drums and percussion
+bass
+piano
+acoustic guitar
+electric guitar
+strings
+brass
+woodwinds
+pads and synth layers
+choir where appropriate
+16.3 Orchestration requirements
+
+Generate:
+
+per-instrument MIDI
+voicings
+register-aware writing
+role-based patterns
+counter-lines
+rhythmic comping
+fills
+layer management
+16.4 Rules
+avoid impossible ranges
+avoid muddy orchestration
+avoid excessive note overlap
+respect style density
+respect phrase endings
+write dynamically, not statically
+16.5 Output
+
+Store:
+
+track definitions
+per-track MIDI data
+articulations
+expression lanes
+velocity maps
+orchestration warnings
+STEP 14 — PERFORMANCE AND HUMANIZATION ENGINE
+17.1 Purpose
+
+Prevent robotic playback.
+
+17.2 Add
+timing deviations
+velocity shaping
+phrase-based dynamics
+articulation switching
+groove-aware offsets
+instrument-specific variation rules
+17.3 Instrument-aware logic
+
+Humanization must differ by instrument type.
+Do not use one generic randomizer for everything.
+
+Examples:
+
+drums need microtiming and accent logic
+strings need phrasing and bow-like contour
+piano needs voicing-sensitive velocity behavior
+bass needs groove pocket logic
+STEP 15 — SOUND ENGINE
+18.1 Separate preview from high-quality rendering
+
+Build two render tiers:
+
+Preview engine
+
+Fast, lightweight, for quick user feedback.
+
+High-quality engine
+
+Designed for serious rendering with professional sound sources.
+
+18.2 Important product rule
+
+Never market preview audio as final production-quality output.
+
+18.3 Sound library integration
+
+Design the system so it can integrate professional libraries and articulations through a clean instrument abstraction layer.
+
+Each instrument definition should support:
+
+patch mapping
+articulation mapping
+velocity layers
+expression control
+legato support where relevant
+round-robin support where relevant
+STEP 16 — RENDER ENGINE
+19.1 Render outputs
+
+Generate:
+
+full stereo mix
+stems
+section previews
+instrument previews
+19.2 Rendering pipeline
+
+Render from:
+
+orchestration data
+MIDI
+articulation/expression data
+sound engine patches
+mix presets
+19.3 Required architecture
+
+Do not hardwire render logic into arrangement logic.
+Keep rendering separate and replaceable.
+
+19.4 Store render metadata
+
+Persist:
+
+renderer version
+patch set
+sample rate
+buffer settings
+render duration
+warnings
+STEP 17 — MIXING ENGINE
+20.1 Purpose
+
+Provide musically appropriate mix processing after rendering.
+
+20.2 Include
+EQ
+compression
+panning
+stereo image
+reverb
+delay where relevant
+bus processing
+loudness normalization
+20.3 Style-aware mix presets
+
+Each style profile should have mix defaults such as:
+
+drum forwardness
+vocal space
+string width
+bass weight
+reverb amount
+brightness target
+20.4 Important rule
+
+Mixing should enhance arrangement, not compensate for bad orchestration.
+
+STEP 18 — EXPORT ENGINE
+21.1 Required exports
+
+The platform must export:
+
+full audio in WAV
+full audio in FLAC
+full audio in MP3
+stems
+MIDI
+MusicXML
+PDF lead sheet
+PDF full score
+21.2 Notation rules
+
+Do not treat notation as an afterthought.
+
+Implement:
+
+bar-aware quantization
+measure grouping
+rests
+ties
+note spelling
+clef assignment
+chord symbols
+layout for readable lead sheets
+layout for readable full scores
+21.3 Separate export types
+
+Support distinct export modes:
+
+lead sheet export
+piano reduction export
+full score export
+track-by-track MIDI export
+stems export
+final mix export
+21.4 Validation
+
+Every export must be validated before marked complete.
+
+STEP 19 — MANUAL CORRECTION LAYER
+
+This is essential.
+
+22.1 Users must be able to correct AI results
+
+Build editing tools for:
+
+tempo
+key
+chords
+sections
+melody notes
+arrangement by section
+instrumentation
+voicings
+track muting
+regeneration by track
+regeneration by section
+22.2 Lock system
+
+Allow the user to lock:
+
+harmony
+melody
+rhythm grid
+selected tracks
+section boundaries
+
+Then regenerate only unlocked elements.
+
+This is critical for professional workflows.
+
+STEP 20 — GUI / DESKTOP APPLICATION
+23.1 Build a premium DAW-like interface
+
+The app must feel expensive and polished.
+
+23.2 Main screens
+
+Create at minimum:
+
+Project dashboard
+project list
+recent projects
+import audio
+style templates
+Analysis screen
+waveform
+beat markers
+section markers
+key and chord overview
+melody view
+stem preview
+Arrangement screen
+section map
+structure editor
+style selector
+arranger profile selector
+arrangement controls
+Orchestration screen
+track list
+instrument assignments
+density controls
+register controls
+layer visibility
+Piano roll / MIDI editor
+note editing
+quantization tools
+velocity editing
+articulation editing
+Mixer screen
+level
+pan
+buses
+insert presets
+stem solo/mute
+Export screen
+export presets
+file formats
+score options
+stems options
+23.3 UX rules
+drag and drop import
+visible progress for jobs
+explicit error states
+no fake completion
+professional dark theme
+responsive desktop layout
+keyboard shortcuts
+undo/redo
+revision history
+STEP 21 — API LAYER
+24.1 Build a clean API
+
+Expose endpoints for:
+
+project creation
+audio upload
+preprocessing trigger
+analysis trigger
+arrangement trigger
+orchestration trigger
+render trigger
+export trigger
+job status
+project revisions
+style profile listing
+arranger profile listing
+24.2 Validation
+
+Validate all:
+
+params
+body payloads
+file uploads
+job transitions
+
+Return proper 4xx errors for bad inputs.
+
+24.3 WebSockets
+
+Provide live updates for:
+
+queue state
+step progress
+warnings
+completion
+failures
+STEP 22 — MODEL VERSIONING AND PIPELINE VERSIONING
+25.1 Version everything
+
+Every analysis and generation result must record:
+
+pipeline version
+model version
+feature extractor version
+renderer version
+style profile version
+arranger profile version
+25.2 Reproducibility
+
+A past project should be reproducible from saved metadata as much as possible.
+
+STEP 23 — TESTING STRATEGY
+26.1 Add real testing, not only smoke tests
+Unit tests
+
+For:
+
+audio preprocessing
+beat extraction
+key detection
+chord parsing
+style loading
+export generation
+schema validation
+Integration tests
+
+For:
+
+upload to analysis pipeline
+analysis to arrangement
+arrangement to orchestration
+orchestration to render
+export end-to-end
+Regression tests
+
+For:
+
+known audio samples
+known chord charts
+known tempo cases
+known structure cases
+GUI tests
+
+For:
+
+project creation
+job progress
+editing
+export workflow
+26.2 Golden reference tests
+
+Maintain a small curated set of audio files with expected outputs.
+
+STEP 24 — PERFORMANCE AND SCALABILITY
+27.1 Cache intermediate results
+
+Cache:
+
+normalized audio
+stems
+features
+analysis outputs
+melody tracks
+structure maps
+27.2 Split CPU and GPU work
+
+Run:
+
+lightweight DSP on CPU
+heavy inference on GPU
+27.3 Resource management
+
+Add:
+
+job concurrency control
+temp file cleanup
+storage cleanup policies
+disk quota awareness
+memory safety checks
+STEP 25 — DOCUMENTATION
+28.1 Required docs
+
+Create:
+
+architecture overview
+service diagram
+schema reference
+style profile spec
+arranger profile spec
+job lifecycle spec
+export spec
+error handling spec
+model versioning spec
+28.2 Developer docs
+
+Explain:
+
+how to run locally
+how to run workers
+how to run model server
+how to add styles
+how to add arranger profiles
+how to add instruments
+how to add new export types
+STEP 26 — WHAT TO FIX FIRST IN THE CURRENT PROJECT
+
+Before adding more flashy features, first correct the current structural weaknesses.
+
+29.1 Immediate fixes
+Remove silent simulated success flows.
+Replace fake fallback success with explicit mock mode only.
+Fix all DB/schema mismatches.
+Add a real queue system.
+Add dedicated result fields instead of abusing error fields.
+Persist all analysis outputs including vocals and source separation metadata.
+Introduce style single-source-of-truth.
+Add model and pipeline versioning.
+Separate preview rendering from high-quality rendering.
+Add manual correction tools.
+Improve notation export correctness.
+Add strict validation for all API routes.
+Clean dependency configuration and remove unrelated package clutter.
+Ensure every background job is restart-safe and failure-safe.
+STEP 27 — DELIVERY STANDARD
+30.1 Every module must include
+clear interfaces
+input schema
+output schema
+logging
+error handling
+tests
+version metadata
+30.2 Every major engine must produce
+primary result
+confidence
+warnings
+alternatives where ambiguity exists
+version metadata
+FINAL DIRECTIVE
+
+Build this project as a world-class AI music workstation, not a toy tool.
+
+The system must be:
+
+technically correct
+musically intelligent
+architecturally clean
+commercially viable
+visually premium
+honest in what is real versus preview or mock functionality
+
+Prioritize correctness, modularity, and long-term scalability over shortcuts.
+
+Implement the system exactly in this order:
+
+Foundation
+Database and storage
+Real job queue
+Audio ingestion
+Source separation
+Rhythm engine
+Key/mode engine
+Chord engine
+Vocal engine
+Structure engine
+Style system
+Arrangement engine
+Orchestration engine
+Humanization engine
+Sound engine
+Render engine
+Mixing engine
+Export engine
+Manual correction layer
+GUI
+API refinement
+Versioning
+Tests
+Performance optimization
+Documentation
+Final hardening
+
+Do not skip stages.
+Do not pretend unfinished systems are production-ready.
+Build each layer correctly before building the next one

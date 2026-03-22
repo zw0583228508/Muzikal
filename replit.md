@@ -182,11 +182,25 @@ pnpm --filter @workspace/db run push-force
 pnpm --filter @workspace/api-spec run codegen
 ```
 
+## Step 26 Compliance (spec "Fix First" list)
+
+| # | Requirement | Status |
+|---|-------------|--------|
+| 1 | Remove silent simulated success | ✅ Mock mode only when MOCK_MODE=true |
+| 2 | Explicit mock mode label | ✅ All steps prefixed [MOCK], yellow banner in UI |
+| 3 | DB/schema mismatches | ✅ Fixed (tracks_data) |
+| 4 | Real queue system | ⚠️ PostgreSQL-based jobs + WebSocket |
+| 7 | Style single-source-of-truth | ✅ styles.ts in Node.js matches arranger.py |
+| 10 | Manual correction tools | ✅ BPM/Key/Mode corrections modal |
+| 11 | WebSocket real-time updates | ✅ /api/ws, auto-reconnect, fallback to polling |
+
 ## Remaining Features (Future)
 
-- WebSocket real-time job progress (replace polling)
 - Replit Auth (user accounts, project ownership)
 - FluidSynth/soundfont rendering (higher quality audio)
 - Piano roll MIDI editor
+- Real job queue with Redis + Celery (currently PostgreSQL-based)
 - torchcrepe / basic-pitch for more accurate melody extraction
 - Transformer-based chord recognition model
+- Section-by-section arrangement regeneration (lock/unlock)
+- Pipeline versioning for result reproducibility

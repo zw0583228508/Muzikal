@@ -320,6 +320,7 @@ export default function ProjectStudio() {
   const [selectedTrack, setSelectedTrack] = useState<any | null>(null);
   // Lock/unlock system (Step 19): locked fields won't be regenerated during re-arrangement
   const [lockedFields, setLockedFields] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState("analysis");
   const [selectedFormats, setSelectedFormats] = useState<Record<string, boolean>>({
     midi: true, musicxml: false, pdf: false,
     wav: true, flac: false, mp3: false, stems: false,
@@ -551,7 +552,7 @@ export default function ProjectStudio() {
 
         {/* ─ Right Panel ─ */}
         <div className="w-[340px] border-l border-white/10 bg-card flex flex-col z-20 shadow-2xl relative">
-          <Tabs defaultValue="analysis" className="flex-1 flex flex-col">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
             <div className="p-4 border-b border-white/5">
               <TabsList className="w-full grid grid-cols-3">
                 <TabsTrigger value="analysis">{t("Analyze")}</TabsTrigger>
@@ -708,15 +709,6 @@ export default function ProjectStudio() {
                   </div>
                 </div>
 
-                <Button variant="glow" className="w-full" onClick={handleArrange} disabled={!!activeJobId}>
-                  <Layers className="w-4 h-4 mr-2" /> {t("Generate Arrangement")}
-                </Button>
-
-                {arrangement && (
-                  <p className="text-xs text-center text-green-400/80 flex items-center justify-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> {t("Arrangement ready")} — {styles?.find((s: any) => s.id === arrangement.styleId)?.name}
-                  </p>
-                )}
               </TabsContent>
 
               {/* ── EXPORT TAB ── */}
@@ -800,6 +792,20 @@ export default function ProjectStudio() {
                 )}
               </TabsContent>
             </div>
+
+            {/* ── Pinned Action Footer — always visible regardless of scroll position ── */}
+            {activeTab === "arrange" && (
+              <div className="shrink-0 p-4 border-t border-white/5 bg-card space-y-2">
+                {arrangement && (
+                  <p className="text-xs text-center text-green-400/80 flex items-center justify-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> {t("Arrangement ready")} — {styles?.find((s: any) => s.id === arrangement.styleId)?.name}
+                  </p>
+                )}
+                <Button variant="glow" className="w-full" onClick={handleArrange} disabled={!!activeJobId}>
+                  <Layers className="w-4 h-4 mr-2" /> {t("Generate Arrangement")}
+                </Button>
+              </div>
+            )}
           </Tabs>
         </div>
       </div>

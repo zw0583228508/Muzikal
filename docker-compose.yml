@@ -1,0 +1,113 @@
+version: '3.9'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: muzikal
+      POSTGRES_USER: muzikal
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-dev_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U muzikal"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  python-backend:
+    build:
+      context: ./artifacts/music-ai-backend
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://muzikal:${DB_PASSWORD:-dev_password}@postgres:5432/muzikal
+      REDIS_URL: redis://redis:6379/0
+      PYTHON_BACKEND_PORT: "8001"
+      MOCK_MODE: "false"
+      LOCAL_STORAGE_PATH: /app/storage
+    volumes:
+      - audio_storage:/app/storage
+      - stems_storage:/tmp/musicai_stems
+    ports:
+      - "8001:8001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/python-api/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  celery-worker:
+    build:
+      context: ./artifacts/music-ai-backend
+      dockerfile: Dockerfile
+    command: celery -A workers.celery_app worker --loglevel=info --concurrency=2
+    environment:
+      DATABASE_URL: postgresql://muzikal:${DB_PASSWORD:-dev_password}@postgres:5432/muzikal
+      REDIS_URL: redis://redis:6379/0
+      LOCAL_STORAGE_PATH: /app/storage
+    volumes:
+      - audio_storage:/app/storage
+      - stems_storage:/tmp/musicai_stems
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  api-server:
+    build:
+      context: ./artifacts/api-server
+      dockerfile: Dockerfile
+    environment:
+      DATABASE_URL: postgresql://muzikal:${DB_PASSWORD:-dev_password}@postgres:5432/muzikal
+      REDIS_URL: redis://redis:6379/0
+      PYTHON_BACKEND_URL: http://python-backend:8001
+      MOCK_MODE: "false"
+      PORT: "8080"
+      NODE_ENV: production
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      python-backend:
+        condition: service_healthy
+
+  frontend:
+    build:
+      context: ./artifacts/music-daw
+      dockerfile: Dockerfile
+      args:
+        VITE_API_BASE_URL: http://api-server:8080
+    ports:
+      - "3000:80"
+    depends_on:
+      - api-server
+
+volumes:
+  postgres_data:
+  redis_data:
+  audio_storage:
+  stems_storage:

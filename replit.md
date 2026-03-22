@@ -161,13 +161,22 @@ lib/
 - `POST /python-api/jobs/{job_id}/cancel` — revokes Celery task (if `celery_task_id` stored) + marks DB `cancelled`
 - **Run workers**: `celery -A workers.celery_app worker --loglevel=info` (requires Redis)
 
-### T008 — Tests + replit.md Update ✅
-- **39 Python tests, all passing** (`python -m pytest tests/ -v`)
+### T008 — Tests + replit.md Update ✅ (expanded to 188 tests)
+- **188 Python tests passing, 4 skipped** (`python -m pytest tests/ -v`)
 - `tests/test_feature_cache.py` — 9 tests: miss/hit, TTL expiry, stats, clear, complex JSON
-- `tests/test_personas.py` — 9 tests: all 6 personas present, schema validation, `apply_persona_to_arrangement` metadata + volume weights, LRU cache
-- `tests/test_jobs.py` — 12 tests: Celery fallback (CELERY_AVAILABLE, dispatch returns None), FastAPI health/styles/cancel/422 validation
-- `tests/test_regen_endpoints.py` — 9 integration tests (skip if server down): regen-section, regen-track, inputPayload stored, personas endpoint
-- `tests/conftest.py` — autouse fixture isolates cache per test via temp dir
+- `tests/test_personas.py` — 9 tests: all 6 personas present, schema validation, `apply_persona_to_arrangement`
+- `tests/test_jobs.py` — 12 tests: Celery fallback, health/styles/cancel/422 validation
+- `tests/test_regen_endpoints.py` — 9 integration tests: regen-section, regen-track, personas endpoint
+- `tests/test_key_mode.py` — 23 tests: chroma_to_key, top_k, analyze_key, modulation confidence
+- `tests/test_storage_provider.py` — 17 tests: LocalStorage CRUD, singleton factory, S3 env routing
+- `tests/test_rhythm.py` — 15 tests: BPM plausibility, time sig format, silence/noise fallback
+- `tests/test_chords.py` — 10 tests: analyze_chords signature, chord timeline, monotonicity
+- `tests/test_structure.py` — 12 tests: analyze_structure signature, segments, monotonic times
+- `tests/test_export_engine.py` — 30 tests: export_midi (MThd header), export_musicxml, run_export
+- `tests/test_persona_loader.py` — 17 tests: load/get all 6 personas, uniqueness, None on unknown
+- `tests/test_celery_workers.py` — 11 tests: import, CELERY_AVAILABLE bool, task callability
+- `tests/test_api_routes.py` — 18 tests: health, styles, cache, analysis, arrangement, jobs endpoints
+- `tests/conftest.py` — autouse cache fixture + test_client (FastAPI TestClient) + mock_project fixture
 - Run: `cd artifacts/music-ai-backend && python -m pytest tests/ -v`
 
 ## Key Features Implemented
@@ -274,10 +283,44 @@ pnpm --filter @workspace/api-spec run codegen
 - **Piano Roll**: Full MIDI editor panel at bottom — click any track lane to open; scrollable with pitch grid, note colors, velocity opacity, zoom 20-240px/beat
 - **Replit Auth (OIDC/PKCE)**: Login/logout in header, sessions in PostgreSQL, openid-client v6
 
+## Phase 2+ Features (Current Session)
+
+### Export Center ✅
+- `artifacts/music-daw/src/pages/export-center.tsx` — unified Export tab with format cards
+- Score group: MIDI, MusicXML, Lead Sheet PDF
+- Audio group: WAV (24-bit), FLAC, MP3 320kbps, Stems (per-instrument)
+- Format selection with toggle cards + single Export button
+- Downloads list with file metadata + direct download links
+- Integrated into project-studio.tsx Export tab (replaced inline form)
+
+### Storage Abstraction ✅
+- `artifacts/music-ai-backend/storage/storage_provider.py` — `StorageProvider` ABC
+- `LocalStorage`: writes to `/tmp/muzikal` (or `LOCAL_STORAGE_PATH`)
+- `S3Storage`: boto3 + presigned URLs (activated when `S3_ENDPOINT` env var set)
+- `get_storage()` factory returns singleton; auto-selects backend from environment
+
+### Docker Compose + Dockerfiles ✅
+- `docker-compose.yml` — full stack: postgres, redis, python-backend, celery-worker, api-server, frontend
+- `artifacts/music-ai-backend/Dockerfile` — python:3.11-slim, ffmpeg, uvicorn 2-worker
+- `artifacts/api-server/Dockerfile` — node:20-slim multi-stage builder + runtime
+- `artifacts/music-daw/Dockerfile` — node:20-slim build + nginx:alpine SPA server
+- Named volumes: postgres_data, redis_data, audio_storage, stems_storage
+- Health checks on all services
+
+### Tonal Timeline Improvement ✅
+- `audio/key_mode.py` — modulation entries now include `confidence` field (was missing)
+- Each `{"timeSeconds", "fromKey", "toKey", "confidence"}` — confidence in [0.0, 1.0]
+
+### Pagination + Correlation IDs ✅
+- `GET /api/projects` returns `{projects, pagination}` with `page`, `limit`, `total`, `pages`
+- `home.tsx` handles both legacy array and new paginated shape transparently
+- Pagination footer shown when `pages > 1`
+- `x-correlation-id` header propagated on every request (generated if missing)
+
 ## Remaining Features (Future)
 
+- WaveSurfer.js waveform visualisation (currently custom WaveformVisualizer)
 - FluidSynth/soundfont rendering (higher quality audio)
-- Real job queue with Redis + Celery (currently PostgreSQL-based)
 - torchcrepe / basic-pitch for more accurate melody extraction
 - Transformer-based chord recognition model
-- Pipeline versioning for result reproducibility
+- Full pipeline integration test (end-to-end with real audio)

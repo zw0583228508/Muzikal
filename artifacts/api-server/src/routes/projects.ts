@@ -2,7 +2,7 @@ import { Router, type IRouter } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { eq, desc, and } from "drizzle-orm";
+import { eq, desc, and, count } from "drizzle-orm";
 import { db, projectsTable, jobsTable, analysisResultsTable, arrangementsTable, projectFilesTable } from "@workspace/db";
 import { v4 as uuidv4 } from "uuid";
 import { broadcastJobUpdate } from "../lib/websocket";
@@ -181,10 +181,25 @@ router.get("/mock-mode", (_req, res) => {
 
 // ─── Projects CRUD ────────────────────────────────────────────────────────────
 
-// GET /api/projects
-router.get("/", async (_req, res) => {
-  const projects = await db.select().from(projectsTable).orderBy(desc(projectsTable.createdAt));
-  res.json(projects.map(serializeProject));
+// GET /api/projects  — supports ?page=1&limit=20
+router.get("/", async (req, res) => {
+  const page  = Math.max(1, parseInt(req.query.page  as string) || 1);
+  const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
+  const offset = (page - 1) * limit;
+
+  const [projects, [{ total }]] = await Promise.all([
+    db.select().from(projectsTable)
+      .orderBy(desc(projectsTable.createdAt))
+      .limit(limit)
+      .offset(offset),
+    db.select({ total: count() }).from(projectsTable),
+  ]);
+
+  const pages = Math.ceil(Number(total) / limit);
+  res.json({
+    projects: projects.map(serializeProject),
+    pagination: { page, limit, total: Number(total), pages },
+  });
 });
 
 // POST /api/projects

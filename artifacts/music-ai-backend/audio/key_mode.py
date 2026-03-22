@@ -100,6 +100,7 @@ def analyze_key(y: np.ndarray, sr: int) -> Dict[str, Any]:
                 "timeSeconds": round(time_seconds, 2),
                 "fromKey": prev_key,
                 "toKey": key,
+                "confidence": round(float(conf), 3),
             })
             prev_key = key
 

@@ -26,6 +26,7 @@ import {
 } from "lucide-react";
 import { PianoRoll } from "@/components/piano-roll";
 import { AnalysisInspector } from "@/components/analysis-inspector";
+import ExportCenter from "@/pages/export-center";
 import { formatTime, cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "@/components/language-toggle";
@@ -1013,84 +1014,8 @@ export default function ProjectStudio() {
               </TabsContent>
 
               {/* ── EXPORT TAB ── */}
-              <TabsContent value="export" className="space-y-4 mt-0">
-                <div className="daw-panel p-4">
-                  <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-3">Score &amp; MIDI</h4>
-                  <div className="space-y-2">
-                    {([["midi", "MIDI Tracks"], ["musicxml", "MusicXML Score"], ["pdf", "Lead Sheet PDF"]] as [string, string][]).map(([key, label]) => (
-                      <label key={key} className="flex items-center gap-3 p-3 rounded border border-white/5 bg-black/20 cursor-pointer hover:bg-white/5">
-                        <input
-                          type="checkbox"
-                          className="accent-primary w-4 h-4"
-                          checked={!!selectedFormats[key]}
-                          onChange={e => setSelectedFormats(f => ({ ...f, [key]: e.target.checked }))}
-                        />
-                        <span className="text-sm" dir="ltr">{t(label)}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <Button className="w-full mt-3" variant="secondary" onClick={handleExport} disabled={!!activeJobId || !arrangement}>
-                    <Download className="w-4 h-4 mr-2" /> {t("Export Files")}
-                  </Button>
-                  {!arrangement && <p className="text-xs text-muted-foreground mt-2 text-center">{t("Generate an arrangement first")}</p>}
-                </div>
-
-                <div className="daw-panel p-4">
-                  <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-3">Audio Render</h4>
-                  <div className="space-y-2">
-                    {([["wav", "WAV Audio (Lossless)"], ["flac", "FLAC Audio (Lossless)"], ["mp3", "MP3 320kbps"], ["stems", "Separated Stems"]] as [string, string][]).map(([key, label]) => (
-                      <label key={key} className="flex items-center gap-3 p-3 rounded border border-white/5 bg-black/20 cursor-pointer hover:bg-white/5">
-                        <input
-                          type="checkbox"
-                          className="accent-primary w-4 h-4"
-                          checked={!!selectedFormats[key]}
-                          onChange={e => setSelectedFormats(f => ({ ...f, [key]: e.target.checked }))}
-                        />
-                        <span className="text-sm" dir="ltr">{t(label)}</span>
-                      </label>
-                    ))}
-                  </div>
-                  <Button className="w-full mt-3 bg-accent hover:bg-accent/80 text-white" onClick={handleRender} disabled={!!activeJobId || !arrangement}>
-                    <Music className="w-4 h-4 mr-2" /> {t("Render Audio")}
-                  </Button>
-                  {!arrangement && <p className="text-xs text-muted-foreground mt-2 text-center">{t("Generate an arrangement first")}</p>}
-                </div>
-
-                {projectFiles.length > 0 && (
-                  <div className="daw-panel p-4">
-                    <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-3">{t("Generated Files")}</h4>
-                    <div className="space-y-2">
-                      {(projectFiles as any[]).map((f: any) => {
-                        const iconMap: Record<string, any> = {
-                          mid: FileMusic, midi: FileMusic,
-                          musicxml: FileText, txt: FileText, pdf: FileText,
-                          wav: FileAudio, flac: FileAudio, mp3: FileAudio,
-                        };
-                        const Icon = iconMap[f.fileType] || HardDrive;
-                        const sizeKb = f.fileSizeBytes ? Math.round(f.fileSizeBytes / 1024) : null;
-                        return (
-                          <a
-                            key={f.id}
-                            href={`/api/projects/${projectId}/files/${encodeURIComponent(f.fileName)}/download`}
-                            download={f.fileName}
-                            className="flex items-center justify-between p-3 rounded border border-white/5 bg-black/20 hover:bg-white/5 group cursor-pointer"
-                          >
-                            <div className="flex items-center gap-3 min-w-0">
-                              <Icon className="w-4 h-4 text-primary flex-shrink-0" />
-                              <div className="min-w-0">
-                                <p className="text-sm font-mono truncate" dir="ltr">{f.fileName}</p>
-                                <p className="text-xs text-muted-foreground" dir="ltr">
-                                  {f.fileType.toUpperCase()}{sizeKb ? ` · ${sizeKb > 1024 ? (sizeKb / 1024).toFixed(1) + "MB" : sizeKb + "KB"}` : ""}
-                                </p>
-                              </div>
-                            </div>
-                            <Download className="w-4 h-4 text-muted-foreground group-hover:text-primary flex-shrink-0" />
-                          </a>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+              <TabsContent value="export" className="mt-0">
+                <ExportCenter projectId={projectId} hasArrangement={!!arrangement} />
               </TabsContent>
             </div>
 

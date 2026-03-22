@@ -16,10 +16,13 @@ type Options = {
   onJobUpdate: (update: JobUpdate) => void;
 };
 
+const MAX_RETRIES = 5;
+const BACKOFF_BASE = 1000;
+
 /**
  * Subscribes to real-time WebSocket job updates for a project.
- * Falls back gracefully to polling if the WebSocket connection fails
- * (the polling hook remains active regardless).
+ * Uses exponential backoff (1s, 2s, 4s, 8s, 16s) then gives up and
+ * falls back entirely to the polling hook (which is always active).
  */
 export function useJobWebSocket({ projectId, onJobUpdate }: Options) {
   const wsRef = useRef<WebSocket | null>(null);
@@ -41,13 +44,17 @@ export function useJobWebSocket({ projectId, onJobUpdate }: Options) {
 
     let ws: WebSocket;
     let alive = true;
+    let retryCount = 0;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
 
     function connect() {
+      if (!alive) return;
       ws = new WebSocket(wsUrl);
       wsRef.current = ws;
 
       ws.onopen = () => {
         if (!alive) { ws.close(); return; }
+        retryCount = 0; // reset on successful connection
         ws.send(JSON.stringify({ type: "subscribe_project", projectId }));
       };
 
@@ -57,15 +64,26 @@ export function useJobWebSocket({ projectId, onJobUpdate }: Options) {
           if (msg.type === "job_update") {
             onUpdateRef.current(msg as JobUpdate);
           }
-        } catch { /* ignore */ }
+        } catch { /* ignore malformed messages */ }
       };
 
       ws.onerror = () => { /* silently fall back to polling */ };
 
       ws.onclose = () => {
         wsRef.current = null;
-        // Reconnect after 3s if still mounted
-        if (alive) setTimeout(connect, 3000);
+        if (!alive) return;
+
+        if (retryCount >= MAX_RETRIES) {
+          console.warn(
+            `[WebSocket] Max retries (${MAX_RETRIES}) reached — using polling fallback only`
+          );
+          return;
+        }
+
+        const delay = BACKOFF_BASE * Math.pow(2, retryCount);
+        retryCount++;
+        console.info(`[WebSocket] Reconnecting in ${delay}ms (attempt ${retryCount}/${MAX_RETRIES})`);
+        retryTimer = setTimeout(connect, delay);
       };
     }
 
@@ -73,6 +91,7 @@ export function useJobWebSocket({ projectId, onJobUpdate }: Options) {
 
     return () => {
       alive = false;
+      if (retryTimer) clearTimeout(retryTimer);
       ws?.close();
       wsRef.current = null;
     };

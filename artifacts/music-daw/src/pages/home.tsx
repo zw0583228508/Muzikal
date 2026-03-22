@@ -15,7 +15,12 @@ export default function Home() {
   const { t } = useTranslation();
   const [, setLocation] = useLocation();
   const queryClient = useQueryClient();
-  const { data: projects, isLoading } = useListProjects();
+  const { data: _projectsData, isLoading } = useListProjects();
+  // API now returns { projects, pagination } — handle both old and new shape
+  const projects: Project[] = Array.isArray(_projectsData)
+    ? _projectsData
+    : ((_projectsData as any)?.projects ?? []);
+  const pagination = Array.isArray(_projectsData) ? null : ((_projectsData as any)?.pagination ?? null);
   const { user, isAuthenticated, login, logout } = useAuth();
   
   const createMutation = useCreateProject({
@@ -178,6 +183,12 @@ export default function Home() {
                 </div>
               </motion.div>
             ))}
+          </div>
+        )}
+
+        {pagination && pagination.pages > 1 && (
+          <div className="mt-8 flex items-center justify-center gap-2 text-sm text-muted-foreground">
+            <span>{t("Showing")} {((pagination.page - 1) * pagination.limit) + 1}–{Math.min(pagination.page * pagination.limit, pagination.total)} {t("of")} {pagination.total} {t("projects")}</span>
           </div>
         )}
       </div>

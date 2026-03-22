@@ -140,8 +140,14 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     if rhythm is not None:
         logger.info("Rhythm: cache hit")
     else:
-        rhythm = analyze_rhythm(y, sr)
-        _cache_set(file_hash, "rhythm", rhythm)
+        try:
+            rhythm = analyze_rhythm(y, sr)
+            _cache_set(file_hash, "rhythm", rhythm)
+        except Exception as e:
+            logger.error(f"[ANALYZER] Rhythm step failed: {e}")
+            all_warnings.append(f"Rhythm analysis failed: {e}")
+            rhythm = {"bpm": 120.0, "timeSignature": {"numerator": 4, "denominator": 4},
+                      "beatGrid": [], "downbeats": [], "confidence": 0.0, "warnings": [], "isFallback": True}
 
     # ── Step 5: Key/Mode ────────────────────────────────────────────────────
     report("Detecting key and mode", 40)
@@ -149,8 +155,14 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     if key is not None:
         logger.info("Key: cache hit")
     else:
-        key = analyze_key(y, sr)
-        _cache_set(file_hash, "key", key)
+        try:
+            key = analyze_key(y, sr)
+            _cache_set(file_hash, "key", key)
+        except Exception as e:
+            logger.error(f"[ANALYZER] Key step failed: {e}")
+            all_warnings.append(f"Key analysis failed: {e}")
+            key = {"key": "C", "mode": "major", "confidence": 0.0, "modulations": [],
+                   "alternatives": [], "isFallback": True}
 
     # ── Step 6: Chords ──────────────────────────────────────────────────────
     report("Analyzing chord progressions", 55)
@@ -158,8 +170,13 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     if chords is not None:
         logger.info("Chords: cache hit")
     else:
-        chords = analyze_chords(y, sr, rhythm, key)
-        _cache_set(file_hash, "chords", chords)
+        try:
+            chords = analyze_chords(y, sr, rhythm, key)
+            _cache_set(file_hash, "chords", chords)
+        except Exception as e:
+            logger.error(f"[ANALYZER] Chords step failed: {e}")
+            all_warnings.append(f"Chord analysis failed: {e}")
+            chords = {"chords": [], "leadSheet": "", "confidence": 0.0, "isFallback": True}
 
     # ── Step 7: Melody ──────────────────────────────────────────────────────
     report("Extracting melody", 68)
@@ -167,8 +184,13 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     if melody is not None:
         logger.info("Melody: cache hit")
     else:
-        melody = analyze_melody(y, sr, rhythm)
-        _cache_set(file_hash, "melody", melody)
+        try:
+            melody = analyze_melody(y, sr, rhythm)
+            _cache_set(file_hash, "melody", melody)
+        except Exception as e:
+            logger.error(f"[ANALYZER] Melody step failed: {e}")
+            all_warnings.append(f"Melody extraction failed: {e}")
+            melody = {"notes": [], "inferredHarmony": [], "confidence": 0.0, "isFallback": True}
 
     # ── Step 8: Vocal Analysis ──────────────────────────────────────────────
     report("Analyzing vocals (pitch, vibrato, phrasing)", 78)
@@ -191,8 +213,14 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     if structure is not None:
         logger.info("Structure: cache hit")
     else:
-        structure = analyze_structure(y, sr, rhythm)
-        _cache_set(file_hash, "structure", structure)
+        try:
+            structure = analyze_structure(y, sr, rhythm)
+            _cache_set(file_hash, "structure", structure)
+        except Exception as e:
+            logger.error(f"[ANALYZER] Structure step failed: {e}")
+            all_warnings.append(f"Structure detection failed: {e}")
+            structure = {"sections": [{"label": "verse", "startTime": 0.0,
+                         "endTime": duration, "confidence": 0.0}], "isFallback": True}
 
     # ── Step 9: Confidence aggregation ─────────────────────────────────────
     report("Aggregating confidence scores", 95)

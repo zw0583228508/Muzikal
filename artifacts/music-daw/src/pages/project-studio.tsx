@@ -1,4 +1,5 @@
 import { useState, useRef } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useParams, Link } from "wouter";
 import { 
   useGetProject, 
@@ -19,70 +20,57 @@ import { JobProgress } from "@/components/job-progress";
 import { 
   Play, Pause, Square, SkipBack, Search, Volume2, Settings2, 
   ChevronLeft, Upload, Zap, Download, Layers, Activity, Music, 
-  Settings, Loader2
+  Settings, Loader2, FileMusic, FileAudio, FileText, HardDrive
 } from "lucide-react";
 import { formatTime, cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "@/components/language-toggle";
+import { AudioPlayer } from "@/components/audio-player";
 
 // --- Sub-components for DAW ---
 
 function TransportBar({ project, analysis }: { project: any, analysis: any }) {
   const { t } = useTranslation();
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [time, setTime] = useState(0);
-
-  // Fake playhead for visuals
-  useState(() => {
-    let interval: any;
-    if (isPlaying) {
-      interval = setInterval(() => setTime(t => t + 0.1), 100);
-    }
-    return () => clearInterval(interval);
-  });
+  const hasAudio = !!(project?.audioFilePath || project?.audioFileName);
 
   return (
-    <div className="h-16 border-b border-white/10 bg-background/95 backdrop-blur flex items-center px-4 justify-between sticky top-0 z-40">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="icon" asChild className="mr-2 ltr:rotate-0 rtl:rotate-180">
-          <Link href="/"><ChevronLeft className="w-5 h-5" /></Link>
-        </Button>
-        <div className="flex gap-1 bg-black/40 p-1 rounded-lg border border-white/5" dir="ltr">
-          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10" onClick={() => setTime(0)}>
-            <SkipBack className="w-4 h-4" />
+    <div className="border-b border-white/10 bg-background/95 backdrop-blur sticky top-0 z-40">
+      {/* Top row: nav + metadata + project name */}
+      <div className="h-12 flex items-center px-4 justify-between">
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="icon" asChild className="ltr:rotate-0 rtl:rotate-180 h-8 w-8">
+            <Link href="/"><ChevronLeft className="w-4 h-4" /></Link>
           </Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-white/10" onClick={() => setIsPlaying(false)}>
-            <Square className="w-4 h-4" />
-          </Button>
-          <Button variant={isPlaying ? "glow" : "ghost"} size="icon" className="h-8 w-8" onClick={() => setIsPlaying(!isPlaying)}>
-            {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4 ml-0.5" />}
-          </Button>
+          <h2 className="font-display font-semibold text-base text-white/80 truncate max-w-[200px]">{project?.name}</h2>
         </div>
-        
-        <div className="font-mono text-xl font-light text-primary text-glow mx-4 tracking-wider bg-black/40 px-4 py-1 rounded border border-primary/20 shadow-inner" dir="ltr">
-          {formatTime(time)}
+
+        <div className="flex items-center gap-5 text-xs font-display uppercase tracking-widest text-muted-foreground" dir="ltr">
+          <div className="flex flex-col items-center">
+            <span className="text-white font-bold text-sm">{analysis?.rhythm?.bpm ? Math.round(analysis.rhythm.bpm) : '—'}</span>
+            <span className="text-[9px]">{t("BPM")}</span>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="text-primary font-bold text-sm">{analysis?.rhythm?.timeSignatureNumerator || '4'}/{analysis?.rhythm?.timeSignatureDenominator || '4'}</span>
+            <span className="text-[9px]">{t("TIME")}</span>
+          </div>
+          <div className="flex flex-col items-center">
+            <span className="text-accent font-bold text-sm">{analysis?.key?.globalKey ? `${analysis.key.globalKey} ${analysis.key.mode || 'Maj'}` : '—'}</span>
+            <span className="text-[9px]">{t("Key")}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2">
+          <LanguageToggle />
         </div>
       </div>
 
-      <div className="flex items-center gap-6 text-sm font-display uppercase tracking-widest text-muted-foreground" dir="ltr">
-        <div className="flex flex-col items-center">
-          <span className="text-white font-bold">{analysis?.rhythm?.bpm ? Math.round(analysis.rhythm.bpm) : '120'}</span>
-          <span className="text-[10px]">{t("BPM")}</span>
-        </div>
-        <div className="flex flex-col items-center">
-          <span className="text-primary font-bold">{analysis?.rhythm?.timeSignatureNumerator || '4'}/{analysis?.rhythm?.timeSignatureDenominator || '4'}</span>
-          <span className="text-[10px]">{t("TIME")}</span>
-        </div>
-        <div className="flex flex-col items-center">
-          <span className="text-accent font-bold">{analysis?.key?.globalKey || 'C'} {analysis?.key?.mode || 'Maj'}</span>
-          <span className="text-[10px]">{t("Key")}</span>
-        </div>
-      </div>
-
-      <div className="flex items-center gap-2">
-        <h2 className="font-display font-semibold text-lg text-white/80 mr-4 truncate max-w-[200px]">{project?.name}</h2>
-        <LanguageToggle />
-        <Button variant="outline" size="sm" className="hidden lg:flex"><Settings2 className="w-4 h-4 mr-2" /> {t("Settings")}</Button>
+      {/* Audio player row */}
+      <div className="px-4 pb-2">
+        <AudioPlayer
+          projectId={project?.id || 0}
+          hasAudio={hasAudio}
+          className="bg-black/30 rounded-lg px-3 py-2 border border-white/5"
+        />
       </div>
     </div>
   );
@@ -170,6 +158,12 @@ export default function ProjectStudio() {
   const { data: analysis } = useGetAnalysisResults(projectId, { query: { retry: false } });
   const { data: arrangement } = useGetArrangement(projectId, { query: { retry: false } });
   const { data: styles } = useListStyles();
+  const filesQueryKey = [`/api/projects/${projectId}/files`];
+  const { data: projectFiles = [] } = useQuery<any[]>({
+    queryKey: filesQueryKey,
+    queryFn: () => fetch(`/api/projects/${projectId}/files`).then(r => r.json()),
+    refetchInterval: 0,
+  });
 
   // Mutations
   const uploadMut = useUploadAudio();
@@ -183,6 +177,7 @@ export default function ProjectStudio() {
     queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}`] });
     queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/analysis`] });
     queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/arrangement`] });
+    queryClient.invalidateQueries({ queryKey: filesQueryKey });
     setActiveJobId(null);
   });
 
@@ -474,6 +469,45 @@ export default function ProjectStudio() {
                     </p>
                   )}
                 </div>
+
+                {/* Downloads section */}
+                {projectFiles.length > 0 && (
+                  <div className="daw-panel p-4">
+                    <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-3">
+                      {t("Generated Files")}
+                    </h4>
+                    <div className="space-y-2">
+                      {projectFiles.map((f: any) => {
+                        const iconMap: Record<string, any> = {
+                          mid: FileMusic, midi: FileMusic,
+                          musicxml: FileText, txt: FileText, pdf: FileText,
+                          wav: FileAudio, flac: FileAudio, mp3: FileAudio,
+                        };
+                        const Icon = iconMap[f.fileType] || HardDrive;
+                        const sizeKb = f.fileSizeBytes ? Math.round(f.fileSizeBytes / 1024) : null;
+                        return (
+                          <a
+                            key={f.id}
+                            href={`/api/projects/${projectId}/files/${encodeURIComponent(f.fileName)}/download`}
+                            download={f.fileName}
+                            className="flex items-center justify-between p-3 rounded border border-white/5 bg-black/20 hover:bg-white/5 group cursor-pointer"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Icon className="w-4 h-4 text-primary flex-shrink-0" />
+                              <div className="min-w-0">
+                                <p className="text-sm font-mono truncate" dir="ltr">{f.fileName}</p>
+                                <p className="text-xs text-muted-foreground" dir="ltr">
+                                  {f.fileType.toUpperCase()}{sizeKb ? ` · ${sizeKb > 1024 ? (sizeKb/1024).toFixed(1)+'MB' : sizeKb+'KB'}` : ''}
+                                </p>
+                              </div>
+                            </div>
+                            <Download className="w-4 h-4 text-muted-foreground group-hover:text-primary flex-shrink-0" />
+                          </a>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </TabsContent>
             </div>
           </Tabs>

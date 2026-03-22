@@ -95,6 +95,9 @@ export default {
     "Mastering": "מאסטרינג",
     "Writing audio": "כותב קובץ אודיו",
     "Render complete": "הרנדר הושלם",
-    "No waveform data": "אין נתוני גל קול"
+    "No waveform data": "אין נתוני גל קול",
+    "Generated Files": "קבצים שנוצרו",
+    "Upload audio to enable playback": "העלה אודיו כדי לאפשר נגינה",
+    "Audio playback error": "שגיאה בנגינת אודיו"
   }
 };

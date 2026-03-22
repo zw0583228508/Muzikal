@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, real, jsonb, timestamp, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, real, jsonb, timestamp, pgEnum, bigint } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -60,6 +60,17 @@ export const arrangementsTable = pgTable("arrangements", {
   createdAt: timestamp("created_at").notNull().defaultNow(),
 });
 
+export const projectFilesTable = pgTable("project_files", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull().references(() => projectsTable.id, { onDelete: "cascade" }),
+  jobId: text("job_id").notNull(),
+  fileName: text("file_name").notNull(),
+  filePath: text("file_path").notNull(),
+  fileType: text("file_type").notNull(),
+  fileSizeBytes: bigint("file_size_bytes", { mode: "number" }),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
 export const insertProjectSchema = createInsertSchema(projectsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertJobSchema = createInsertSchema(jobsTable).omit({ id: true, createdAt: true, updatedAt: true });
 
@@ -69,3 +80,4 @@ export type Job = typeof jobsTable.$inferSelect;
 export type InsertJob = z.infer<typeof insertJobSchema>;
 export type AnalysisResult = typeof analysisResultsTable.$inferSelect;
 export type Arrangement = typeof arrangementsTable.$inferSelect;
+export type ProjectFile = typeof projectFilesTable.$inferSelect;

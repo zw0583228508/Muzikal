@@ -25,6 +25,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _save_files_to_db(project_id: int, job_id: str, results: dict):
+    """Save generated file records to project_files table."""
+    from api.database import get_db_connection
+    if not results:
+        return
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            for fmt, file_path in results.items():
+                if not file_path or not os.path.exists(str(file_path)):
+                    continue
+                file_name = os.path.basename(str(file_path))
+                ext = os.path.splitext(file_name)[1].lower().lstrip(".")
+                size = os.path.getsize(str(file_path))
+                cur.execute(
+                    """INSERT INTO project_files (project_id, job_id, file_name, file_path, file_type, file_size_bytes)
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       ON CONFLICT DO NOTHING""",
+                    (project_id, job_id, file_name, str(file_path), ext, size)
+                )
+        conn.commit()
+        logger.info(f"Saved {len(results)} file records for project {project_id}")
+    except Exception as e:
+        logger.warning(f"Could not save file records: {e}")
+    finally:
+        conn.close()
+
+
 @router.get("/styles")
 async def get_styles():
     """Return available musical styles."""
@@ -225,6 +253,8 @@ def run_export_pipeline(job_id: str, project_id: int, formats: List[str],
         from audio.export_engine import run_export
         results = run_export(project_id, analysis, arrangement, formats, output_dir)
 
+        _save_files_to_db(project_id, job_id, results)
+
         update_job(job_id, "completed", 100, "Export complete", extra={
             "exportedFiles": results,
             "outputDir": output_dir,
@@ -291,6 +321,8 @@ def run_render_pipeline(job_id: str, project_id: int, formats: List[str],
         results = run_audio_render(
             project_id, tracks, total_duration, formats, output_dir, progress_callback
         )
+
+        _save_files_to_db(project_id, job_id, results)
 
         update_job(job_id, "completed", 100, "Render complete", extra={
             "renderedFiles": results,

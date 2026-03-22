@@ -83,7 +83,6 @@ export default {
     "Separated Stems": "Separated Stems",
     "Lead Sheet PDF": "Lead Sheet PDF",
     "Job": "Job",
-    "Arrange": "Arrange",
     "Render Audio": "Render Audio",
     "Generate an arrangement first": "Generate an arrangement first",
     "WAV Audio (Lossless)": "WAV Audio (Lossless)",
@@ -91,6 +90,9 @@ export default {
     "MP3 320kbps": "MP3 320kbps",
     "Upload failed": "Upload failed",
     "Analysis failed to start": "Analysis failed to start",
-    "No waveform data": "No waveform data"
+    "No waveform data": "No waveform data",
+    "Generated Files": "Generated Files",
+    "Upload audio to enable playback": "Upload audio to enable playback",
+    "Audio playback error": "Audio playback error"
   }
 };

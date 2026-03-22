@@ -2,8 +2,8 @@ import { Router, type IRouter } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
-import { eq, desc } from "drizzle-orm";
-import { db, projectsTable, jobsTable, analysisResultsTable, arrangementsTable } from "@workspace/db";
+import { eq, desc, and } from "drizzle-orm";
+import { db, projectsTable, jobsTable, analysisResultsTable, arrangementsTable, projectFilesTable } from "@workspace/db";
 import { v4 as uuidv4 } from "uuid";
 
 const router: IRouter = Router();
@@ -286,6 +286,85 @@ router.get("/:id/arrangement", async (req, res) => {
     tracks: result.tracksData,
     totalDurationSeconds: result.totalDurationSeconds,
   });
+});
+
+// GET /api/projects/:id/audio  (stream the original uploaded audio)
+router.get("/:id/audio", async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) return res.status(404).json({ error: "Project not found" });
+  if (!project.audioFilePath || !fs.existsSync(project.audioFilePath)) {
+    return res.status(404).json({ error: "No audio file" });
+  }
+  const stat = fs.statSync(project.audioFilePath);
+  const ext = path.extname(project.audioFilePath).toLowerCase().slice(1);
+  const mimeMap: Record<string, string> = {
+    wav: "audio/wav", mp3: "audio/mpeg", flac: "audio/flac",
+    aiff: "audio/aiff", m4a: "audio/mp4", ogg: "audio/ogg",
+  };
+  const mime = mimeMap[ext] || "audio/octet-stream";
+  const range = req.headers.range;
+  if (range) {
+    const [startStr, endStr] = range.replace(/bytes=/, "").split("-");
+    const start = parseInt(startStr, 10);
+    const end = endStr ? parseInt(endStr, 10) : stat.size - 1;
+    res.writeHead(206, {
+      "Content-Range": `bytes ${start}-${end}/${stat.size}`,
+      "Accept-Ranges": "bytes",
+      "Content-Length": end - start + 1,
+      "Content-Type": mime,
+    });
+    fs.createReadStream(project.audioFilePath, { start, end }).pipe(res);
+  } else {
+    res.writeHead(200, {
+      "Content-Length": stat.size,
+      "Content-Type": mime,
+      "Accept-Ranges": "bytes",
+    });
+    fs.createReadStream(project.audioFilePath).pipe(res);
+  }
+});
+
+// GET /api/projects/:id/files  (list generated files)
+router.get("/:id/files", async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  const files = await db.select()
+    .from(projectFilesTable)
+    .where(eq(projectFilesTable.projectId, projectId))
+    .orderBy(desc(projectFilesTable.createdAt));
+  res.json(files.map(f => ({
+    id: f.id,
+    fileName: f.fileName,
+    fileType: f.fileType,
+    fileSizeBytes: f.fileSizeBytes,
+    createdAt: f.createdAt,
+  })));
+});
+
+// GET /api/projects/:id/files/:filename/download  (serve file)
+router.get("/:id/files/:filename/download", async (req, res) => {
+  const projectId = parseInt(req.params.id);
+  const { filename } = req.params;
+  const [file] = await db.select()
+    .from(projectFilesTable)
+    .where(and(
+      eq(projectFilesTable.projectId, projectId),
+      eq(projectFilesTable.fileName, filename)
+    ));
+  if (!file) return res.status(404).json({ error: "File not found" });
+  if (!fs.existsSync(file.filePath)) return res.status(410).json({ error: "File no longer on disk" });
+
+  const mimeMap: Record<string, string> = {
+    mid: "audio/midi", midi: "audio/midi",
+    musicxml: "application/vnd.recordare.musicxml+xml",
+    wav: "audio/wav", flac: "audio/flac", mp3: "audio/mpeg",
+    txt: "text/plain", pdf: "application/pdf",
+  };
+  const mime = mimeMap[file.fileType] || "application/octet-stream";
+  res.setHeader("Content-Disposition", `attachment; filename="${file.fileName}"`);
+  res.setHeader("Content-Type", mime);
+  if (file.fileSizeBytes) res.setHeader("Content-Length", file.fileSizeBytes);
+  fs.createReadStream(file.filePath).pipe(res);
 });
 
 // POST /api/projects/:id/render  (audio synthesis from arrangement)

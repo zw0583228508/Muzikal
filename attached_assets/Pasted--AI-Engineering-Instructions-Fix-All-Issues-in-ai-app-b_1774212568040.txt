@@ -1,0 +1,267 @@
+# AI Engineering Instructions: Fix All Issues in ai-app-builder
+
+> These are precise, file-specific instructions. Work through them in order.
+> Do NOT rewrite files from scratch unless explicitly told to. Make surgical changes only.
+
+---
+
+## ISSUE 1 — Split `messages.ts` (2,225 lines) into focused modules
+
+**File:** `artifacts/api-server/src/routes/projects/messages.ts`
+
+This file does too many things. Extract the following into separate files without changing any behavior:
+
+### 1a. Create `artifacts/api-server/src/services/ai/streaming.ts`
+Extract all SSE/streaming logic:
+- The `sendEvent` helper
+- The heartbeat `setInterval` setup and teardown
+- The `clientDisconnected` flag and `req.on('close', ...)` handler
+- Export a `setupSseStream(req, res)` function that returns `{ sendEvent, cleanup }`
+
+### 1b. Create `artifacts/api-server/src/services/ai/context-builder.ts`
+Extract all message history and context injection logic:
+- The `buildUserContent` function (handles attachments as ContentBlock[])
+- The `buildFinalUserContent` function (injects previewHtml / React files / spec context)
+- The history trimming logic (`HISTORY_WINDOW = 20`, `MAX_HIST_MSG_CHARS = 6_000`)
+- Export: `buildMessageHistory(project, existingMessages, body, intent, isAfterSpecPhase)`
+
+### 1c. Create `artifacts/api-server/src/services/ai/plan-limits.ts`
+Extract plan limit enforcement:
+- The `PLAN_LIMITS` object
+- The DB query that fetches `userPlanId`
+- The message count check and 429 response
+- Export: `async function enforcePlanLimits(req, res, project): Promise<boolean>` — returns `false` and sends 429 if limit hit, `true` if OK
+
+### 1d. Update `messages.ts`
+Replace the extracted blocks with imports from the new files. The file should shrink to under 600 lines. Verify the imports compile correctly.
+
+---
+
+## ISSUE 2 — Fix `applyPatch` using `String.replace` instead of `replaceAll`
+
+**File:** `artifacts/api-server/src/services/ai/patching/index.ts`
+
+**Problem:** `result.replace(find, replace)` only replaces the first occurrence. If the same string appears twice in the HTML (e.g. repeated CSS class, duplicate section), only the first gets patched.
+
+**Fix:**
+
+```typescript
+// BEFORE:
+result = result.replace(find, replace);
+
+// AFTER:
+// Use split/join to replace ALL occurrences, not just the first
+result = result.split(find).join(replace);
+```
+
+Also add a guard to prevent catastrophic replacement when `find` is too short (less than 10 characters risks false matches):
+
+```typescript
+if (find.length < 10) {
+  logger.warn({ find }, "applyPatch: REPLACE block too short, skipping to avoid false match");
+  continue;
+}
+result = result.split(find).join(replace);
+patchApplied = true;
+```
+
+Update the tests in `artifacts/api-server/src/__tests__/` to add a case: two identical strings in HTML where both should be replaced.
+
+---
+
+## ISSUE 3 — Move `previewHtml` out of the hot SELECT path
+
+**File:** `lib/db/src/schema/projects.ts` and all routes that SELECT from `projectsTable`
+
+**Problem:** `preview_html` is a `text` column that can be 50–200KB. Every `db.select().from(projectsTable)` loads it into memory even for list views that don't need it.
+
+**Fix — two steps:**
+
+### 3a. Add a partial select helper
+In `lib/db/src/schema/projects.ts`, add an exported constant:
+
+```typescript
+// All columns EXCEPT the heavy preview_html — use for list queries
+export const projectsTableMeta = {
+  id: projectsTable.id,
+  userId: projectsTable.userId,
+  title: projectsTable.title,
+  description: projectsTable.description,
+  type: projectsTable.type,
+  userMode: projectsTable.userMode,
+  stack: projectsTable.stack,
+  shareToken: projectsTable.shareToken,
+  customSlug: projectsTable.customSlug,
+  githubRepoUrl: projectsTable.githubRepoUrl,
+  lastDeployUrl: projectsTable.lastDeployUrl,
+  deletedAt: projectsTable.deletedAt,
+  createdAt: projectsTable.createdAt,
+  updatedAt: projectsTable.updatedAt,
+};
+```
+
+### 3b. Use `projectsTableMeta` in all list queries
+Search the codebase for `db.select().from(projectsTable)` and replace with `db.select(projectsTableMeta).from(projectsTable)` in these specific routes:
+- `routes/projects/get-project.ts` — list endpoint only (not the single-project detail fetch)
+- `routes/projects/index.ts` — any `findAll` / paginated query
+- `routes/projects/messages.ts` — the initial project fetch for the message route only needs metadata, NOT `previewHtml`. Leave the specific re-fetch of `previewHtml` where it's used for context injection (that one already reads `project.previewHtml` intentionally).
+
+Do NOT change queries that are followed by code that reads `project.previewHtml` — those need the full row.
+
+---
+
+## ISSUE 4 — Terminal enabled in dev by default is dangerous
+
+**File:** `artifacts/api-server/src/routes/terminal.ts`
+
+**Current code:**
+```typescript
+const TERMINAL_ENABLED =
+  process.env["ENABLE_TERMINAL"] === "true" ||
+  process.env["NODE_ENV"] !== "production";
+```
+
+**Problem:** This means terminal is ON in any non-production environment. A staging server, a developer laptop with exposed port, or a misconfigured deploy all get an open bash shell.
+
+**Fix — require explicit opt-in always:**
+```typescript
+// Terminal must be explicitly enabled regardless of NODE_ENV.
+// Set ENABLE_TERMINAL=true in your local .env to enable during development.
+const TERMINAL_ENABLED = process.env["ENABLE_TERMINAL"] === "true";
+```
+
+Also add a startup log so it's impossible to miss:
+```typescript
+if (TERMINAL_ENABLED) {
+  logger.warn("⚠️  Terminal WebSocket is ENABLED — do not enable in production unless sandboxed");
+} else {
+  logger.info("Terminal WebSocket is disabled (set ENABLE_TERMINAL=true to enable)");
+}
+```
+
+Update `.env.example` (or `replit.md`) to document: `ENABLE_TERMINAL=true  # Only for local dev — NEVER in production`.
+
+---
+
+## ISSUE 5 — Multi-agent pipeline runs for short messages (latency)
+
+**File:** `artifacts/api-server/src/routes/projects/messages.ts`
+
+**Problem:** The multi-agent analysis pipeline (4 parallel Claude calls: architecture, UI, security, performance) fires for any message over 300 chars + 20 words. This adds 2–4 seconds of latency before the main generation even starts.
+
+**Find the block** that calls `runArchitectureAgent`, `runUiAgent`, `runSecurityAgent`, `runPerformanceAgent` in parallel (likely a `Promise.all([...])`).
+
+**Fix — gate behind a smarter condition:**
+
+```typescript
+// Only run the multi-agent analysis pipeline when:
+// 1. It is the FIRST message (creating a new project), AND
+// 2. The message is detailed enough to benefit from planning (>400 chars AND >30 words)
+// For edits, fixes, or short creates — skip the pipeline entirely.
+
+const wordCount = body.content.trim().split(/\s+/).length;
+const isDetailedCreate =
+  isFirstMessage &&
+  body.content.length > 400 &&
+  wordCount > 30 &&
+  detectedIntent.intent === "create";
+
+let agentContext = "";
+if (isDetailedCreate) {
+  const [arch, ui] = await Promise.all([
+    runArchitectureAgent(body.content, project.stack, currentMode),
+    runUiAgent(body.content, currentMode),
+    // Drop security + performance agents from the hot path — they add latency
+    // and their output rarely affects the generated code meaningfully.
+    // Re-enable via a background job if needed.
+  ]);
+  agentContext = buildAgentContext({ architecture: arch, ui });
+}
+```
+
+**Why drop security + performance agents from the hot path:** Looking at `agents.ts`, `runSecurityAgent` and `runPerformanceAgent` return generic advice that gets injected into the system prompt but rarely changes the generated HTML meaningfully. The latency cost (2 extra Claude calls) is not worth it for 95% of requests. If you want to keep them, move them to a background fire-and-forget after the main response is done.
+
+---
+
+## ISSUE 6 — `agent-run.ts` uses hardcoded `claude-haiku-4-5` (wrong model string)
+
+**File:** `artifacts/api-server/src/routes/projects/agent-run.ts`
+
+**Line:**
+```typescript
+model: "claude-haiku-4-5",
+```
+
+This model string is missing the date suffix. The correct string based on the rest of the codebase is `"claude-haiku-4-5-20251001"`. Using an invalid model string will cause API errors at runtime.
+
+**Fix:** Replace all occurrences of `"claude-haiku-4-5"` (without date suffix) in `agent-run.ts` with `"claude-haiku-4-5-20251001"`.
+
+Search the entire codebase for bare `"claude-haiku-4-5"` (without `-20251001`) and fix any others found.
+
+---
+
+## ISSUE 7 — `previewHtml` stored in DB with no size guard
+
+**File:** `artifacts/api-server/src/routes/projects/messages.ts` — wherever `previewHtml` is written to DB
+
+**Problem:** There is no maximum size check before saving `previewHtml` to Postgres. A generated HTML file could be 500KB+, causing slow writes, large WAL, and expensive reads.
+
+**Fix — add a size guard before every DB write of `previewHtml`:**
+
+```typescript
+const MAX_PREVIEW_HTML_BYTES = 400_000; // 400KB hard limit
+
+// Before any db.update({ previewHtml: currentHtml }) or db.insert with previewHtml:
+const htmlToSave = currentHtml.length > MAX_PREVIEW_HTML_BYTES
+  ? currentHtml.slice(0, MAX_PREVIEW_HTML_BYTES) + "\n<!-- [TRUNCATED: file too large to store in preview] -->"
+  : currentHtml;
+```
+
+Apply this guard in:
+1. `messages.ts` — the main save path after AI generation
+2. `agent-run.ts` — the save inside the transaction after agent pipeline completes
+
+Also add a Postgres column comment in the migration or schema comment:
+```typescript
+previewHtml: text("preview_html"), // Max ~400KB enforced at application layer
+```
+
+---
+
+## ISSUE 8 — No error boundary around DB operations in `messages.ts`
+
+**File:** `artifacts/api-server/src/routes/projects/messages.ts`
+
+**Problem:** Multiple DB operations run without try/catch outside the main SSE try/catch. If a DB write fails mid-stream (after the AI has already finished generating and streamed to the client), the error is swallowed or causes an unhandled rejection.
+
+**Fix — wrap the final save block in its own try/catch:**
+
+Find the block that does the final `db.insert(projectMessagesTable)` for the assistant message and the `db.update(projectsTable)` for `previewHtml`. Wrap it:
+
+```typescript
+try {
+  await db.transaction(async (tx) => {
+    // ... all the final saves ...
+  });
+} catch (dbErr) {
+  logger.error({ err: dbErr, projectId: params.id }, "Failed to persist AI response to DB — response was already streamed to client");
+  // Do NOT send an error event here — the client already got the full response.
+  // Just log it so it shows up in monitoring.
+}
+```
+
+This is especially important because the SSE connection may still be open when the DB write fails, and sending an error event after `done: true` can confuse the frontend.
+
+---
+
+## Verification Checklist
+
+After making all changes, verify the following:
+
+1. `messages.ts` is under 700 lines. Run `wc -l`.
+2. `applyPatch` test suite passes with the new replaceAll behavior.
+3. `db.select().from(projectsTable)` in list routes returns rows without `previewHtml` — confirm with a `console.log(Object.keys(rows[0]))`.
+4. Starting the server with `NODE_ENV=development` and `ENABLE_TERMINAL` unset — terminal WebSocket should be **disabled**.
+5. The multi-agent pipeline does NOT fire for a short message like "fix the button color" — add a log line temporarily to confirm.
+6. No `"claude-haiku-4-5"` (without date suffix) appears in the codebase: `grep -r "claude-haiku-4-5\"" artifacts/`.
+7. Sending a >400KB HTML string to the message endpoint — it should be truncated before DB write, not cause a 500.

@@ -212,3 +212,136 @@ class TestAnalysisResultFields:
             time.sleep(2)
         finally:
             requests.delete(f"{BASE_URL}/projects/{pid}", timeout=10)
+
+
+class TestArrangementEndpoint:
+    """Tests for the arrangement endpoint (T011)."""
+
+    def test_arrangement_returns_404_when_not_ready(self):
+        cr = requests.post(f"{BASE_URL}/projects", json={"name": "Arr 404 Test"}, timeout=10)
+        pid = cr.json()["id"]
+        try:
+            r = api(f"/projects/{pid}/arrangement")
+            assert r.status_code == 404
+        finally:
+            requests.delete(f"{BASE_URL}/projects/{pid}", timeout=10)
+
+    def test_arrangement_job_starts_in_mock_mode(self):
+        mode = api("/projects/mock-mode").json()
+        if not mode.get("isMock"):
+            pytest.skip("Skipping mock arrangement test — MOCK_MODE=false")
+        cr = requests.post(f"{BASE_URL}/projects", json={"name": "Mock Arr Test"}, timeout=10)
+        pid = cr.json()["id"]
+        try:
+            r = api(f"/projects/{pid}/arrangement", method="POST", json={"styleId": "pop"})
+            assert r.status_code == 200
+            job = r.json()
+            assert "jobId" in job
+            assert job["isMock"] is True, f"Expected isMock=True for arrangement in MOCK_MODE, got {job}"
+        finally:
+            requests.delete(f"{BASE_URL}/projects/{pid}", timeout=10)
+
+    def test_arrangement_history_is_list(self):
+        cr = requests.post(f"{BASE_URL}/projects", json={"name": "Arr History Test"}, timeout=10)
+        pid = cr.json()["id"]
+        try:
+            r = api(f"/projects/{pid}/arrangement/history")
+            assert r.status_code == 200
+            assert isinstance(r.json(), list)
+        finally:
+            requests.delete(f"{BASE_URL}/projects/{pid}", timeout=10)
+
+
+class TestExportEndpoint:
+    """Tests for the export endpoint (T011)."""
+
+    def test_export_job_starts_in_mock_mode(self):
+        mode = api("/projects/mock-mode").json()
+        if not mode.get("isMock"):
+            pytest.skip("Skipping mock export test — MOCK_MODE=false")
+        cr = requests.post(f"{BASE_URL}/projects", json={"name": "Mock Export Test"}, timeout=10)
+        pid = cr.json()["id"]
+        try:
+            r = api(f"/projects/{pid}/export", method="POST", json={"formats": ["midi"]})
+            assert r.status_code == 200
+            job = r.json()
+            assert "jobId" in job
+            assert job["isMock"] is True
+        finally:
+            requests.delete(f"{BASE_URL}/projects/{pid}", timeout=10)
+
+    def test_export_files_returns_list(self):
+        cr = requests.post(f"{BASE_URL}/projects", json={"name": "Export Files Test"}, timeout=10)
+        pid = cr.json()["id"]
+        try:
+            r = api(f"/projects/{pid}/files")
+            assert r.status_code == 200
+            assert isinstance(r.json(), list)
+        finally:
+            requests.delete(f"{BASE_URL}/projects/{pid}", timeout=10)
+
+
+class TestLockSystemFull:
+    """Full lock system tests (T011 — T009 verification)."""
+
+    def _make_project(self, name: str) -> int:
+        r = requests.post(f"{BASE_URL}/projects", json={"name": name}, timeout=10)
+        return r.json()["id"]
+
+    def test_put_locks_full_state(self):
+        pid = self._make_project("Lock PUT Test")
+        try:
+            body = {"harmony": True, "structure": False, "melody": True,
+                    "tracks": False, "key": True, "chords": False, "bpm": False}
+            r = api(f"/projects/{pid}/locks", method="PUT", json=body)
+            assert r.status_code == 200
+            locks = r.json()["locks"]
+            assert locks["harmony"] is True
+            assert locks["melody"] is True
+            assert locks["structure"] is False
+        finally:
+            requests.delete(f"{BASE_URL}/projects/{pid}", timeout=10)
+
+    def test_patch_all_lock_components(self):
+        pid = self._make_project("Lock PATCH All Test")
+        try:
+            for component in ["harmony", "structure", "melody", "tracks", "key", "chords", "bpm"]:
+                r = api(f"/projects/{pid}/locks/{component}", method="PATCH", json={"locked": True})
+                assert r.status_code == 200, f"PATCH lock/{component} failed: {r.text}"
+                assert r.json()["locked"] is True
+        finally:
+            requests.delete(f"{BASE_URL}/projects/{pid}", timeout=10)
+
+    def test_invalid_lock_key_in_put_is_ignored(self):
+        pid = self._make_project("Lock PUT Invalid Key")
+        try:
+            r = api(f"/projects/{pid}/locks", method="PUT", json={"harmony": True, "INVALID_KEY": True})
+            assert r.status_code == 200
+            assert "INVALID_KEY" not in r.json()["locks"]
+        finally:
+            requests.delete(f"{BASE_URL}/projects/{pid}", timeout=10)
+
+
+class TestVersioning:
+    """Versioning system tests (T005 — STEP 9)."""
+
+    def test_pipeline_version_is_1_1_0(self):
+        r = api("/projects/mock-mode")
+        assert r.status_code == 200
+        version = r.json().get("pipelineVersion", "")
+        assert version == "1.1.0", f"Expected pipelineVersion=1.1.0, got {version}"
+
+    def test_model_versions_use_model_name_keys(self):
+        r = api("/projects/mock-mode")
+        mv = r.json().get("modelVersions", {})
+        for key in mv:
+            assert key in {"madmom", "essentia", "chord-cnn", "pyin", "msaf", "demucs", "crepe"}, \
+                f"Unexpected model key '{key}' — should use model-name format"
+
+    def test_model_version_values_are_non_empty_strings(self):
+        r = api("/projects/mock-mode")
+        mv = r.json().get("modelVersions", {})
+        assert len(mv) > 0, "Expected at least one model version entry"
+        for key, val in mv.items():
+            assert isinstance(val, str) and len(val) > 0, \
+                f"Model version '{key}' should be a non-empty string, got: {val!r}"

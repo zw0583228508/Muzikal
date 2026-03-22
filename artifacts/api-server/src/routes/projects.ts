@@ -422,11 +422,15 @@ router.post("/:id/arrangement", async (req, res) => {
   const { styleId, instruments, density, humanize, tempoFactor } = req.body;
 
   const jobId = `arrangement-${uuidv4()}`;
-  await db.insert(jobsTable).values({ jobId, projectId, type: "arrangement", status: "queued", progress: 0, currentStep: "Queued" });
-  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued" });
+  await db.insert(jobsTable).values({ jobId, projectId, type: "arrangement", status: "queued", progress: 0, currentStep: "Queued", isMock: MOCK_MODE });
+  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued", isMock: MOCK_MODE });
 
   (async () => {
     try {
+      if (MOCK_MODE) {
+        await runSimulatedArrangement(jobId, projectId, styleId || "pop");
+        return;
+      }
       await callPythonBackend("/arrange", {
         job_id: jobId,
         project_id: projectId,
@@ -438,12 +442,7 @@ router.post("/:id/arrangement", async (req, res) => {
         pipeline_version: PIPELINE_VERSION,
       });
     } catch (err) {
-      if (!MOCK_MODE) {
-        await failJobNoPython(jobId, projectId, err);
-      } else {
-        console.warn("[MOCK] Python backend unavailable, running simulated arrangement");
-        await runSimulatedArrangement(jobId, projectId, styleId || "pop");
-      }
+      await failJobNoPython(jobId, projectId, err);
     }
   })();
 
@@ -582,34 +581,33 @@ router.post("/:id/render", async (req, res) => {
   const { formats = ["wav"] } = req.body;
 
   const jobId = `render-${uuidv4()}`;
-  await db.insert(jobsTable).values({ jobId, projectId, type: "render", status: "queued", progress: 0, currentStep: "Queued" });
-  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued" });
+  await db.insert(jobsTable).values({ jobId, projectId, type: "render", status: "queued", progress: 0, currentStep: "Queued", isMock: MOCK_MODE });
+  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued", isMock: MOCK_MODE });
 
   (async () => {
+    if (MOCK_MODE) {
+      const steps = [
+        "[MOCK] Synthesizing instruments",
+        "[MOCK] Mixing tracks",
+        "[MOCK] Mastering (-14 LUFS)",
+        "[MOCK] Writing audio files",
+      ];
+      for (let i = 0; i < steps.length; i++) {
+        await new Promise(r => setTimeout(r, 2000));
+        await updateJob(jobId, projectId, {
+          status: "running",
+          progress: Math.round((i + 1) / steps.length * 95),
+          currentStep: steps[i],
+          isMock: true,
+        });
+      }
+      await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Render complete", isMock: true });
+      return;
+    }
     try {
       await callPythonBackend("/render", { job_id: jobId, project_id: projectId, formats });
     } catch (err) {
-      if (!MOCK_MODE) {
-        await failJobNoPython(jobId, projectId, err);
-      } else {
-        console.warn("[MOCK] Python backend unavailable, running simulated render");
-        const steps = [
-          "[MOCK] Synthesizing instruments",
-          "[MOCK] Mixing tracks",
-          "[MOCK] Mastering (-14 LUFS)",
-          "[MOCK] Writing audio files",
-        ];
-        for (let i = 0; i < steps.length; i++) {
-          await new Promise(r => setTimeout(r, 2000));
-          await updateJob(jobId, projectId, {
-            status: "running",
-            progress: Math.round((i + 1) / steps.length * 95),
-            currentStep: steps[i],
-            isMock: true,
-          });
-        }
-        await updateJob(jobId, projectId, { status: "completed", progress: 100, currentStep: "[MOCK] Render complete", isMock: true });
-      }
+      await failJobNoPython(jobId, projectId, err);
     }
   })();
 
@@ -626,19 +624,18 @@ router.post("/:id/export", async (req, res) => {
   const { formats = ["midi"] } = req.body;
 
   const jobId = `export-${uuidv4()}`;
-  await db.insert(jobsTable).values({ jobId, projectId, type: "export", status: "queued", progress: 0, currentStep: "Queued" });
-  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued" });
+  await db.insert(jobsTable).values({ jobId, projectId, type: "export", status: "queued", progress: 0, currentStep: "Queued", isMock: MOCK_MODE });
+  broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued", isMock: MOCK_MODE });
 
   (async () => {
     try {
+      if (MOCK_MODE) {
+        await runSimulatedExport(jobId, projectId, formats);
+        return;
+      }
       await callPythonBackend("/export", { job_id: jobId, project_id: projectId, formats });
     } catch (err) {
-      if (!MOCK_MODE) {
-        await failJobNoPython(jobId, projectId, err);
-      } else {
-        console.warn("[MOCK] Python backend unavailable, running simulated export");
-        await runSimulatedExport(jobId, projectId, formats);
-      }
+      await failJobNoPython(jobId, projectId, err);
     }
   })();
 

@@ -176,12 +176,45 @@ def analyze_vocals(vocal_audio_path: Optional[str], y: np.ndarray, sr: int) -> D
     # Vocal range
     vocal_range = analyze_vocal_range(notes)
 
-    logger.info(f"Vocal: {len(notes)} notes, {len(phrases)} phrases, vibrato={vibrato['detected']}")
+    voiced_ratio = round(float(voiced_flag.mean()), 3) if len(voiced_flag) > 0 else 0.0
+
+    confidence = round(min(1.0, voiced_ratio * 1.3 + (0.2 if vibrato["detected"] else 0.0)), 3)
+    confidence = max(0.1, confidence)
+
+    warnings: List[str] = []
+    if voiced_ratio < 0.1:
+        warnings.append("Very low voiced ratio — may be purely instrumental or vocal stem unavailable")
+    if len(notes) < 5:
+        warnings.append("Too few vocal notes detected — analysis unreliable")
+    if vocal_range.get("range_semitones", 0) == 0:
+        warnings.append("No valid vocal range detected — check audio quality")
+    if not vocal_audio_path:
+        warnings.append("No vocal stem provided — analysis run on full mix (less accurate)")
+
+    alternatives: List[str] = []
+    if vocal_range.get("tessitura", 0) > 0:
+        tess = vocal_range["tessitura"]
+        if tess < 57:
+            alternatives.append("bass")
+        elif tess < 64:
+            alternatives.append("baritone")
+        elif tess < 69:
+            alternatives.append("tenor")
+        elif tess < 74:
+            alternatives.append("mezzo-soprano")
+        else:
+            alternatives.append("soprano")
+
+    logger.info(f"Vocal: {len(notes)} notes, {len(phrases)} phrases, vibrato={vibrato['detected']}, confidence={confidence}")
 
     return {
         "notes": notes,
         "vibrato": vibrato,
         "phrases": phrases,
         "vocal_range": vocal_range,
-        "voiced_ratio": round(float(voiced_flag.mean()), 3) if len(voiced_flag) > 0 else 0.0,
+        "voiced_ratio": voiced_ratio,
+        "confidence": confidence,
+        "warnings": warnings,
+        "alternatives": alternatives,
+        "model": "pyin-0.1.1",
     }

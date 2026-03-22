@@ -483,7 +483,48 @@ def generate_arrangement(
                 "chords": unique_chords[:8],
             })
 
-    logger.info(f"Generated {len(tracks)} tracks, {len(harmonic_plan)} section plans")
+    # Build transitions between adjacent sections
+    TRANSITION_TYPES = {
+        ("intro", "verse"):   "lift",
+        ("verse", "chorus"):  "build",
+        ("chorus", "verse"):  "drop",
+        ("verse", "bridge"):  "shift",
+        ("bridge", "chorus"): "build",
+        ("chorus", "outro"):  "fade",
+        ("outro", "end"):     "end",
+    }
+    transitions = []
+    for i in range(len(sections) - 1):
+        a = sections[i].get("label", "").lower()
+        b = sections[i + 1].get("label", "").lower()
+        t_type = TRANSITION_TYPES.get((a, b), "crossfade")
+        transitions.append({
+            "fromSection": a,
+            "toSection": b,
+            "type": t_type,
+            "atTime": round(sections[i + 1]["startTime"], 3),
+        })
+
+    # Build instrumentation plan per section
+    instrumentation_plan = {
+        "styleId": style_id,
+        "tracks": [
+            {
+                "instrument": inst,
+                "role": {
+                    "drums": "rhythm", "bass": "low-end", "piano": "harmony",
+                    "guitar": "rhythm/melody", "strings": "texture", "pad": "atmosphere",
+                    "lead_synth": "melody", "brass": "accent", "violin": "melody",
+                    "accordion": "harmony", "oud": "melody", "darbuka": "rhythm",
+                }.get(inst, "support"),
+                "density": round(density * _section_density(style_id, sections[0].get("label", "verse") if sections else "verse", density), 2),
+                "sections": [sec.get("label", "all") for sec in sections],
+            }
+            for inst in base_instruments
+        ],
+    }
+
+    logger.info(f"Generated {len(tracks)} tracks, {len(harmonic_plan)} section plans, {len(transitions)} transitions")
 
     return {
         "styleId": style_id,
@@ -491,11 +532,14 @@ def generate_arrangement(
         "totalDurationSeconds": round(total_duration, 2),
         "sections": sections,
         "harmonicPlan": harmonic_plan,
+        "transitions": transitions,
+        "instrumentationPlan": instrumentation_plan,
         "profileUsed": bool(profile),
         "generationParams": {
             "density": density,
             "tempo_factor": tempo_factor,
             "humanize": do_humanize,
             "section_count": len(sections),
+            "transition_count": len(transitions),
         },
     }

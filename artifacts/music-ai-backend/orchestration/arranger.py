@@ -10,6 +10,12 @@ import random
 import math
 from typing import Dict, Any, List, Optional
 
+from orchestration.harmonic_engine import (
+    build_chord_events_from_progression,
+    apply_swing,
+    get_progression_for_section,
+)
+
 logger = logging.getLogger(__name__)
 
 # ─── Locate workspace root ────────────────────────────────────────────────────
@@ -230,8 +236,10 @@ def generate_drum_pattern(
     return notes
 
 
-def generate_bass_line(chord_events: List[Dict], beat_grid: List[float], style: str) -> List[Dict]:
+def generate_bass_line(chord_events: List[Dict], beat_grid: List[float], style: str, analysis: Optional[Dict] = None) -> List[Dict]:
     """Generate bass line following chord roots."""
+    analysis = analysis or {}
+    swing = analysis.get("_profileSwingFactor", 0.0)
     notes = []
     beat_duration = (beat_grid[1] - beat_grid[0]) if len(beat_grid) > 1 else 0.5
 
@@ -260,11 +268,15 @@ def generate_bass_line(chord_events: List[Dict], beat_grid: List[float], style: 
             notes[-1]["duration"] = round(dur * 0.9, 3)
             notes[-1]["velocity"] = 100
 
+    if swing > 0.01:
+        notes = apply_swing(notes, swing)
     return notes
 
 
-def generate_piano_voicings(chord_events: List[Dict], style: str, density: float) -> List[Dict]:
+def generate_piano_voicings(chord_events: List[Dict], style: str, density: float, analysis: Optional[Dict] = None) -> List[Dict]:
     """Generate piano chord voicings."""
+    analysis = analysis or {}
+    swing = analysis.get("_profileSwingFactor", 0.0)
     notes = []
     for chord_ev in chord_events:
         chord = chord_ev.get("chord", "C")
@@ -298,10 +310,12 @@ def generate_piano_voicings(chord_events: List[Dict], style: str, density: float
             for pitch in midi_notes:
                 notes.append({"startTime": round(start, 3), "duration": round(duration * 0.9, 3), "pitch": pitch, "velocity": 70})
 
+    if swing > 0.01:
+        notes = apply_swing(notes, swing)
     return notes
 
 
-def generate_string_pad(chord_events: List[Dict], style: str = "pop") -> List[Dict]:
+def generate_string_pad(chord_events: List[Dict], style: str = "pop", analysis: Optional[Dict] = None) -> List[Dict]:
     """Generate lush string/pad voicings."""
     notes = []
     for chord_ev in chord_events:
@@ -316,8 +330,10 @@ def generate_string_pad(chord_events: List[Dict], style: str = "pop") -> List[Di
     return notes
 
 
-def generate_guitar_strum(chord_events: List[Dict], style: str, beat_grid: List[float]) -> List[Dict]:
+def generate_guitar_strum(chord_events: List[Dict], style: str, beat_grid: List[float], analysis: Optional[Dict] = None) -> List[Dict]:
     """Generate guitar strum pattern."""
+    analysis = analysis or {}
+    swing = analysis.get("_profileSwingFactor", 0.0)
     notes = []
     beat_dur = (beat_grid[1] - beat_grid[0]) if len(beat_grid) > 1 else 0.5
 
@@ -346,6 +362,57 @@ def generate_guitar_strum(chord_events: List[Dict], style: str, beat_grid: List[
                     notes.append({"startTime": round(t, 3), "duration": round(beat_dur * 0.4, 3), "pitch": pitch, "velocity": 68})
                 t += beat_dur * 2
 
+    if swing > 0.01:
+        notes = apply_swing(notes, swing)
+    return notes
+
+
+def generate_melody_line(
+    chord_events: List[Dict], style: str, beat_grid: List[float], analysis: Optional[Dict] = None
+) -> List[Dict]:
+    """
+    Generate a simple melodic line over chord_events.
+    Plays root + 3rd/5th of each chord in a rhythmic pattern.
+    Adapts to ornament style from profile.
+    Melody is one octave above piano (+12 semitones).
+    """
+    analysis = analysis or {}
+    swing = analysis.get("_profileSwingFactor", 0.0)
+    scale_type = analysis.get("_profileScaleType", "minor")
+    notes = []
+    beat_dur = (beat_grid[1] - beat_grid[0]) if len(beat_grid) > 1 else 0.5
+
+    for chord_ev in chord_events:
+        chord = chord_ev.get("chord", "C")
+        start = chord_ev["startTime"]
+        end = chord_ev["endTime"]
+        dur = end - start
+        pitches = chord_to_midi_notes(chord, octave=5)
+        if not pitches:
+            continue
+
+        root = pitches[0]
+        third = pitches[1] if len(pitches) > 1 else root + 3
+        fifth = pitches[2] if len(pitches) > 2 else root + 7
+
+        if style in ("hasidic", "middle_eastern") or scale_type in ("freygish", "maqam_hijaz"):
+            # Ornamental pickup: root -> third -> root
+            notes.append({"startTime": round(start, 3), "duration": round(dur * 0.3, 3), "pitch": root + 12, "velocity": 85})
+            notes.append({"startTime": round(start + dur * 0.35, 3), "duration": round(dur * 0.25, 3), "pitch": third + 12, "velocity": 75})
+            notes.append({"startTime": round(start + dur * 0.65, 3), "duration": round(dur * 0.3, 3), "pitch": root + 12, "velocity": 80})
+        elif style == "jazz" or scale_type == "dorian":
+            # Jazz: fifth -> third -> root (bebop feel)
+            notes.append({"startTime": round(start, 3), "duration": round(beat_dur * 0.4, 3), "pitch": fifth + 12, "velocity": 78})
+            notes.append({"startTime": round(start + beat_dur * 0.5, 3), "duration": round(beat_dur * 0.4, 3), "pitch": third + 12, "velocity": 70})
+            notes.append({"startTime": round(start + beat_dur, 3), "duration": round(dur * 0.4, 3), "pitch": root + 12, "velocity": 75})
+        else:
+            # Default: long note on root, pickup to fifth
+            notes.append({"startTime": round(start, 3), "duration": round(dur * 0.8, 3), "pitch": root + 12, "velocity": 80})
+            if dur > 0.8:
+                notes.append({"startTime": round(end - beat_dur * 0.3, 3), "duration": round(beat_dur * 0.25, 3), "pitch": fifth + 12, "velocity": 68})
+
+    if swing > 0.01:
+        notes = apply_swing(notes, swing)
     return notes
 
 
@@ -357,6 +424,29 @@ def _beats_in_range(beat_grid: List[float], start: float, end: float) -> List[fl
 
 def _chords_in_range(chord_events: List[Dict], start: float, end: float) -> List[Dict]:
     return [c for c in chord_events if c["startTime"] >= start and c["startTime"] < end]
+
+
+def _profile_chord_events(
+    analysis: dict,
+    section_label: str,
+    seg_start: float,
+    seg_end: float,
+    detected_chords: list,
+) -> list:
+    """
+    Returns chord_events for a segment.
+    Priority: profile progressions (if present) > detected chords.
+    """
+    progression = get_progression_for_section(analysis, section_label)
+    if not progression:
+        return detected_chords
+
+    key = analysis.get("detectedKey", "C")
+    scale_type = analysis.get("_profileScaleType", "minor")
+    duration = seg_end - seg_start
+    return build_chord_events_from_progression(
+        progression, key, scale_type, seg_start, duration
+    )
 
 
 def generate_arrangement(
@@ -388,6 +478,11 @@ def generate_arrangement(
         analysis["_profileOrnamentStyle"] = style_profile.get("ornamentStyle", "none")
         analysis["_profileTimeSignature"] = style_profile.get("timeSignature", "4/4")
         analysis["_profileGrooveTemplate"] = style_profile.get("grooveTemplate", "on_top")
+        # Inject harmonic data — only if not already set by adapter
+        if "_profileProgressionPatterns" not in analysis:
+            analysis["_profileProgressionPatterns"] = style_profile.get("progressionPatterns", [])
+        if "_profileScaleType" not in analysis:
+            analysis["_profileScaleType"] = style_profile.get("scaleType", "minor")
         result_extra = {
             "styleProfileGenre": style_profile.get("genre", ""),
             "styleProfileEra": style_profile.get("era", ""),
@@ -430,37 +525,62 @@ def generate_arrangement(
         seg_density = _section_density(style_id, seg_label, density)
         seg_instruments = _section_instruments(style_id, seg_label, base_instruments)
         seg_beats = _beats_in_range(beat_grid, seg_start, seg_end)
-        seg_chords = _chords_in_range(chord_events, seg_start, seg_end)
+        _detected_chords = _chords_in_range(chord_events, seg_start, seg_end)
+        seg_chords = _profile_chord_events(
+            analysis, seg_label, seg_start, seg_end, _detected_chords
+        )
 
         if "drums" in seg_instruments and seg_beats:
-            notes = generate_drum_pattern(seg_beats, time_sig, style_id, seg_density)
+            notes = generate_drum_pattern(seg_beats, time_sig, style_id, seg_density, analysis=analysis)
             if do_humanize:
                 notes = humanize(notes, 0.008, 10)
             track_notes["drums"].extend(notes)
 
         if "bass" in seg_instruments and seg_chords:
-            notes = generate_bass_line(seg_chords, seg_beats or beat_grid, style_id)
+            notes = generate_bass_line(seg_chords, seg_beats or beat_grid, style_id, analysis=analysis)
             if do_humanize:
                 notes = humanize(notes, 0.005, 6)
             track_notes["bass"].extend(notes)
 
+        if "double_bass" in seg_instruments and seg_chords:
+            notes = generate_bass_line(seg_chords, seg_beats or beat_grid, style_id, analysis=analysis)
+            if do_humanize:
+                notes = humanize(notes, 0.005, 6)
+            track_notes.setdefault("double_bass", []).extend(notes)
+
         if "piano" in seg_instruments and seg_chords:
-            notes = generate_piano_voicings(seg_chords, style_id, seg_density)
+            notes = generate_piano_voicings(seg_chords, style_id, seg_density, analysis=analysis)
             if do_humanize:
                 notes = humanize(notes, 0.012, 8)
             track_notes["piano"].extend(notes)
 
+        if any(i in seg_instruments for i in ["accordion", "tsimbl", "qanun"]) and seg_chords:
+            for inst in ["accordion", "tsimbl", "qanun"]:
+                if inst in seg_instruments:
+                    notes = generate_piano_voicings(seg_chords, style_id, seg_density, analysis=analysis)
+                    if do_humanize:
+                        notes = humanize(notes, 0.012, 8)
+                    track_notes.setdefault(inst, []).extend(notes)
+
         if any(i in seg_instruments for i in ["strings", "pad", "synth_pad"]) and seg_chords:
-            notes = generate_string_pad(seg_chords, style_id)
+            notes = generate_string_pad(seg_chords, style_id, analysis=analysis)
             if do_humanize:
                 notes = humanize(notes, 0.015, 5)
             track_notes["strings"].extend(notes)
 
         if "guitar" in seg_instruments and seg_chords:
-            notes = generate_guitar_strum(seg_chords, style_id, seg_beats or beat_grid)
+            notes = generate_guitar_strum(seg_chords, style_id, seg_beats or beat_grid, analysis=analysis)
             if do_humanize:
                 notes = humanize(notes, 0.010, 7)
             track_notes["guitar"].extend(notes)
+
+        MELODY_INSTRUMENTS = {"violin", "oud", "nay", "trumpet", "saxophone", "lead_synth"}
+        melody_inst = next((i for i in seg_instruments if i in MELODY_INSTRUMENTS), None)
+        if melody_inst and seg_chords:
+            notes = generate_melody_line(seg_chords, style_id, seg_beats or beat_grid, analysis=analysis)
+            if do_humanize:
+                notes = humanize(notes, 0.015, 10)
+            track_notes.setdefault(melody_inst, []).extend(notes)
 
     if sections:
         for section in sections:

@@ -3,7 +3,7 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { createHmac, randomBytes } from "crypto";
-import { eq, desc, and, count } from "drizzle-orm";
+import { eq, desc, and, count, or, isNull } from "drizzle-orm";
 import { db, projectsTable, jobsTable, analysisResultsTable, arrangementsTable, projectFilesTable } from "@workspace/db";
 import { v4 as uuidv4 } from "uuid";
 import { broadcastJobUpdate } from "../lib/websocket";
@@ -243,12 +243,18 @@ router.get("/", async (req, res) => {
   const limit = Math.min(100, Math.max(1, parseInt(req.query.limit as string) || 20));
   const offset = (page - 1) * limit;
 
+  const userId: string | null = (req as any).user?.id ?? (req as any).userId ?? null;
+  const userFilter = userId
+    ? or(eq(projectsTable.userId, userId), isNull(projectsTable.userId))
+    : undefined;
+
   const [projects, [{ total }]] = await Promise.all([
     db.select().from(projectsTable)
+      .where(userFilter)
       .orderBy(desc(projectsTable.createdAt))
       .limit(limit)
       .offset(offset),
-    db.select({ total: count() }).from(projectsTable),
+    db.select({ total: count() }).from(projectsTable).where(userFilter),
   ]);
 
   const pages = Math.ceil(Number(total) / limit);
@@ -265,7 +271,8 @@ router.post("/", async (req, res) => {
     res.status(400).json({ error: "name is required" });
     return;
   }
-  const [project] = await db.insert(projectsTable).values({ name: name.trim(), description }).returning();
+  const userId: string | null = (req as any).user?.id ?? (req as any).userId ?? null;
+  const [project] = await db.insert(projectsTable).values({ name: name.trim(), description, userId }).returning();
   res.status(201).json(serializeProject(project));
 });
 

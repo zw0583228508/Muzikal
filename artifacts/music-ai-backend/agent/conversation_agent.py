@@ -131,9 +131,10 @@ class ConversationAgent:
             known_genres=", ".join(self._style_db.list_genres()),
             current_params=json.dumps(self.collected_params, ensure_ascii=False),
         )
+        _model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
         try:
             response = await self._client.chat.completions.create(
-                model="gpt-5-mini",
+                model=_model,
                 max_completion_tokens=512,
                 messages=[
                     {
@@ -151,7 +152,7 @@ class ConversationAgent:
                     text_resp = text_resp[4:]
             return json.loads(text_resp)
         except Exception as e:
-            logger.warning(f"LLM extraction failed, using heuristic: {e}")
+            logger.error(f"LLM call failed (model={_model}): {e}. Falling back to heuristic.")
             return self._extract_params_heuristic(text)
 
     HEBREW_GENRE_ALIASES: dict[str, str] = {

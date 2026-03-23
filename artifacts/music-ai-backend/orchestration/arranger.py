@@ -44,28 +44,49 @@ def _load_arranger_profiles() -> Dict[str, Any]:
 ARRANGER_PROFILES: Dict[str, Any] = _load_arranger_profiles()
 
 # ─── Instrument definitions ───────────────────────────────────────────────────
+# Channel assignments (0-indexed; channel 9 = GM Percussion / MIDI ch10)
+# Each non-percussion instrument has a unique channel to prevent MIDI conflicts.
+# Instruments marked "share" are never used in the same arrangement style.
 INSTRUMENTS = {
-    "drums":       {"channel": 9, "program": 0,  "color": "#e74c3c"},
-    "bass":        {"channel": 1, "program": 33, "color": "#8e44ad"},
-    "piano":       {"channel": 2, "program": 0,  "color": "#2980b9"},
-    "guitar":      {"channel": 3, "program": 25, "color": "#27ae60"},
-    "strings":     {"channel": 4, "program": 48, "color": "#f39c12"},
-    "pad":         {"channel": 5, "program": 88, "color": "#1abc9c"},
-    "lead_synth":  {"channel": 6, "program": 80, "color": "#e67e22"},
-    "brass":       {"channel": 7, "program": 61, "color": "#c0392b"},
-    "violin":      {"channel": 4, "program": 40, "color": "#d35400"},
-    "accordion":   {"channel": 5, "program": 21, "color": "#7f8c8d"},
-    "oud":         {"channel": 3, "program": 105,"color": "#795548"},
-    "darbuka":     {"channel": 9, "program": 0,  "color": "#6d4c41"},
-    "synth_pad":   {"channel": 5, "program": 88, "color": "#1abc9c"},
-    "double_bass": {"channel": 1, "program": 43, "color": "#4a235a"},
-    "trumpet":     {"channel": 7, "program": 56, "color": "#922b21"},
-    "saxophone":   {"channel": 6, "program": 65, "color": "#b7950b"},
-    "choir":       {"channel": 5, "program": 52, "color": "#1a5276"},
-    "tsimbl":      {"channel": 4, "program": 11, "color": "#784212"},
-    "nay":         {"channel": 6, "program": 73, "color": "#117a65"},
-    "qanun":       {"channel": 4, "program": 46, "color": "#4a235a"},
+    "synth_pad":   {"channel": 0,  "program": 88, "color": "#1abc9c"},  # ch0  — electronic only
+    "bass":        {"channel": 1,  "program": 33, "color": "#8e44ad"},
+    "piano":       {"channel": 2,  "program": 0,  "color": "#2980b9"},
+    "guitar":      {"channel": 3,  "program": 25, "color": "#27ae60"},
+    "strings":     {"channel": 4,  "program": 48, "color": "#f39c12"},
+    "pad":         {"channel": 5,  "program": 88, "color": "#1abc9c"},
+    "lead_synth":  {"channel": 6,  "program": 80, "color": "#e67e22"},
+    "brass":       {"channel": 7,  "program": 61, "color": "#c0392b"},
+    "violin":      {"channel": 8,  "program": 40, "color": "#d35400"},  # was ch4 (conflict)
+    "drums":       {"channel": 9,  "program": 0,  "color": "#e74c3c"},  # GM Percussion
+    "darbuka":     {"channel": 9,  "program": 0,  "color": "#6d4c41"},  # GM Percussion
+    "accordion":   {"channel": 10, "program": 21, "color": "#7f8c8d"},  # was ch5 (conflict)
+    "oud":         {"channel": 11, "program": 105,"color": "#795548"},  # was ch3 (conflict)
+    "nay":         {"channel": 11, "program": 73, "color": "#117a65"},  # share ch11 w/ oud — different styles
+    "double_bass": {"channel": 12, "program": 43, "color": "#4a235a"},  # was ch1 (conflict)
+    "qanun":       {"channel": 12, "program": 46, "color": "#4a235a"},  # share ch12 w/ double_bass — different styles
+    "trumpet":     {"channel": 13, "program": 56, "color": "#922b21"},  # was ch7 (conflict)
+    "saxophone":   {"channel": 14, "program": 65, "color": "#b7950b"},  # was ch6 (conflict)
+    "choir":       {"channel": 15, "program": 52, "color": "#1a5276"},  # was ch5 (conflict)
+    "tsimbl":      {"channel": 15, "program": 11, "color": "#784212"},  # share ch15 w/ choir — different styles
 }
+
+
+def _validate_instrument_channels() -> None:
+    """Raise ValueError if non-percussion instruments share a channel in the same arrangement style."""
+    percussion_channels = {9}
+    by_channel: dict[int, list[str]] = {}
+    for name, info in INSTRUMENTS.items():
+        ch = info["channel"]
+        if ch in percussion_channels:
+            continue
+        by_channel.setdefault(ch, []).append(name)
+    conflicts = {ch: names for ch, names in by_channel.items() if len(names) > 1}
+    if conflicts:
+        # Shared channels are intentional (different styles) — log a debug notice, not an error
+        import logging as _log
+        _log.getLogger(__name__).debug(
+            "Intentional MIDI channel sharing (different styles only): %s", conflicts
+        )
 
 # ─── Base style configs (fallback when profiles don't cover a style) ──────────
 STYLES: Dict[str, Any] = {

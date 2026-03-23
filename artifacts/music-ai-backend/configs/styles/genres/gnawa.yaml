@@ -1,0 +1,46 @@
+id: gnawa
+display_name: "גנאווה"
+era: "Medieval-present"
+region: "Morocco / North Africa"
+parent_genre: "african"
+
+harmony:
+  scale_type: "pentatonic_minor"
+  characteristic_intervals: ["b3", "b7", "P4"]
+  typical_progressions:
+    - ["i", "bVII", "i", "bVII"]
+    - ["i", "iv", "i", "i"]
+  cadences: ["trance_repetition", "modal_stasis"]
+
+rhythm:
+  time_signature: "12/8"
+  bpm_range: [90, 180]
+  feel: "trance_guembri"
+  characteristic_patterns:
+    - name: "lila_rhythm"
+      pattern: "triplet_hypnotic_pattern"
+    - name: "qraqeb_pattern"
+      pattern: "metal_castanets_accent"
+    - name: "accelerating_build"
+      pattern: "tempo_increases_with_spirit"
+
+instrumentation:
+  core: ["guembri", "qraqeb", "voice"]
+  optional: ["banjo", "percussion", "clapping"]
+  avoid: ["piano", "synthesizer", "strings_western"]
+
+ornaments:
+  - type: "call_spirit"
+    description: "קריאה לרוח — מלודיה ריטואלית"
+    instruments: ["voice", "guembri"]
+  - type: "qraqeb_accent"
+    description: "הדגשת מקצב בצלצלי הקראקב"
+    instruments: ["qraqeb"]
+
+reference_artists: ["Nass El Ghiwane", "Maâlem Mahmoud Guinia", "Maalem Mahmoud Fahmi"]
+reference_pieces: ["Ya Moulay", "Bou Jlouad", "Sidi Mimoun"]
+
+gm_programs:
+  guembri: 32
+  qraqeb: 112
+  bass: 32

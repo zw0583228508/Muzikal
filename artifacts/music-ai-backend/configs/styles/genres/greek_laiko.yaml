@@ -1,0 +1,49 @@
+id: greek_laiko
+display_name: "לאיקו יווני"
+era: "1950s-present"
+region: "Greece / Athens"
+parent_genre: "mediterranean"
+
+harmony:
+  scale_type: "harmonic_minor"
+  characteristic_intervals: ["b2", "b3", "b6", "M7"]
+  typical_progressions:
+    - ["i", "bII", "V7", "i"]
+    - ["i", "bVII", "bVI", "V7"]
+    - ["i", "iv", "V7", "i"]
+  cadences: ["phrygian_greek", "authentic"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [60, 140]
+  feel: "zeimbekiko_9_8"
+  characteristic_patterns:
+    - name: "zeimbekiko"
+      pattern: "9/8_asymmetric"
+    - name: "hasapiko"
+      pattern: "2/4_straight"
+    - name: "tsifteteli"
+      pattern: "belly_dance_8_8"
+
+instrumentation:
+  core: ["bouzouki", "guitar", "bass", "voice"]
+  optional: ["accordion", "piano", "violin", "oud", "drums"]
+  avoid: ["synthesizer_heavy", "electric_guitar_distorted"]
+
+ornaments:
+  - type: "tsak"
+    description: "הדגשת בוזוקי — מכה חדה על הנימה"
+    instruments: ["bouzouki"]
+  - type: "mandinades"
+    description: "שירה ספונטנית של מילים אימפרוביזטוריות"
+    instruments: ["voice"]
+
+reference_artists: ["Vasilis Tsitsanis", "Grigoris Bithikotsis", "Stelios Kazantzidis", "Haris Alexiou"]
+reference_pieces: ["Synnefiasmeni Kyriaki", "To Kaiki", "Fragosyriani"]
+
+gm_programs:
+  bouzouki: 105
+  guitar: 25
+  bass: 32
+  violin: 40
+  accordion: 21

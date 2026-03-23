@@ -28,6 +28,8 @@ import { PianoRoll } from "@/components/piano-roll";
 import { AnalysisInspector } from "@/components/analysis-inspector";
 import ExportCenter from "@/pages/export-center";
 import ChatAgent from "@/components/chat-agent";
+import { WaveformPlayer } from "@/components/waveform-player";
+import { MidiPlayer } from "@/components/midi-player";
 import { formatTime, cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "@/components/language-toggle";
@@ -194,24 +196,7 @@ function TrackLane({ track, isSelected, onSelect, onRegen }: { track: any; isSel
   );
 }
 
-// ─── Waveform ─────────────────────────────────────────────────────────────────
-
-function WaveformVisualizer({ data }: { data?: number[] }) {
-  const { t } = useTranslation();
-  if (!data || data.length === 0) return <div className="h-32 flex items-center justify-center text-muted-foreground">{t("No waveform data")}</div>;
-  const displayData = data.filter((_, i) => i % Math.ceil(data.length / 500) === 0).slice(0, 500);
-  return (
-    <div className="h-32 w-full flex items-end gap-[1px] px-4 opacity-70" dir="ltr">
-      {displayData.map((val, i) => (
-        <div
-          key={i}
-          className="bg-primary/60 flex-1 rounded-t-sm transition-all hover:bg-primary"
-          style={{ height: `${Math.max(2, Math.abs(val) * 100)}%` }}
-        />
-      ))}
-    </div>
-  );
-}
+// ─── Waveform — replaced by WaveformPlayer component ──────────────────────────
 
 // ─── Manual Corrections Modal ─────────────────────────────────────────────────
 
@@ -586,9 +571,13 @@ export default function ProjectStudio() {
                     <div className="w-64 bg-card border-r border-white/10 flex items-center px-4">
                       <span className="font-medium text-sm text-white">{t("Original Audio")}</span>
                     </div>
-                    <div className="flex-1 bg-[#0a0a0c] relative">
+                    <div className="flex-1 bg-[#0a0a0c] relative px-2 py-1">
                       {analysis?.waveformData ? (
-                        <WaveformVisualizer data={analysis.waveformData} />
+                        <WaveformPlayer
+                          audioUrl={project.audioFileName ? `/api/projects/${projectId}/audio` : undefined}
+                          peaks={analysis.waveformData}
+                          duration={analysis.duration ?? project.audioDurationSeconds}
+                        />
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">
                           {activeJobId
@@ -955,6 +944,26 @@ export default function ProjectStudio() {
                     <Slider defaultValue={[50]} max={100} dir="ltr" />
                   </div>
                 </div>
+
+                {/* ── MIDI Playback Engine ── */}
+                {arrangement?.tracks?.length > 0 && (
+                  <div className="daw-panel p-4 space-y-3">
+                    <div className="flex items-center gap-2 mb-1">
+                      <Music className="w-3.5 h-3.5 text-primary/70" />
+                      <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("MIDI Preview")}</h4>
+                    </div>
+                    <MidiPlayer
+                      tracks={arrangement.tracks.map((tr: any) => ({
+                        id: tr.id ?? String(tr.instrument),
+                        instrument: tr.instrument,
+                        midiProgram: tr.midiProgram,
+                        notes: tr.notes ?? [],
+                        volume: 80,
+                      }))}
+                      totalDuration={arrangement.totalDuration ?? arrangement.durationSeconds}
+                    />
+                  </div>
+                )}
 
                 {arrangement?.arrangementPlan?.harmonicPlan && (
                   <div className="daw-panel p-4 space-y-2">

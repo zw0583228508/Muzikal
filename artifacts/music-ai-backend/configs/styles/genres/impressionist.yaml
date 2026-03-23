@@ -1,0 +1,52 @@
+id: impressionist
+display_name: "אימפרסיוניזם מוזיקלי"
+era: "1890-1930"
+region: "France / Paris"
+parent_genre: "classical"
+
+harmony:
+  scale_type: "whole_tone"
+  characteristic_intervals: ["M7", "M9", "#11", "M13", "b7"]
+  typical_progressions:
+    - ["Imaj9", "bVIImaj9", "IVmaj9", "Imaj9"]
+    - ["ii9", "bII9", "Imaj9"]
+    - ["i9", "bVI9", "bVII9", "i9"]
+  cadences: ["no_resolution", "modal_drift", "parallel_chord"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [44, 88]
+  feel: "floating_impressionistic"
+  characteristic_patterns:
+    - name: "shimmering_arpeggios"
+      pattern: "broken_chord_cascade"
+    - name: "whole_tone_texture"
+      pattern: "chromatic_wash"
+
+instrumentation:
+  core: ["piano", "flute", "strings", "harp"]
+  optional: ["oboe", "clarinet", "French_horn", "celeste", "choir"]
+  avoid: ["drums", "electric", "synthesizer", "harpsichord"]
+
+ornaments:
+  - type: "parallel_chords"
+    description: "אקורדים מקבילים — מאפיין האימפרסיוניזם"
+    instruments: ["piano", "strings"]
+  - type: "whole_tone_scale"
+    description: "סקאלה בטונים שלמים — ללא כיוון ברור"
+  - type: "pentatonic_wash"
+    description: "רצף פנטטוני ערפילי"
+    instruments: ["piano", "harp"]
+
+reference_artists: ["Claude Debussy", "Maurice Ravel", "Gabriel Fauré", "Erik Satie"]
+reference_pieces: ["Clair de Lune", "Boléro", "La Mer", "Gymnopédies", "Pavane pour une infante défunte"]
+
+gm_programs:
+  piano: 0
+  flute: 73
+  harp: 46
+  violin: 40
+  cello: 42
+  celeste: 8
+  clarinet: 71

@@ -1,0 +1,54 @@
+id: classical_era
+display_name: "תקופה קלאסית"
+era: "1750-1820"
+region: "Europe / Vienna / Austria"
+parent_genre: "classical"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M3", "P5", "M7", "M9"]
+  typical_progressions:
+    - ["I", "V", "I", "IV", "I", "V7", "I"]
+    - ["I", "ii6", "V7", "I"]
+    - ["I", "IV", "ii", "V", "I"]
+  cadences: ["perfect_authentic", "half", "deceptive", "plagal"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [60, 140]
+  feel: "balanced_phrase"
+  characteristic_patterns:
+    - name: "alberti_bass"
+      pattern: "low_high_mid_high"
+    - name: "um_pah_pah"
+      pattern: "bass_chord_chord"
+    - name: "four_bar_phrase"
+      pattern: "antecedent_consequent"
+
+instrumentation:
+  core: ["piano", "strings", "woodwinds", "brass"]
+  optional: ["harpsichord", "horns", "timpani"]
+  avoid: ["synthesizer", "electric_instruments"]
+
+ornaments:
+  - type: "alberti_bass"
+    description: "תבנית בס של אלברטי — אופיינית לפסנתר קלאסי"
+    instruments: ["piano"]
+  - type: "grace_note"
+    description: "תו חן — הקדמה מהירה לתו הראשי"
+  - type: "dynamic_contrast"
+    description: "ניגודיות עוצמה חדה: פורטה-פיאנו"
+
+reference_artists: ["W.A. Mozart", "J. Haydn", "L. van Beethoven (early)", "C.P.E. Bach"]
+reference_pieces: ["Symphony No. 40", "Piano Sonata K. 331", "The Creation", "Moonlight Sonata"]
+
+gm_programs:
+  piano: 0
+  violin: 40
+  viola: 41
+  cello: 42
+  flute: 73
+  oboe: 68
+  clarinet: 71
+  french_horn: 60
+  trumpet: 56

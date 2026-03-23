@@ -1,0 +1,49 @@
+id: drum_and_bass
+display_name: "דראם אנד בייס"
+era: "1990s-present"
+region: "London / UK"
+parent_genre: "electronic"
+
+harmony:
+  scale_type: "minor"
+  characteristic_intervals: ["b3", "b7", "b6"]
+  typical_progressions:
+    - ["i", "bVII", "bVI", "bVII"]
+    - ["i", "iv", "i", "bVII"]
+  cadences: ["unresolved_loop", "dark_modal"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [160, 180]
+  feel: "breakbeat_amen"
+  characteristic_patterns:
+    - name: "amen_break"
+      pattern: "k...s..kk.s.k.s."
+    - name: "think_break"
+      pattern: "syncopated_jungle"
+    - name: "half_time_bass"
+      pattern: "bass_on_1_3"
+
+instrumentation:
+  core: ["drum_machine", "bass_synth", "synthesizer"]
+  optional: ["strings_sample", "vocal_chop", "piano_sample", "reese_bass"]
+  avoid: ["acoustic_drums", "acoustic_instruments_prominent"]
+
+ornaments:
+  - type: "amen_chop"
+    description: "חיתוך וסידור מחדש של סמפל האמן"
+    instruments: ["drum_machine"]
+  - type: "reese_bass"
+    description: "בס ראז' כבד ומסוחרר"
+    instruments: ["bass_synth"]
+  - type: "breakbeat_roll"
+    description: "רולים מהירים של הדראמס"
+
+reference_artists: ["Goldie", "LTJ Bukem", "Roni Size", "Andy C"]
+reference_pieces: ["Terminator", "Music", "Brown Paper Bag", "Battleship Grey"]
+
+gm_programs:
+  bass: 38
+  synthesizer: 81
+  strings: 48
+  drums: 118

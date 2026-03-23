@@ -1,0 +1,49 @@
+id: blues_delta
+display_name: "בלוז דלתא"
+era: "1920s-1940s"
+region: "Mississippi Delta, USA"
+parent_genre: "american_roots"
+
+harmony:
+  scale_type: "blues"
+  characteristic_intervals: ["b3", "4", "b5", "5", "b7"]
+  typical_progressions:
+    - ["I7", "I7", "I7", "I7", "IV7", "IV7", "I7", "I7", "V7", "IV7", "I7", "V7"]
+    - ["I7", "IV7", "I7", "V7", "IV7", "I7"]
+  cadences: ["turnaround", "blues_authentic"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [60, 110]
+  feel: "shuffle"
+  characteristic_patterns:
+    - name: "shuffle_boogie"
+      pattern: "long_short_long_short"
+    - name: "stop_time"
+      pattern: "hit_rest_hit_rest"
+
+instrumentation:
+  core: ["acoustic_guitar", "voice", "harmonica"]
+  optional: ["slide_guitar", "double_bass", "drums_brushes", "piano"]
+  avoid: ["synthesizer", "electric_guitar_distorted", "strings"]
+
+ornaments:
+  - type: "bent_note"
+    description: "גלישת טון — הלב של הבלוז"
+    instruments: ["guitar", "harmonica"]
+  - type: "vibrato_wide"
+    description: "ויברטו רחב ורגשי"
+    instruments: ["voice", "guitar"]
+  - type: "slide"
+    description: "נגינת בקבוק או סכין"
+    instruments: ["guitar"]
+
+reference_artists: ["Robert Johnson", "Muddy Waters", "Son House", "Charley Patton"]
+reference_pieces: ["Cross Road Blues", "Mannish Boy", "Death Letter", "Rollin' and Tumblin'"]
+
+gm_programs:
+  acoustic_guitar: 25
+  harmonica: 22
+  bass: 32
+  piano: 0
+  voice: 53

@@ -1,0 +1,54 @@
+id: bulgarian_folk
+display_name: "פולקלור בולגרי"
+era: "Traditional-present"
+region: "Bulgaria / Balkans"
+parent_genre: "balkan"
+
+harmony:
+  scale_type: "phrygian"
+  characteristic_intervals: ["b2", "b3", "P4", "b6", "b7"]
+  typical_progressions:
+    - ["i", "bII", "i", "bVII"]
+    - ["i", "bVII", "bVI", "bVII"]
+    - ["i", "bII", "bVII", "i"]
+  cadences: ["phrygian_half", "balkan_authentic"]
+
+rhythm:
+  time_signature: "7/8"
+  bpm_range: [100, 180]
+  feel: "aksak_bulgar"
+  characteristic_patterns:
+    - name: "rachenitsa"
+      pattern: "2+2+3"
+    - name: "pajdushko"
+      pattern: "2+3"
+    - name: "kopanitsa"
+      pattern: "2+2+2+3"
+    - name: "sandansko"
+      pattern: "3+2+2+3"
+
+instrumentation:
+  core: ["gaida", "kaval", "gadulka", "tapan"]
+  optional: ["accordion", "violin", "clarinet", "voice", "tambura"]
+  avoid: ["electric_guitar", "drums_western", "piano"]
+
+ornaments:
+  - type: "drone"
+    description: "בורדון — טוניקה רציפה מתחת למלודיה"
+    instruments: ["gaida"]
+  - type: "microtonal_glide"
+    description: "גלישות רבע-טון"
+    instruments: ["gadulka", "kaval"]
+  - type: "ornamental_trill"
+    description: "טרנסקריפציה של תזמונות דקות"
+    instruments: ["kaval"]
+
+reference_artists: ["Neshka Robeva", "Le Mystère des Voix Bulgares", "Kaloyan Nikolov", "Filip Kutev"]
+reference_pieces: ["Rachenitsa", "Dilmano Dilbero", "Izlel e Delyo Haydutin"]
+
+gm_programs:
+  gaida: 109
+  kaval: 75
+  gadulka: 40
+  accordion: 21
+  bass: 43

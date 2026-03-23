@@ -1,0 +1,49 @@
+id: zydeco
+display_name: "זידקו"
+era: "1940s-present"
+region: "Louisiana / Creole USA"
+parent_genre: "american_roots"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["b3", "b7", "P5"]
+  typical_progressions:
+    - ["I7", "IV7", "V7", "I7"]
+    - ["I", "IV", "I", "V7"]
+    - ["I7", "bVII7", "IV7", "I7"]
+  cadences: ["blues_turn", "authentic"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [110, 175]
+  feel: "creole_two_step"
+  characteristic_patterns:
+    - name: "two_step"
+      pattern: "quick_quick_slow"
+    - name: "zydeco_waltz"
+      pattern: "3/4_creole"
+    - name: "rubboard_scratch"
+      pattern: "16th_note_groove"
+
+instrumentation:
+  core: ["accordion", "rubboard", "bass", "drums"]
+  optional: ["electric_guitar", "fiddle", "trumpet", "voice"]
+  avoid: ["classical_strings", "synthesizer_lead"]
+
+ornaments:
+  - type: "accordion_riff"
+    description: "ריף אקורדיון הניאו-קריאול"
+    instruments: ["accordion"]
+  - type: "rubboard_groove"
+    description: "לוח-שפשוף — קצב אחורי אופייני"
+    instruments: ["rubboard"]
+
+reference_artists: ["Clifton Chenier", "Boozoo Chavis", "Buckwheat Zydeco", "Zydeco Force"]
+reference_pieces: ["Zydeco sont pas salés", "Hey Ma Ma", "Paper in My Shoe"]
+
+gm_programs:
+  accordion: 21
+  bass: 32
+  electric_guitar: 27
+  trumpet: 56
+  fiddle: 40

@@ -1,0 +1,54 @@
+id: new_orleans_jazz
+display_name: "ג'אז ניו אורלינס"
+era: "1900s-1930s"
+region: "New Orleans / Louisiana"
+parent_genre: "jazz"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["b3", "b7", "M9"]
+  typical_progressions:
+    - ["I7", "IV7", "I7", "V7"]
+    - ["I", "VI7", "II7", "V7"]
+    - ["i7", "IV7", "bVII7", "V7"]
+  cadences: ["jazz_authentic", "blues_turnaround"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [100, 180]
+  feel: "dixieland_swing"
+  characteristic_patterns:
+    - name: "second_line"
+      pattern: "syncopated_march"
+    - name: "dixieland_stomp"
+      pattern: "2_beat_feel"
+    - name: "trad_jazz_swing"
+      pattern: "long_short_eight"
+
+instrumentation:
+  core: ["trumpet", "clarinet", "trombone", "piano", "bass", "drums"]
+  optional: ["banjo", "tuba", "guitar", "voice"]
+  avoid: ["synthesizer", "electric_guitar"]
+
+ornaments:
+  - type: "collective_improvisation"
+    description: "כולם מאולתרים בו-זמנית — הסאונד של ניו אורלינס"
+    instruments: ["trumpet", "clarinet", "trombone"]
+  - type: "smear"
+    description: "גלישת פליז"
+    instruments: ["trumpet", "trombone"]
+  - type: "gliss"
+    description: "קלרינט גולש בין אוקטבות"
+    instruments: ["clarinet"]
+
+reference_artists: ["Louis Armstrong", "Jelly Roll Morton", "King Oliver", "Sidney Bechet"]
+reference_pieces: ["When the Saints Go Marching In", "Muskrat Ramble", "Tiger Rag", "St. James Infirmary"]
+
+gm_programs:
+  trumpet: 56
+  clarinet: 71
+  trombone: 57
+  piano: 0
+  bass: 43
+  banjo: 105

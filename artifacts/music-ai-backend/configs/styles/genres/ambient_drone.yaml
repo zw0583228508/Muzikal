@@ -1,0 +1,47 @@
+id: ambient_drone
+display_name: "אמביינט-דרון"
+era: "1970s-present"
+region: "Electronic / Global"
+parent_genre: "electronic"
+
+harmony:
+  scale_type: "lydian"
+  characteristic_intervals: ["M7", "#4", "M9", "M13"]
+  typical_progressions:
+    - ["Imaj9", "bVIImaj9", "Imaj9"]
+    - ["Imaj7", "Imaj7", "bVIImaj7"]
+  cadences: ["modal_stasis", "no_resolution"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [40, 80]
+  feel: "floating_no_pulse"
+  characteristic_patterns:
+    - name: "sustained_pads"
+      pattern: "whole_notes_long_release"
+    - name: "slow_arp"
+      pattern: "gentle_rising_pattern"
+
+instrumentation:
+  core: ["synthesizer_pad", "synthesizer_texture", "field_recording"]
+  optional: ["strings", "piano", "choir_pad", "bass_drone", "guitar_reverse"]
+  avoid: ["drums", "percussion", "sharp_attacks"]
+
+ornaments:
+  - type: "reverse_reverb"
+    description: "הד הפוך — קדם את הצליל"
+    instruments: ["synthesizer", "piano"]
+  - type: "slow_filter_sweep"
+    description: "מסנן המשתנה לאט לאט"
+    instruments: ["synthesizer_pad"]
+  - type: "granular_texture"
+    description: "פיצוח סאמפלים לגרגרים קטנים"
+
+reference_artists: ["Brian Eno", "Stars of the Lid", "William Basinski", "Tim Hecker"]
+reference_pieces: ["Music for Airports", "Disintegration Loops", "An Approximation", "Ravedeath 1972"]
+
+gm_programs:
+  pad: 88
+  strings: 48
+  choir: 52
+  piano: 0

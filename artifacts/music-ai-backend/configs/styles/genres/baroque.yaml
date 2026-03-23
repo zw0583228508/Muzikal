@@ -1,0 +1,57 @@
+id: baroque
+display_name: "בארוק"
+era: "1600-1750"
+region: "Europe / Germany / Italy / France"
+parent_genre: "classical"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M7", "M9", "P5", "M3"]
+  typical_progressions:
+    - ["I", "IV", "V7", "I"]
+    - ["I", "V", "vi", "IV", "I", "IV", "V", "I"]
+    - ["i", "iv", "V7", "i"]
+    - ["I", "ii", "V", "I"]
+  cadences: ["perfect_authentic", "deceptive", "plagal", "half"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [60, 140]
+  feel: "terraced_dynamics"
+  characteristic_patterns:
+    - name: "ostinato_bass"
+      pattern: "ground_bass_pattern"
+    - name: "dotted_rhythm"
+      pattern: "french_overture"
+    - name: "walking_bass"
+      pattern: "steady_quarter_notes"
+
+instrumentation:
+  core: ["harpsichord", "strings", "basso_continuo"]
+  optional: ["flute", "oboe", "trumpet", "lute", "organ", "viola_da_gamba"]
+  avoid: ["piano_modern", "electric_instruments", "synthesizer"]
+
+ornaments:
+  - type: "trill"
+    description: "טרנסקריפציה מהירה בין שני טונים סמוכים"
+    instruments: ["harpsichord", "flute", "violin"]
+  - type: "mordent"
+    description: "עיטור מהיר: תו-שלב מטה-תו"
+    instruments: ["harpsichord", "oboe"]
+  - type: "appoggiatura"
+    description: "תו שיר מעוכב"
+  - type: "turn"
+    description: "הפנייה — ארבעה תווים סביב הטון"
+
+reference_artists: ["J.S. Bach", "G.F. Handel", "A. Vivaldi", "H. Purcell"]
+reference_pieces: ["Brandenburg Concertos", "Water Music", "Four Seasons", "Toccata and Fugue in D minor"]
+
+gm_programs:
+  harpsichord: 6
+  violin: 40
+  viola: 41
+  cello: 42
+  flute: 73
+  oboe: 68
+  trumpet: 56

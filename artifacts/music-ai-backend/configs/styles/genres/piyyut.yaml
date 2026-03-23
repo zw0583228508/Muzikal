@@ -1,0 +1,48 @@
+id: piyyut
+display_name: "פיוט"
+era: "6th century-present"
+region: "Land of Israel / Diaspora"
+parent_genre: "jewish_liturgical"
+
+harmony:
+  scale_type: "maqam_bayat"
+  characteristic_intervals: ["neutral2", "b3", "P5", "b7"]
+  typical_progressions:
+    - ["i", "bVII", "i", "V"]
+    - ["i", "bII", "bVII", "i"]
+    - ["i", "iv", "bVII", "i"]
+  cadences: ["liturgical_karar", "phrygian"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [55, 110]
+  feel: "devotional_pulse"
+  characteristic_patterns:
+    - name: "maqam_rhythm"
+      pattern: "D.T.D..T.D.T."
+    - name: "call_response"
+      pattern: "solo_choir_antiphon"
+
+instrumentation:
+  core: ["voice", "oud", "darbuka"]
+  optional: ["kanun", "violin", "riq", "ney", "accordion"]
+  avoid: ["electric_guitar", "drums_heavy", "synthesizer"]
+
+ornaments:
+  - type: "melisma_piyyut"
+    description: "קישוטי קול מסורתיים — כפולה ותחנה"
+    instruments: ["voice"]
+  - type: "tashbetz"
+    description: "אריג קולי — שתי קולות משוזרים"
+  - type: "hatimah"
+    description: "חתימה — סיום מסורתי של הפיוט"
+
+reference_artists: ["Rabbi Israel Najara", "Bracha Zefira", "Eyal Golan", "Haim Moshe"]
+reference_pieces: ["יה ריבון", "לכה דודי", "מה ידידות", "אל נורא עלילה"]
+
+gm_programs:
+  oud: 105
+  darbuka: 116
+  kanun: 46
+  violin: 40
+  ney: 75

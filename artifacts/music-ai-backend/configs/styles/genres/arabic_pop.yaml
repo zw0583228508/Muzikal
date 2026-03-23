@@ -1,0 +1,54 @@
+id: arabic_pop
+display_name: "פופ ערבי"
+era: "1970s-present"
+region: "Egypt / Lebanon / Gulf States"
+parent_genre: "arabic_popular"
+
+harmony:
+  scale_type: "maqam_bayat"
+  characteristic_intervals: ["neutral2", "b3", "P5", "b7"]
+  typical_progressions:
+    - ["i", "bVII", "bVI", "V7"]
+    - ["i", "iv", "V7", "i"]
+    - ["i", "bII", "bVII", "i"]
+  cadences: ["arabic_authentic", "pop_half"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [80, 130]
+  feel: "maqsum_groove"
+  characteristic_patterns:
+    - name: "maqsum"
+      pattern: "D..T..D.T..."
+    - name: "wahda"
+      pattern: "D.....T.D.T."
+    - name: "malfuf"
+      pattern: "D.D.T.D.T..."
+
+instrumentation:
+  core: ["oud", "darbuka", "kanun", "bass", "strings", "voice"]
+  optional: ["accordion", "violin", "keyboards", "saxophone", "riq"]
+  avoid: ["heavy_distortion", "tuba"]
+
+ornaments:
+  - type: "taksim"
+    description: "הקדמה אינסטרומנטלית חופשית"
+    instruments: ["oud", "kanun", "violin"]
+  - type: "melismatic_vocal"
+    description: "קישוטי קול ערביים — מואשח ותحريك"
+    instruments: ["voice"]
+  - type: "layal"
+    description: "שירה קולית ארוכת נשימה"
+    instruments: ["voice"]
+
+reference_artists: ["Fairuz", "Umm Kulthum", "Amr Diab", "Kadim Al Saher"]
+reference_pieces: ["Habibi ya Nour el Ain", "Ya Msafer Wahdak", "Ahibbak", "Bahebak Aktar"]
+
+gm_programs:
+  oud: 105
+  darbuka: 116
+  kanun: 46
+  violin: 40
+  bass: 32
+  strings: 48

@@ -1,0 +1,52 @@
+id: mariachi
+display_name: "מריאצ'י"
+era: "1850s-present"
+region: "Jalisco / Mexico"
+parent_genre: "mexican"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M3", "P5", "b7"]
+  typical_progressions:
+    - ["I", "IV", "V7", "I"]
+    - ["I", "V7", "I", "IV"]
+    - ["i", "V7", "i", "bVII"]
+  cadences: ["authentic_mexican", "half"]
+
+rhythm:
+  time_signature: "3/4"
+  bpm_range: [100, 180]
+  feel: "ranchera_waltz"
+  characteristic_patterns:
+    - name: "son_jaliscience"
+      pattern: "6/8_and_3/4_mix"
+    - name: "ranchera_waltz"
+      pattern: "OOM_pah_pah"
+    - name: "corrido"
+      pattern: "2/4_march_feel"
+
+instrumentation:
+  core: ["trumpet", "violin", "vihuela", "guitarron", "guitar"]
+  optional: ["harp", "trumpet_2", "voice"]
+  avoid: ["drums", "synthesizer", "electric_bass"]
+
+ornaments:
+  - type: "grito"
+    description: "קריאת 'aha!' ספונטנית"
+    instruments: ["voice"]
+  - type: "trompetazo"
+    description: "פרזת חצוצרה אנרגטית"
+    instruments: ["trumpet"]
+  - type: "vihuela_rasgueado"
+    description: "סטראמינג מהיר על הוואויה"
+    instruments: ["vihuela"]
+
+reference_artists: ["Pedro Infante", "Jorge Negrete", "Vicente Fernández", "Mariachi Vargas de Tecalitlán"]
+reference_pieces: ["Cielito Lindo", "La Bamba", "México Lindo y Querido", "Guadalajara"]
+
+gm_programs:
+  trumpet: 56
+  violin: 40
+  guitar: 25
+  harp: 46
+  bass: 43

@@ -1,0 +1,51 @@
+id: country
+display_name: "קאנטרי"
+era: "1920s-present"
+region: "Nashville / Rural America"
+parent_genre: "american_roots"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M3", "P5", "M7"]
+  typical_progressions:
+    - ["I", "IV", "V", "I"]
+    - ["I", "V", "vi", "IV"]
+    - ["I", "IV", "I", "V7"]
+  cadences: ["authentic", "half"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [90, 160]
+  feel: "straight_with_twang"
+  characteristic_patterns:
+    - name: "boom_chick"
+      pattern: "bass_strum_bass_strum"
+    - name: "train_beat"
+      pattern: "steady_eighth_notes"
+
+instrumentation:
+  core: ["acoustic_guitar", "steel_guitar", "bass", "fiddle"]
+  optional: ["banjo", "mandolin", "drums", "piano", "dobro", "voice"]
+  avoid: ["synthesizer", "turntable"]
+
+ornaments:
+  - type: "steel_glide"
+    description: "גלישת גיטרה פדל סטיל"
+    instruments: ["steel_guitar"]
+  - type: "twang"
+    description: "נגינה עם פינגר-פיקינג"
+    instruments: ["acoustic_guitar", "banjo"]
+  - type: "double_stop"
+    description: "שתי מיתרים בו-זמנית בכינור"
+    instruments: ["fiddle"]
+
+reference_artists: ["Hank Williams", "Johnny Cash", "Dolly Parton", "Willie Nelson"]
+reference_pieces: ["I'm So Lonesome I Could Cry", "Ring of Fire", "Jolene", "On the Road Again"]
+
+gm_programs:
+  acoustic_guitar: 25
+  steel_guitar: 26
+  fiddle: 40
+  banjo: 105
+  bass: 32
+  piano: 0

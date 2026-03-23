@@ -1,0 +1,52 @@
+id: hungarian_csardas
+display_name: "צ'ארדש הונגרי"
+era: "1820s-present"
+region: "Hungary / Pannonian Plains"
+parent_genre: "european_folk"
+
+harmony:
+  scale_type: "harmonic_minor"
+  characteristic_intervals: ["b3", "b6", "M7"]
+  typical_progressions:
+    - ["i", "V7", "i", "V7"]
+    - ["i", "iv", "V7", "i"]
+    - ["I", "IV", "V", "I"]
+  cadences: ["authentic", "half_cadence"]
+
+rhythm:
+  time_signature: "2/4"
+  bpm_range: [60, 220]
+  feel: "lassan_to_friss"
+  characteristic_patterns:
+    - name: "lassan"
+      pattern: "slow_dramatic"
+    - name: "friss"
+      pattern: "2/4_fast_energetic"
+    - name: "verbunkos_dotted"
+      pattern: "dotted_eighth_sixteenth"
+
+instrumentation:
+  core: ["violin", "cimbalom", "bass", "clarinet"]
+  optional: ["accordion", "guitar", "voice", "tambura"]
+  avoid: ["synthesizer", "electric_guitar", "drums_modern"]
+
+ornaments:
+  - type: "cifrázás"
+    description: "קישוט הונגרי — טרנסקריפציה של הנגינה"
+    instruments: ["violin"]
+  - type: "portamento"
+    description: "החלקה רחבה בין תווים"
+    instruments: ["violin", "cimbalom"]
+  - type: "staccato_bowing"
+    description: "קשתות קצרות ואנרגטיות"
+    instruments: ["violin"]
+
+reference_artists: ["Vittorio Monti", "Johannes Brahms", "Roby Lakatos", "Sandor Lakatos"]
+reference_pieces: ["Csárdás (Monti)", "Hungarian Dance No. 5", "Más se nyilik a violavirág"]
+
+gm_programs:
+  violin: 40
+  cimbalom: 11
+  clarinet: 71
+  bass: 43
+  accordion: 21

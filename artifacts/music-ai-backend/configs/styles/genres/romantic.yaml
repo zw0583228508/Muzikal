@@ -1,0 +1,58 @@
+id: romantic
+display_name: "תקופה רומנטית"
+era: "1820-1900"
+region: "Europe / Germany / France / Russia"
+parent_genre: "classical"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M7", "M9", "b13", "#11"]
+  typical_progressions:
+    - ["I", "bVI", "IV", "V7"]
+    - ["I", "III", "vi", "IV", "V"]
+    - ["i", "bVI", "bVII", "i"]
+    - ["I", "V/vi", "vi", "V"]
+  cadences: ["perfect_authentic", "deceptive_romantic", "half_romantic"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "3/4"
+  bpm_range: [50, 140]
+  feel: "expressive_rubato"
+  characteristic_patterns:
+    - name: "waltz_romantic"
+      pattern: "OOM_pah_pah"
+    - name: "triplet_feel"
+      pattern: "sweeping_triplets"
+    - name: "rubato"
+      pattern: "flexible_tempo"
+
+instrumentation:
+  core: ["piano", "strings", "woodwinds", "brass", "harp"]
+  optional: ["organ", "choir", "horn", "timpani", "contrabass"]
+  avoid: ["synthesizer", "electric_instruments", "harpsichord"]
+
+ornaments:
+  - type: "rubato"
+    description: "גמישות בטמפו — אופיינית לנגינה רומנטית"
+    instruments: ["piano", "violin"]
+  - type: "fermata"
+    description: "עצירה — הארכת תו"
+  - type: "chromatic_modulation"
+    description: "מעבר הרמוני כרומטי מפתיע"
+  - type: "lied_vocal"
+    description: "שירה אינטימית של הלידר הגרמני"
+    instruments: ["voice"]
+
+reference_artists: ["F. Chopin", "R. Schumann", "J. Brahms", "F. Liszt", "P. Tchaikovsky"]
+reference_pieces: ["Nocturnes", "Kinderszenen", "Symphony No. 4", "Piano Concerto No. 1 (Tchaikovsky)"]
+
+gm_programs:
+  piano: 0
+  violin: 40
+  viola: 41
+  cello: 42
+  harp: 46
+  french_horn: 60
+  flute: 73
+  clarinet: 71

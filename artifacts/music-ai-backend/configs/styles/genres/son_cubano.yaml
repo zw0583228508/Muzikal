@@ -1,0 +1,53 @@
+id: son_cubano
+display_name: "סון קובני"
+era: "1890s-1950s"
+region: "Cuba / Oriente"
+parent_genre: "latin_caribbean"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["b7", "P5", "M9"]
+  typical_progressions:
+    - ["I", "IV", "V7", "I"]
+    - ["ii7", "V7", "Imaj7", "I"]
+    - ["I", "bVII", "IV", "I"]
+  cadences: ["authentic", "montuno_loop"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [120, 180]
+  feel: "son_clave"
+  characteristic_patterns:
+    - name: "son_clave_3_2"
+      pattern: "x.x.x...x.x..."
+    - name: "tumbao_bass"
+      pattern: "syncopated_cuban_bass"
+    - name: "anticipated_bass"
+      pattern: "bass_on_and_of_4"
+
+instrumentation:
+  core: ["tres", "bongo", "bass", "maracas", "clave", "voice"]
+  optional: ["trumpet", "piano", "guitar", "timbales", "conga"]
+  avoid: ["synthesizer", "electric_guitar_heavy"]
+
+ornaments:
+  - type: "tres_arabesque"
+    description: "פרזת טרס קובנית — גיטרה שלוש מיתרים"
+    instruments: ["tres"]
+  - type: "bongo_martillo"
+    description: "תבנית בונגו קבועה"
+    instruments: ["bongo"]
+  - type: "coros"
+    description: "קורוסים חוזרים בין הסולן"
+    instruments: ["voice", "choir"]
+
+reference_artists: ["Compay Segundo", "Ibrahim Ferrer", "Arsenio Rodríguez", "Buena Vista Social Club"]
+reference_pieces: ["Chan Chan", "El Cuarto de Tula", "Tres Lindas Cubanas", "Guantanamera"]
+
+gm_programs:
+  guitar: 25
+  bass: 32
+  trumpet: 56
+  piano: 0
+  maracas: 70

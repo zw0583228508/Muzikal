@@ -1,0 +1,51 @@
+id: romani_swing
+display_name: "ג'אז מנוחה (ג'אנגו)"
+era: "1930s-present"
+region: "France / Romani Europe"
+parent_genre: "european_jazz"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M7", "M9", "#11", "b13"]
+  typical_progressions:
+    - ["Imaj7", "VI7", "ii7", "V7"]
+    - ["I6", "bIII7", "ii7", "V7"]
+    - ["i6", "bVI7", "bII7", "V7"]
+  cadences: ["jazz_authentic", "django_turnaround"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [140, 240]
+  feel: "pompe_swing"
+  characteristic_patterns:
+    - name: "pompe"
+      pattern: "muted_strum_on_beats_2_4"
+    - name: "gypsy_pick"
+      pattern: "fast_alternate_picking"
+
+instrumentation:
+  core: ["acoustic_guitar_lead", "acoustic_guitar_rhythm", "bass", "violin"]
+  optional: ["accordion", "clarinet", "voice", "piano"]
+  avoid: ["drums_kit", "electric_guitar", "synthesizer"]
+
+ornaments:
+  - type: "rest_stroke"
+    description: "פלוק עם מנוחה — הטכניקה של ג'נגו"
+    instruments: ["acoustic_guitar"]
+  - type: "chromatic_run"
+    description: "ריצה כרומטית מהירה"
+    instruments: ["violin", "guitar"]
+  - type: "left_hand_slap"
+    description: "טפיחה של יד שמאל על הנימות"
+    instruments: ["guitar"]
+
+reference_artists: ["Django Reinhardt", "Stéphane Grappelli", "Biréli Lagrène", "Fapy Lafertin"]
+reference_pieces: ["Minor Swing", "Nuages", "Djangology", "Les Yeux Noirs"]
+
+gm_programs:
+  acoustic_guitar: 25
+  violin: 40
+  bass: 32
+  accordion: 21
+  clarinet: 71

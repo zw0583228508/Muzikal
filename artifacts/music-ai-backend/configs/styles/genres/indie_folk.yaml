@@ -1,0 +1,54 @@
+id: indie_folk
+display_name: "אינדי-פולק"
+era: "2000s-present"
+region: "USA / Canada / UK"
+parent_genre: "contemporary_folk"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M7", "M9", "P4", "M6"]
+  typical_progressions:
+    - ["I", "V", "vi", "IV"]
+    - ["I", "IV", "I", "V"]
+    - ["vi", "IV", "I", "V"]
+    - ["I", "bVII", "IV", "I"]
+  cadences: ["plagal", "half", "authentic"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [70, 130]
+  feel: "organic_folk"
+  characteristic_patterns:
+    - name: "finger_picking"
+      pattern: "travis_pick_pattern"
+    - name: "strummed_chords"
+      pattern: "down_up_down_up"
+    - name: "shuffle_folk"
+      pattern: "triplet_feel_light"
+
+instrumentation:
+  core: ["acoustic_guitar", "voice", "bass"]
+  optional: ["banjo", "mandolin", "violin", "piano", "ukulele", "choir", "drums_brushes"]
+  avoid: ["electric_guitar_distorted", "synthesizer_heavy", "drum_machine"]
+
+ornaments:
+  - type: "voice_harmony"
+    description: "הרמוניות קוליות פשוטות — שלישיות ושישיות"
+    instruments: ["voice", "choir"]
+  - type: "finger_pick_pattern"
+    description: "פינגר-פיקינג ייחודי"
+    instruments: ["acoustic_guitar"]
+  - type: "banjo_roll"
+    description: "גלגול בנג'ו עדין"
+    instruments: ["banjo"]
+
+reference_artists: ["Iron & Wine", "Fleet Foxes", "Bon Iver", "Sufjan Stevens", "The Tallest Man on Earth"]
+reference_pieces: ["Flume", "White Winter Hymnal", "Skinny Love", "Chicago", "The Gardener"]
+
+gm_programs:
+  acoustic_guitar: 25
+  banjo: 105
+  mandolin: 25
+  violin: 40
+  bass: 32
+  piano: 0

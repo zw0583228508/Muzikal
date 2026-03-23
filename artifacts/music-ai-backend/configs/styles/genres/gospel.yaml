@@ -1,0 +1,52 @@
+id: gospel
+display_name: "גוספל"
+era: "1930s-present"
+region: "Southern USA / African American Church"
+parent_genre: "american_roots"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M3", "P5", "M7", "M9"]
+  typical_progressions:
+    - ["I", "IV", "I", "V7"]
+    - ["I", "vi", "IV", "V"]
+    - ["I", "bVII", "IV", "I"]
+    - ["I", "IV", "bVII", "IV", "I"]
+  cadences: ["plagal_amen", "authentic", "tierce_de_picardie"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [65, 130]
+  feel: "swung_triplet"
+  characteristic_patterns:
+    - name: "hand_clap_backbeat"
+      pattern: "_.x._.x."
+    - name: "gospel_shuffle"
+      pattern: "swing_8ths"
+
+instrumentation:
+  core: ["choir", "piano", "organ"]
+  optional: ["bass", "drums", "electric_guitar", "tambourine", "trumpet"]
+  avoid: ["synthesizer_lead", "distortion"]
+
+ornaments:
+  - type: "melisma"
+    description: "מליסמה — הרחבת הברה על פני מספר תווים"
+    instruments: ["voice", "choir"]
+  - type: "shout"
+    description: "קריאת שיא רגשית"
+    instruments: ["voice"]
+  - type: "call_response"
+    description: "שאלה ותשובה בין סולן ומקהלה"
+
+reference_artists: ["Mahalia Jackson", "Thomas A. Dorsey", "Kirk Franklin", "Aretha Franklin"]
+reference_pieces: ["Oh Happy Day", "Amazing Grace", "His Eye Is on the Sparrow", "Take My Hand"]
+
+gm_programs:
+  choir: 52
+  piano: 0
+  organ: 19
+  bass: 32
+  drums: 0
+  trumpet: 56

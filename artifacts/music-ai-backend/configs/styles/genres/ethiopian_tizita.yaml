@@ -1,0 +1,47 @@
+id: ethiopian_tizita
+display_name: "תיזיטה אתיופית"
+era: "Traditional-present"
+region: "Ethiopia / Horn of Africa"
+parent_genre: "african"
+
+harmony:
+  scale_type: "pentatonic_minor"
+  characteristic_intervals: ["b3", "b7", "P4", "P5"]
+  typical_progressions:
+    - ["i", "bVII", "i", "bVII"]
+    - ["i", "bVI", "bVII", "i"]
+    - ["i", "iv", "i", "bVII"]
+  cadences: ["pentatonic_drift", "modal_stasis"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [55, 85]
+  feel: "languid_nostalgic"
+  characteristic_patterns:
+    - name: "kebero_slow"
+      pattern: "D..D.T.D..D."
+    - name: "slow_ballad"
+      pattern: "1..2..3..4.."
+
+instrumentation:
+  core: ["masenko", "krar", "voice", "kebero"]
+  optional: ["acoustic_guitar", "bass", "piano", "saxophone"]
+  avoid: ["synthesizer_heavy", "electric_guitar_distorted"]
+
+ornaments:
+  - type: "tizita_ornament"
+    description: "עיטורים קוליים אתיופיים — נוסטלגיה בלב"
+    instruments: ["voice", "masenko"]
+  - type: "pentatonic_melisma"
+    description: "מלודיה פנטטונית עם עיטורים"
+    instruments: ["voice"]
+
+reference_artists: ["Mahmoud Ahmed", "Tilahun Gessesse", "Mulatu Astatke", "Aster Aweke"]
+reference_pieces: ["Ere Mela Mela", "Tizita", "Yèkatit", "Hasabe"]
+
+gm_programs:
+  masenko: 40
+  krar: 24
+  acoustic_guitar: 25
+  bass: 32
+  saxophone: 66

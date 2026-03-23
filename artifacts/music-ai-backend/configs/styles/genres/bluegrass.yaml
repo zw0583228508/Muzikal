@@ -1,0 +1,52 @@
+id: bluegrass
+display_name: "בלוגראס"
+era: "1940s-present"
+region: "Appalachia / Southern USA"
+parent_genre: "american_roots"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M3", "P5", "M7"]
+  typical_progressions:
+    - ["I", "IV", "V", "I"]
+    - ["I", "I7", "IV", "V", "I"]
+    - ["I", "bVII", "IV", "I"]
+  cadences: ["authentic", "half"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [120, 200]
+  feel: "driving_straight"
+  characteristic_patterns:
+    - name: "chop"
+      pattern: "muted_backbeat_mandolin"
+    - name: "rolls"
+      pattern: "banjo_forward_roll"
+    - name: "bass_runs"
+      pattern: "walking_bass_fills"
+
+instrumentation:
+  core: ["banjo", "fiddle", "mandolin", "acoustic_guitar", "bass"]
+  optional: ["voice_harmony", "dobro", "resonator_guitar"]
+  avoid: ["drums", "electric_guitar", "synthesizer", "piano"]
+
+ornaments:
+  - type: "scruggs_roll"
+    description: "גלגול שלוש אצבעות של בניו"
+    instruments: ["banjo"]
+  - type: "shuffle_bow"
+    description: "קשתת שאפל על הכינור"
+    instruments: ["fiddle"]
+  - type: "chop_strum"
+    description: "מנדולינה מחוקה — הביט של הבלוגראס"
+    instruments: ["mandolin"]
+
+reference_artists: ["Bill Monroe", "Earl Scruggs", "Alison Krauss", "Béla Fleck"]
+reference_pieces: ["Blue Moon of Kentucky", "Foggy Mountain Breakdown", "Man of Constant Sorrow"]
+
+gm_programs:
+  banjo: 105
+  fiddle: 40
+  mandolin: 25
+  acoustic_guitar: 25
+  bass: 32

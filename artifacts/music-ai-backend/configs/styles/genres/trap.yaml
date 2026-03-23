@@ -1,0 +1,51 @@
+id: trap
+display_name: "טראפ"
+era: "2000s-present"
+region: "Atlanta / Southern USA"
+parent_genre: "hip_hop"
+
+harmony:
+  scale_type: "minor"
+  characteristic_intervals: ["b3", "b7", "b2", "b6"]
+  typical_progressions:
+    - ["i", "bVII", "bVI", "bVII"]
+    - ["i", "bII", "i", "bVII"]
+    - ["i7", "iv7", "bVII7", "i7"]
+  cadences: ["loop_vamp", "no_resolution"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [130, 180]
+  feel: "half_time_trap"
+  characteristic_patterns:
+    - name: "hi_hat_roll"
+      pattern: "rapid_triplet_hi_hats"
+    - name: "808_kick"
+      pattern: "k...k.k....."
+    - name: "snare_2_4"
+      pattern: "...s.....s.."
+
+instrumentation:
+  core: ["808_bass", "drum_machine", "synthesizer", "voice"]
+  optional: ["piano", "strings_sample", "choir_sample", "guitar_sample"]
+  avoid: ["acoustic_drums", "live_bass", "acoustic_guitar_prominent"]
+
+ornaments:
+  - type: "808_slide"
+    description: "גלישת 808 — בס שמשתנה בטון"
+    instruments: ["808_bass"]
+  - type: "hi_hat_triplet"
+    description: "שלישיות טורבו על ה-hi-hat"
+    instruments: ["drum_machine"]
+  - type: "adlib"
+    description: "שאקות והערות ספונטניות ברקע"
+    instruments: ["voice"]
+
+reference_artists: ["Young Jeezy", "Gucci Mane", "T.I.", "Future", "Travis Scott"]
+reference_pieces: ["Mask Off", "SICKO MODE", "Jumpman", "Bad and Boujee"]
+
+gm_programs:
+  bass: 38
+  synthesizer: 81
+  piano: 0
+  strings: 49

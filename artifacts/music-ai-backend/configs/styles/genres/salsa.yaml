@@ -1,0 +1,55 @@
+id: salsa
+display_name: "סלסה"
+era: "1960s-present"
+region: "New York / Puerto Rico / Colombia"
+parent_genre: "latin_caribbean"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["b7", "b3", "P5"]
+  typical_progressions:
+    - ["ii7", "V7", "Imaj7", "VI7"]
+    - ["i", "bVII7", "bVI7", "V7"]
+    - ["I", "IV", "V7", "I"]
+  cadences: ["authentic", "montuno_loop"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [160, 220]
+  feel: "son_clave_2-3"
+  characteristic_patterns:
+    - name: "clave_2_3"
+      pattern: "x.x...x.x.x..."
+    - name: "clave_3_2"
+      pattern: "x.x.x...x.x..."
+    - name: "montuno"
+      pattern: "offbeat_piano_ostinato"
+    - name: "tumbao"
+      pattern: "syncopated_bass_line"
+
+instrumentation:
+  core: ["piano", "bass", "conga", "bongo", "timbales", "trumpet", "trombone"]
+  optional: ["voice", "violin", "flute", "guitar", "cowbell", "claves"]
+  avoid: ["synthesizer_lead", "electric_guitar_distorted"]
+
+ornaments:
+  - type: "montuno_vamp"
+    description: "הפסנתרן מנגן פרזה חוזרת קצרה"
+    instruments: ["piano"]
+  - type: "coro_pregon"
+    description: "שאלה ותשובה בין סולן ומקהלה"
+    instruments: ["voice", "choir"]
+  - type: "mambo_section"
+    description: "שבירת הריתמוס בחלק הנשיפה"
+
+reference_artists: ["Celia Cruz", "Rubén Blades", "Willie Colón", "Marc Anthony"]
+reference_pieces: ["Quimbara", "Pedro Navaja", "El Todopoderoso", "Vivir Mi Vida"]
+
+gm_programs:
+  piano: 0
+  bass: 32
+  trumpet: 56
+  trombone: 57
+  flute: 73
+  violin: 40

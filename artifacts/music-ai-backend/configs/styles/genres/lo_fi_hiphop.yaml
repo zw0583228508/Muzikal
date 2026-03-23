@@ -1,0 +1,52 @@
+id: lo_fi_hiphop
+display_name: "לו-פי היפ הופ"
+era: "2010s-present"
+region: "Internet / Global"
+parent_genre: "electronic"
+
+harmony:
+  scale_type: "minor"
+  characteristic_intervals: ["b3", "b7", "b6", "M9"]
+  typical_progressions:
+    - ["i7", "bVII7", "bVI7", "bVII7"]
+    - ["i7", "iv7", "bVIImaj7", "V7"]
+    - ["ii7b5", "V7", "i7", "bVII7"]
+  cadences: ["unresolved_loop", "jazz_vamp"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [65, 95]
+  feel: "laid_back_boom_bap"
+  characteristic_patterns:
+    - name: "lazy_kick"
+      pattern: "slightly_behind_beat"
+    - name: "vinyl_crackle"
+      pattern: "continuous_texture"
+    - name: "chop_sample"
+      pattern: "chopped_jazz_loop"
+
+instrumentation:
+  core: ["drum_machine", "bass_synth", "piano_sample", "vinyl_texture"]
+  optional: ["rhodes", "guitar_sample", "strings_sample", "flute_sample"]
+  avoid: ["heavy_distortion", "harsh_synthesis", "full_drums"]
+
+ornaments:
+  - type: "vinyl_crackle"
+    description: "רעש ויניל — הנוסטלגיה של הלו-פי"
+    instruments: ["texture"]
+  - type: "tape_saturation"
+    description: "חימום צליל קלטת"
+    instruments: ["mix"]
+  - type: "chord_chop"
+    description: "חיתוך אקורד ג'אז לרצף"
+    instruments: ["piano", "rhodes"]
+
+reference_artists: ["j^p^n", "Nujabes", "J Dilla", "Knxwledge"]
+reference_pieces: ["Feather", "Counting Stars", "Heartbroken", "Luv(sic)"]
+
+gm_programs:
+  piano: 4
+  bass: 33
+  strings: 48
+  flute: 73

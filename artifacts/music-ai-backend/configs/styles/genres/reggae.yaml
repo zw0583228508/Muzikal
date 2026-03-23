@@ -1,0 +1,49 @@
+id: reggae
+display_name: "רגאי"
+era: "1968-present"
+region: "Jamaica / Kingston"
+parent_genre: "caribbean"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["b7", "P5", "P4"]
+  typical_progressions:
+    - ["I", "IV", "I", "V"]
+    - ["i", "bVII", "bVI", "bVII"]
+    - ["I", "V", "vi", "IV"]
+  cadences: ["authentic", "unresolved_loop"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [60, 100]
+  feel: "one_drop"
+  characteristic_patterns:
+    - name: "one_drop"
+      pattern: "..x...x."
+    - name: "skank_guitar"
+      pattern: ".x.x.x.x"
+    - name: "bubble_keyboard"
+      pattern: "offbeat_chord_stabs"
+
+instrumentation:
+  core: ["electric_guitar", "bass", "drums", "keyboard"]
+  optional: ["horns", "voice", "melodica", "percussion"]
+  avoid: ["heavy_distortion", "classical_strings"]
+
+ornaments:
+  - type: "skank"
+    description: "אקורד קצר בין הפעמות — הגיטרה של הרגאי"
+    instruments: ["electric_guitar", "keyboard"]
+  - type: "bass_emphasis"
+    description: "בס עמוק ומוביל"
+    instruments: ["bass"]
+
+reference_artists: ["Bob Marley", "Peter Tosh", "Burning Spear", "Toots and the Maytals"]
+reference_pieces: ["No Woman No Cry", "Redemption Song", "Pressure Drop", "The Harder They Come"]
+
+gm_programs:
+  electric_guitar: 26
+  bass: 33
+  keyboard: 4
+  organ: 17
+  trumpet: 56

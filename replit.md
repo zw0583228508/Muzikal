@@ -431,9 +431,46 @@ All tests passing. Test breakdown by major feature:
 - E2E endpoints: regen, cache, jobs, export — 100+ tests
 - Audio core: feature_cache, ingestion — 30+ tests
 
+## WaveSurfer.js + MIDI Player + 50 Genres ✅
+
+### T001: WaveSurfer.js Interactive Waveform Player
+- **New file**: `artifacts/music-daw/src/components/waveform-player.tsx`
+- WaveSurfer.js v7 — peaks mode (pre-computed waveformData) + full audio mode (audioUrl)
+- Audio streamed from `/api/projects/:id/audio` (HTTP range requests)
+- Controls: Play/Pause, Skip Back, Zoom In/Out (10x–200x), Volume slider
+- Keyboard: Space=play/pause, ←/→=seek 5s
+- Dark theme, RTL-safe, loading/error states
+- Replaced legacy `WaveformVisualizer` (static bar chart) in project-studio.tsx
+
+### T002: Soundfont / MIDI Playback Engine
+- **New file**: `artifacts/music-daw/src/components/midi-player.tsx`
+- `soundfont-player` + Web Audio API — loads GM soundfonts from CDN per instrument
+- Packages: `wavesurfer.js`, `soundfont-player`, `tone`
+- GM Program Map: 50+ instrument mappings (piano, strings, brass, woodwinds, oud, ney, darbuka...)
+- Per-track: Mute, Solo, Volume slider
+- Master volume + progress bar + Play/Pause/Stop transport
+- Integrated into Arrange tab of project-studio.tsx as "MIDI Preview" panel
+
+### T003: 50 Genre YAML Database (11 → 50)
+39 new genre files added:
+- **African**: ethiopian_tizita, gnawa
+- **Latin**: cumbia, salsa, reggaeton, mariachi, son_cubano
+- **Middle East/Med**: turkish_makam, persian_classical, arabic_pop, greek_laiko, armenian_folk
+- **Jewish/E.Europe**: ashkenazi_folk, mizrahi_pop, piyyut, romani_swing, bulgarian_folk, hungarian_csardas
+- **Caribbean**: reggae, dancehall, ska, calypso
+- **American Roots**: blues_delta, gospel, country, bluegrass, zydeco, new_orleans_jazz
+- **Electronic**: ambient_drone, lo_fi_hiphop, dub_techno, drum_and_bass
+- **Classical**: baroque, classical_era, romantic, impressionist
+- **Contemporary**: neo_soul, trap, indie_folk
+- All 50 files validated (id, display_name, harmony, rhythm, instrumentation, gm_programs)
+
+### Final Test Counts: 801 passing, 10 skipped
+- Parametrized genre tests auto-discovered all 50 YAML files
+- +390 new tests from genre discovery (≈10 per genre file)
+- All existing 411 tests still green
+
 ## Remaining Features (Future)
 
-- WaveSurfer.js waveform visualisation (currently custom WaveformVisualizer)
-- FluidSynth/soundfont rendering (higher quality audio)
-- 50+ additional genres (per spec section 4.2)
-- Soundfont (SF2) per instrument for culturally-authentic playback
+- FluidSynth/soundfont rendering server-side (higher quality audio export)
+- 100+ additional genres
+- AI-generated soundfont samples per cultural instrument

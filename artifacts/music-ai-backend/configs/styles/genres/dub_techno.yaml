@@ -1,0 +1,53 @@
+id: dub_techno
+display_name: "דאב-טקנו"
+era: "1990s-present"
+region: "Berlin / Detroit / Global"
+parent_genre: "electronic"
+
+harmony:
+  scale_type: "minor"
+  characteristic_intervals: ["b3", "b7", "P4"]
+  typical_progressions:
+    - ["i", "bVII", "i", "bVII"]
+    - ["i7", "iv7", "i7", "bVII7"]
+  cadences: ["trance_repetition", "no_resolution"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [120, 138]
+  feel: "four_on_floor"
+  characteristic_patterns:
+    - name: "four_on_floor"
+      pattern: "k.k.k.k.k.k.k.k."
+    - name: "off_beat_hat"
+      pattern: ".x.x.x.x.x.x.x."
+    - name: "echo_snare"
+      pattern: "...s.......s...."
+
+instrumentation:
+  core: ["kick_drum", "bass_synth", "delay_pad", "chord_stab"]
+  optional: ["strings_pad", "arp_synth", "dub_bass", "vocal_fragment"]
+  avoid: ["acoustic_instruments", "full_band"]
+
+ornaments:
+  - type: "dub_delay"
+    description: "הד מתמשך — לב הדאב טקנו"
+    instruments: ["synthesizer", "pad"]
+  - type: "reverb_wash"
+    description: "שטיפת רברב על כל הצליל"
+    instruments: ["mix"]
+  - type: "filter_sweep"
+    description: "מסנן עולה ויורד"
+    instruments: ["synthesizer_pad"]
+  - type: "sub_bass_pulse"
+    description: "דופק בס-תת המורגש בגוף"
+    instruments: ["bass_synth"]
+
+reference_artists: ["Basic Channel", "Deepchord", "Rod Modell", "Rhythm & Sound"]
+reference_pieces: ["Quadrant Dub", "Phylyps Trak", "Elevation", "Mango Drive"]
+
+gm_programs:
+  bass: 38
+  pad: 88
+  synthesizer: 81
+  strings: 48

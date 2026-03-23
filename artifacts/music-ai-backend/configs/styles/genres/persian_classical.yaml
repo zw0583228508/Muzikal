@@ -1,0 +1,46 @@
+id: persian_classical
+display_name: "מוזיקה קלאסית פרסית"
+era: "Qajar era-present"
+region: "Iran / Persia"
+parent_genre: "middle_eastern"
+
+harmony:
+  scale_type: "dastgah_shur"
+  characteristic_intervals: ["neutral2", "b3", "neutral6", "b7"]
+  typical_progressions:
+    - ["i", "bII", "i", "V"]
+    - ["i", "bVII", "i", "bII"]
+  cadences: ["shur_forud", "mahour_karar"]
+
+rhythm:
+  time_signature: "6/8"
+  bpm_range: [50, 140]
+  feel: "flexible_avaz"
+  characteristic_patterns:
+    - name: "avaz_rhythmfree"
+      pattern: "free_meter_improvisation"
+    - name: "zarbi_chaharmezrab"
+      pattern: "rapid_plucked_ostinato"
+
+instrumentation:
+  core: ["tar", "setar", "santur", "ney", "tombak"]
+  optional: ["violin", "voice", "kamancheh"]
+  avoid: ["electric_guitar", "piano", "drums_western"]
+
+ornaments:
+  - type: "tahrir"
+    description: "ביצוע קולי של ויברטו ורצינוף"
+    instruments: ["voice"]
+  - type: "forud"
+    description: "ירידה טקסית אל הטוניקה"
+  - type: "gusheh"
+    description: "יחידה מלודית עצמאית בתוך הדסטגאה"
+
+reference_artists: ["Mohammad Reza Shajarian", "Ali Akbar Shahnazi", "Dariush Talai"]
+reference_pieces: ["Homayoun Improvisation", "Chaharmezrab Segah", "Shur Avaz"]
+
+gm_programs:
+  santur: 15
+  ney: 75
+  violin: 40
+  bass: 43

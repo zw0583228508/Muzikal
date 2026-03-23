@@ -1,0 +1,49 @@
+id: calypso
+display_name: "קאליפסו"
+era: "1900s-1960s"
+region: "Trinidad and Tobago"
+parent_genre: "caribbean"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M3", "P5", "b7", "M9"]
+  typical_progressions:
+    - ["I", "IV", "V7", "I"]
+    - ["I", "vi", "IV", "V"]
+    - ["I", "ii", "V7", "I"]
+  cadences: ["authentic", "half"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [120, 160]
+  feel: "calypso_habanera"
+  characteristic_patterns:
+    - name: "calypso_pattern"
+      pattern: "x..x.x..x.x..."
+    - name: "steel_pan_groove"
+      pattern: "offbeat_panyard"
+    - name: "iron_clave"
+      pattern: "x...x.x...x.x."
+
+instrumentation:
+  core: ["steel_pan", "bass", "guitar", "percussion"]
+  optional: ["brass", "piano", "voice", "flute"]
+  avoid: ["synthesizer", "heavy_distortion"]
+
+ornaments:
+  - type: "pan_roll"
+    description: "גלגול פן-סטיל מהיר"
+    instruments: ["steel_pan"]
+  - type: "verbal_wit"
+    description: "מילים עוקצניות ושנונות"
+    instruments: ["voice"]
+
+reference_artists: ["Lord Kitchener", "Harry Belafonte", "Mighty Sparrow", "Lord Melody"]
+reference_pieces: ["Day-O (Banana Boat)", "Hot Hot Hot", "Jean and Dinah", "Matilda"]
+
+gm_programs:
+  steel_pan: 114
+  bass: 32
+  guitar: 25
+  trumpet: 56
+  flute: 73

@@ -1,0 +1,49 @@
+id: cumbia
+display_name: "קומביה"
+era: "1940s-present"
+region: "Colombia / Caribbean Coast"
+parent_genre: "latin_caribbean"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M3", "P5", "b7"]
+  typical_progressions:
+    - ["I", "IV", "V", "I"]
+    - ["I", "V7", "I", "IV"]
+    - ["i", "bVII", "bVI", "V"]
+  cadences: ["authentic", "half"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [95, 130]
+  feel: "cumbia_clave"
+  characteristic_patterns:
+    - name: "cumbia_clave"
+      pattern: "x..x.x..x.x."
+    - name: "tambora_pattern"
+      pattern: "x.x..x.x..x."
+    - name: "maracas_ostinato"
+      pattern: "xxxxxxxxxxxxxxxx"
+
+instrumentation:
+  core: ["accordion", "bass", "caja_drum", "guacharaca"]
+  optional: ["brass", "piano", "maracas", "electric_guitar", "voice"]
+  avoid: ["heavy_distortion", "orchestral_strings"]
+
+ornaments:
+  - type: "accordion_lick"
+    description: "פרזה מאולתרת על האקורדיון"
+    instruments: ["accordion"]
+  - type: "tambora_roll"
+    description: "גלגול תוף קצר"
+    instruments: ["caja_drum"]
+
+reference_artists: ["Carlos Vives", "Totó la Momposina", "Lisandro Meza", "Andrés Landero"]
+reference_pieces: ["La Cumbia Colombiana", "La Piragua", "El Pescador", "La Boquillera"]
+
+gm_programs:
+  accordion: 21
+  bass: 32
+  trumpet: 56
+  piano: 0
+  maracas: 70

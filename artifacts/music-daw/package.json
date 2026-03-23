@@ -76,5 +76,10 @@
     "vite": "catalog:",
     "wouter": "^3.3.5",
     "zod": "catalog:"
+  },
+  "dependencies": {
+    "soundfont-player": "^0.12.0",
+    "tone": "^15.1.22",
+    "wavesurfer.js": "^7.12.4"
   }
 }

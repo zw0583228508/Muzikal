@@ -1,0 +1,50 @@
+id: ska
+display_name: "סקא"
+era: "1960s-present"
+region: "Jamaica / UK"
+parent_genre: "caribbean"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M3", "P5", "b7"]
+  typical_progressions:
+    - ["I", "IV", "V7", "I"]
+    - ["I", "vi", "IV", "V"]
+    - ["I", "bVII", "IV", "I"]
+  cadences: ["authentic", "half"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [150, 200]
+  feel: "upstroke_offbeat"
+  characteristic_patterns:
+    - name: "ska_upstroke"
+      pattern: ".x.x.x.x"
+    - name: "walking_bass_ska"
+      pattern: "busy_walking_line"
+    - name: "horn_stabs"
+      pattern: "offbeat_staccato"
+
+instrumentation:
+  core: ["guitar", "bass", "drums", "horn_section"]
+  optional: ["piano", "organ", "trombone", "voice", "trumpet"]
+  avoid: ["synthesizer_heavy", "electric_guitar_distorted"]
+
+ornaments:
+  - type: "upstroke_chop"
+    description: "גיטרה בסטראם עלייה — הלב של הסקא"
+    instruments: ["guitar"]
+  - type: "horn_crack"
+    description: "חצוצרה וסקסופון בסטאקאטו חד"
+    instruments: ["trumpet", "saxophone"]
+
+reference_artists: ["The Skatalites", "Toots and the Maytals", "Specials", "Madness"]
+reference_pieces: ["Guns of Navarone", "Pressure Drop", "A Message to You Rudy", "Our House"]
+
+gm_programs:
+  guitar: 26
+  bass: 32
+  trumpet: 56
+  saxophone: 65
+  piano: 0
+  organ: 17

@@ -1,0 +1,52 @@
+id: mizrahi_pop
+display_name: "פופ מזרחי"
+era: "1970s-present"
+region: "Israel / Middle East"
+parent_genre: "israeli_popular"
+
+harmony:
+  scale_type: "freygish"
+  characteristic_intervals: ["b2", "M3", "b6", "b7"]
+  typical_progressions:
+    - ["i", "bII", "bVII", "i"]
+    - ["i", "V7", "i", "bII"]
+    - ["i", "bVII", "bVI", "V7"]
+    - ["i", "iv", "V7", "i"]
+  cadences: ["phrygian_modern", "pop_authentic"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [80, 140]
+  feel: "darbuka_groove"
+  characteristic_patterns:
+    - name: "baladi"
+      pattern: "D.T.D.T.T."
+    - name: "pop_darbuka"
+      pattern: "D..T.D.T."
+    - name: "maqsum"
+      pattern: "D..T..D.T."
+
+instrumentation:
+  core: ["oud", "darbuka", "bass", "keyboards", "voice"]
+  optional: ["violin", "accordion", "riq", "kanun", "electric_guitar"]
+  avoid: ["tuba", "classical_winds"]
+
+ornaments:
+  - type: "melismatic_vocal"
+    description: "קישוטי קול מזרחיים — זלזאל"
+    instruments: ["voice"]
+  - type: "oud_taksim"
+    description: "הקדמה אינסטרומנטלית חופשית על העוד"
+    instruments: ["oud"]
+
+reference_artists: ["Zohar Argov", "Moshe Peretz", "Sarit Hadad", "Eyal Golan"]
+reference_pieces: ["הפרח בגני", "אהבה בלי תנאי", "ברקת", "יש בי אהבה"]
+
+gm_programs:
+  oud: 105
+  darbuka: 116
+  violin: 40
+  bass: 32
+  piano: 0
+  accordion: 21

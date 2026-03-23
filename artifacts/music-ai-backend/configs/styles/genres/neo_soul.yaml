@@ -1,0 +1,53 @@
+id: neo_soul
+display_name: "ניאו-סול"
+era: "1990s-present"
+region: "USA / Philadelphia / Los Angeles"
+parent_genre: "contemporary_soul"
+
+harmony:
+  scale_type: "minor"
+  characteristic_intervals: ["b3", "b7", "M9", "M11", "b13"]
+  typical_progressions:
+    - ["i7", "bVII9", "bVI9", "bVII9"]
+    - ["i9", "iv9", "bVII9", "V7sus4"]
+    - ["i7", "bIII7", "bVI7", "bVII7"]
+  cadences: ["unresolved_vamp", "deceptive_jazz"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [65, 105]
+  feel: "live_groove_pocket"
+  characteristic_patterns:
+    - name: "lazy_backbeat"
+      pattern: "slightly_behind_pocket"
+    - name: "rhodes_vamp"
+      pattern: "chord_stabs_syncopated"
+    - name: "ghost_notes"
+      pattern: "drum_ghost_16ths"
+
+instrumentation:
+  core: ["rhodes", "bass", "drums", "voice"]
+  optional: ["acoustic_guitar", "strings", "trumpet", "saxophone", "choir"]
+  avoid: ["synthesizer_heavy", "auto_tune_heavy", "trap_drums"]
+
+ornaments:
+  - type: "melismatic_run"
+    description: "ריצה קולית בין תווים רבים"
+    instruments: ["voice"]
+  - type: "rhodes_bend"
+    description: "כפיפת תו על ה-Rhodes"
+    instruments: ["rhodes"]
+  - type: "string_swell"
+    description: "כניסה הדרגתית של מיתרים"
+    instruments: ["strings"]
+
+reference_artists: ["D'Angelo", "Erykah Badu", "Lauryn Hill", "Maxwell", "Jill Scott"]
+reference_pieces: ["Untitled (How Does It Feel)", "On & On", "Whenever You Call", "A Woman's Worth"]
+
+gm_programs:
+  piano: 4
+  bass: 33
+  saxophone: 66
+  trumpet: 56
+  strings: 48

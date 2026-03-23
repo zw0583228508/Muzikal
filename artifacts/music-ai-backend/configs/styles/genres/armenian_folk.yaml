@@ -1,0 +1,49 @@
+id: armenian_folk
+display_name: "פולקלור ארמני"
+era: "Medieval-present"
+region: "Armenia / Anatolia / Diaspora"
+parent_genre: "caucasian"
+
+harmony:
+  scale_type: "armenian_modes"
+  characteristic_intervals: ["neutral2", "b3", "tritone", "b6"]
+  typical_progressions:
+    - ["i", "bVII", "bVI", "V"]
+    - ["i", "bII", "i", "V7"]
+    - ["i", "iv", "bVII", "i"]
+  cadences: ["phrygian", "armenian_karar"]
+
+rhythm:
+  time_signature: "7/8"
+  bpm_range: [80, 160]
+  feel: "aksak_armenian"
+  characteristic_patterns:
+    - name: "kochari_beat"
+      pattern: "2+2+3"
+    - name: "shalakho"
+      pattern: "3+2+2"
+    - name: "bar"
+      pattern: "3+3+2"
+
+instrumentation:
+  core: ["duduk", "zurna", "dhol", "kamancha", "saz"]
+  optional: ["oud", "voice", "kanun", "accordion"]
+  avoid: ["electric_guitar", "synthesizer"]
+
+ornaments:
+  - type: "duduk_breath"
+    description: "נשימה מעגלית על הדודוק — צליל רציף"
+    instruments: ["duduk"]
+  - type: "tremolo_kamancha"
+    description: "טרמולו מהיר על הקמאנצ'ה"
+    instruments: ["kamancha"]
+
+reference_artists: ["Djivan Gasparyan", "Sayat-Nova", "Gomidas Vartabed", "Aram Khachaturian"]
+reference_pieces: ["Sari Gyalin", "Groung", "Dle Yaman", "Kele Lao"]
+
+gm_programs:
+  duduk: 68
+  saz: 105
+  kamancha: 40
+  bass: 43
+  dhol: 116

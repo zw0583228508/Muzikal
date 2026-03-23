@@ -1,0 +1,47 @@
+id: ashkenazi_folk
+display_name: "פולקלור אשכנזי"
+era: "18th-20th century"
+region: "Eastern Europe / Jewish Pale of Settlement"
+parent_genre: "jewish_folk"
+
+harmony:
+  scale_type: "dorian"
+  characteristic_intervals: ["b3", "M6", "b7"]
+  typical_progressions:
+    - ["i", "bVII", "bVI", "V7"]
+    - ["i", "iv", "bVII", "i"]
+    - ["i", "bII", "V", "i"]
+  cadences: ["phrygian", "dorian_authentic"]
+
+rhythm:
+  time_signature: "3/8"
+  bpm_range: [90, 160]
+  feel: "waltz_folk"
+  characteristic_patterns:
+    - name: "hora"
+      pattern: "1+2+3+"
+    - name: "bulgar_3_8"
+      pattern: "quick_quick_slow"
+
+instrumentation:
+  core: ["violin", "tsimbl", "accordion", "bass"]
+  optional: ["clarinet", "flute", "piano", "voice"]
+  avoid: ["electric_guitar", "drums_kit"]
+
+ornaments:
+  - type: "nign_vocalise"
+    description: "ניגון ללא מילים — תנועה מלודית רוחנית"
+    instruments: ["voice"]
+  - type: "zets"
+    description: "דגש פתאומי על התו"
+    instruments: ["violin", "accordion"]
+
+reference_artists: ["Abe Schwartz", "Mishka Ziganoff", "Andy Statman", "Itzhak Perlman"]
+reference_pieces: ["Roumania Roumania", "Bay Mir Bistu Shein", "Papirosn", "Tumbalalaika"]
+
+gm_programs:
+  violin: 40
+  accordion: 21
+  bass: 43
+  clarinet: 71
+  flute: 73

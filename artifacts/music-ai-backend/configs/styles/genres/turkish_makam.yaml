@@ -1,0 +1,51 @@
+id: turkish_makam
+display_name: "מקאם תורכי"
+era: "15th century-present"
+region: "Turkey / Ottoman Empire"
+parent_genre: "middle_eastern"
+
+harmony:
+  scale_type: "makam_rast"
+  characteristic_intervals: ["neutral3", "b7", "neutral6"]
+  typical_progressions:
+    - ["I", "bII", "i", "V"]
+    - ["i", "bVII", "bVI", "V"]
+    - ["i", "iv", "bVII", "i"]
+  cadences: ["makam_karar", "tam_karar"]
+
+rhythm:
+  time_signature: "9/8"
+  bpm_range: [70, 160]
+  feel: "aksak_rhythmic_cycle"
+  characteristic_patterns:
+    - name: "devr_hindi"
+      pattern: "2+2+2+3"
+    - name: "curcuna"
+      pattern: "3+2+2+2"
+    - name: "saz_semai"
+      pattern: "6/4_aksak"
+
+instrumentation:
+  core: ["saz", "kanun", "ney", "violin", "darbuka"]
+  optional: ["ud", "accordion", "kemence", "voice"]
+  avoid: ["electric_guitar", "synthesizer", "piano_western"]
+
+ornaments:
+  - type: "taksim"
+    description: "אימפרוביזציה חופשית ללא קצב"
+    instruments: ["saz", "ney", "kanun"]
+  - type: "microtone_ornament"
+    description: "עיטור בין-טוני — רבע-טון ושלושה-שמיניות"
+    instruments: ["ney", "violin", "voice"]
+  - type: "pesrev"
+    description: "מבוא אינסטרומנטלי פורמלי"
+
+reference_artists: ["Tanburi Cemil Bey", "Münir Nurettin Selçuk", "Zeki Müren", "Mercan Dede"]
+reference_pieces: ["Uşşak Saz Semaisi", "Hicaz Longa", "Rast Taksim"]
+
+gm_programs:
+  saz: 105
+  ney: 75
+  kanun: 46
+  violin: 40
+  bass: 43

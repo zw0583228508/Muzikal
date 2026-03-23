@@ -1,0 +1,47 @@
+id: dancehall
+display_name: "דאנסהול"
+era: "1970s-present"
+region: "Jamaica / Kingston"
+parent_genre: "caribbean"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["b7", "P4", "P5"]
+  typical_progressions:
+    - ["I", "V", "vi", "IV"]
+    - ["I", "IV", "I", "V"]
+    - ["i", "bVII", "bVI", "bVII"]
+  cadences: ["loop_vamp", "unresolved"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [65, 100]
+  feel: "digital_riddim"
+  characteristic_patterns:
+    - name: "steppers"
+      pattern: "kick_on_every_beat"
+    - name: "riddim_pattern"
+      pattern: "computerized_offbeat"
+    - name: "buk_buk"
+      pattern: "syncopated_hi_hat"
+
+instrumentation:
+  core: ["drum_machine", "bass_synth", "keyboards", "voice"]
+  optional: ["guitar", "horn_section", "chorus"]
+  avoid: ["acoustic_instruments_only", "classical_strings"]
+
+ornaments:
+  - type: "deejay_toast"
+    description: "ריתמוס דיבור על הבס ריצ'ם"
+    instruments: ["voice"]
+  - type: "digital_bass"
+    description: "בס דיגיטלי עמוק ועוצמתי"
+    instruments: ["bass_synth"]
+
+reference_artists: ["Shabba Ranks", "Beenie Man", "Sizzla", "Vybz Kartel"]
+reference_pieces: ["Mr. Loverman", "Who Am I", "Praise Ye Jah", "Temperature"]
+
+gm_programs:
+  bass: 38
+  keyboard: 4
+  drums: 118

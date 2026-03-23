@@ -115,28 +115,59 @@ export default function ChatAgent({ projectId, onProfileReady, className }: Chat
     if (!sessionId || !profile) return;
     setConfirming(true);
     try {
-      const res = await fetch("/api/agent/confirm", {
+      // שלב א: אישור הפרופיל בסוכן
+      const confirmRes = await fetch("/api/agent/confirm", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sessionId, projectId }),
+        body: JSON.stringify({ session_id: sessionId, project_id: projectId }),
       });
-      const data = await res.json();
-      if (data.confirmed && onProfileReady) {
-        onProfileReady(data.profile);
+      if (!confirmRes.ok) throw new Error(`Confirm HTTP ${confirmRes.status}`);
+      const confirmData = await confirmRes.json();
+
+      if (!confirmData.confirmed) {
+        throw new Error("Profile not confirmed by server");
       }
-      const confirmMsg: Message = {
-        role: "assistant",
-        content: "הפרופיל אושר! שולח לצינור העיבוד...",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, confirmMsg]);
-    } catch {
-      const errMsg: Message = {
-        role: "assistant",
-        content: "שגיאה באישור הפרופיל.",
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errMsg]);
+
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "הפרופיל אושר! מפעיל את מנוע העיבוד...", timestamp: new Date() },
+      ]);
+
+      // שלב ב: הפעלת arrangement עם StyleProfile
+      const arrangeRes = await fetch(`/api/projects/${projectId}/arrangement`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          styleId: (confirmData.profile as Record<string, unknown>)?.genre ?? "pop",
+          styleProfile: confirmData.profile,
+        }),
+      });
+
+      if (arrangeRes.ok) {
+        const arrangeData = await arrangeRes.json();
+        const jobId: string = arrangeData.jobId ?? "—";
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: `העיבוד התחיל! מזהה משרה: ${jobId}. עבור לטאב "עיבוד" לעקוב אחר ההתקדמות.`,
+            timestamp: new Date(),
+          },
+        ]);
+        if (onProfileReady) onProfileReady(confirmData.profile);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "הפרופיל אושר. לחץ על 'עיבוד' להמשך.", timestamp: new Date() },
+        ]);
+        if (onProfileReady) onProfileReady(confirmData.profile);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "שגיאה לא ידועה";
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `שגיאה באישור הפרופיל: ${msg}`, timestamp: new Date() },
+      ]);
     } finally {
       setConfirming(false);
     }

@@ -13,11 +13,13 @@ class AnalyzeRequest(BaseModel):
 class ArrangeRequest(BaseModel):
     job_id: str
     project_id: int
-    style_id: str
+    style_id: str = "pop"
     instruments: Optional[List[str]] = None
     density: float = 0.7
     humanize: bool = True
     tempo_factor: float = 1.0
+    persona_id: Optional[str] = None
+    style_profile: Optional[dict] = None
 
 
 class JobUpdate(BaseModel):

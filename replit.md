@@ -381,10 +381,59 @@ Also added to stylesRouter: GET /api/styles/genres, GET /api/styles/:id/profile
 - LLM calls use `gpt-5-mini` with `max_completion_tokens=2048`
 - Graceful fallback: if no LLM client, uses YAML + heuristic extraction
 
+## Step 7: StyleProfile → Arranger Bridge ✅
+
+### New File: `orchestration/style_profile_adapter.py`
+- **`adapt_profile_to_arranger_args(profile, analysis, persona_id)`** — main entry point
+- **`_derive_style_id(profile)`** — maps genre → STYLES key with GENRE_PARENT_MAP fallback
+- **`_extract_instruments(profile)`** — InstrumentConfig[] → canonical arranger instrument names
+  - INSTRUMENT_NAME_MAP: clarinet→brass, kick→drums, flute→nay, voice_wordless→choir, etc.
+  - Role ordering: MELODY_LEAD → HARMONY → BASS → RHYTHM → COLOR
+  - Fallback: empty profile returns ["drums", "bass", "piano"]
+- **`_derive_density(profile)`** — textureType: sparse→0.35, medium→0.60, layered→0.75, dense→0.90
+- **`_derive_tempo_factor(profile, analysis)`** — detected BPM → target BPM midpoint, clamped 0.5–2.0
+- **`_patch_analysis_with_profile(analysis, profile)`** — injects _profileScaleType, _profileHarmonicTendency, _profileTimeSignature, _profileSwingFactor, _profileGrooveTemplate, _profileOrnamentStyle, _profileChordVocabulary into analysis dict
+
+### Updated: `orchestration/arranger.py`
+- `generate_arrangement()` gains `style_profile: Optional[dict] = None` parameter
+- When provided: injects swing/ornament/time_signature/groove into analysis; appends styleProfileGenre/Era/Region/isFallback to result
+- `generate_drum_pattern()` gains `analysis: Optional[Dict] = None` parameter; reads `_profileTimeSignature` to override time_sig (3/4→3, 6/8→6, 7/8→7)
+
+### Updated: `api/schemas.py`
+- `ArrangeRequest`: added `persona_id: Optional[str]`, `style_profile: Optional[dict]`
+
+### Updated: `api/routes.py`
+- `start_arrangement()`: when `style_profile` present, calls adapter to derive style_id/instruments/density/persona_id
+- `run_arrangement_pipeline()`: added `persona_id`, `style_profile` params; calls adapter on analysis before generate_arrangement
+
+### Updated: `api/agent_routes.py`
+- `confirm_profile()`: when `project_id` provided, auto-dispatches `/python-api/arrange` with `style_profile`; returns `arrangement_job_id`
+
+### Updated: `artifacts/api-server/src/routes/projects.ts`
+- `POST /:id/arrangement`: extracts `styleProfile` from req.body; passes `style_profile` to Python backend
+
+### Updated: `artifacts/music-daw/src/components/chat-agent.tsx`
+- `confirmProfile()`: two-step flow — (1) POST /api/agent/confirm with `session_id`, (2) POST /api/projects/:id/arrangement with `styleProfile`; shows job ID in chat
+
+### Updated: `artifacts/music-daw/src/components/style-profile-card.tsx`
+- isFallback badge text improved: "Fallback — AI data unavailable"
+
+### Tests: `tests/test_style_profile_adapter.py` (55 tests, all passing)
+- TestDeriveStyleId (12 tests), TestExtractInstruments (9), TestDeriveDensity (6), TestDeriveTempoFactor (6), TestPatchAnalysis (6), TestAdaptProfileFull (9), TestInstrumentNameMap (4), TestScaleToHarmonic (3)
+
+## Final Test Counts: 411 passing, 10 skipped
+
+All tests passing. Test breakdown by major feature:
+- Core MIR analysis: rhythm, key, chords, melody, structure — 60+ tests
+- Arranger engine: tracks, personas, sections — 40+ tests
+- Universal Style Engine: conversation_agent, style_enricher, profile_validator, yaml_genres — 90+ tests
+- StyleProfile Adapter (Step 7): 55 tests
+- E2E endpoints: regen, cache, jobs, export — 100+ tests
+- Audio core: feature_cache, ingestion — 30+ tests
+
 ## Remaining Features (Future)
 
 - WaveSurfer.js waveform visualisation (currently custom WaveformVisualizer)
 - FluidSynth/soundfont rendering (higher quality audio)
-- StyleProfile → arranger.py pipeline integration (pass StyleProfile to generate_arrangement)
 - 50+ additional genres (per spec section 4.2)
 - Soundfont (SF2) per instrument for culturally-authentic playback

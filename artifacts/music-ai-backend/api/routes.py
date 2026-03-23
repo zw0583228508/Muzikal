@@ -90,23 +90,48 @@ async def start_analysis(request: AnalyzeRequest, background_tasks: BackgroundTa
 
 @router.post("/arrange")
 async def start_arrangement(request: ArrangeRequest, background_tasks: BackgroundTasks):
-    """Start arrangement generation in background (Celery if available, else in-process)."""
+    """Start arrangement generation in background (Celery if available, else in-process).
+    When style_profile is provided, the adapter translates it to arranger args automatically.
+    """
     from workers.tasks.arrangement import dispatch_arrangement
+
+    style_id = request.style_id
+    instruments = request.instruments
+    density = request.density
+    persona_id = request.persona_id
+
+    # If StyleProfile provided, derive style args from it via adapter
+    if request.style_profile:
+        try:
+            from orchestration.style_profile_adapter import adapt_profile_to_arranger_args
+            placeholder_analysis: dict = {}
+            adapted = adapt_profile_to_arranger_args(
+                request.style_profile, placeholder_analysis, persona_id
+            )
+            style_id = adapted.get("style_id", style_id)
+            instruments = adapted.get("instruments", instruments)
+            density = adapted.get("density", density)
+            persona_id = adapted.get("persona_id", persona_id)
+        except Exception as e:
+            logger.warning(f"StyleProfile adapter error, using defaults: {e}")
+
     celery_task_id = dispatch_arrangement(
-        request.job_id, request.project_id, request.style_id,
-        request.instruments, request.density, request.humanize,
-        request.tempo_factor, getattr(request, "persona_id", None),
+        request.job_id, request.project_id, style_id,
+        instruments, density, request.humanize,
+        request.tempo_factor, persona_id,
     )
     if celery_task_id is None:
         background_tasks.add_task(
             run_arrangement_pipeline,
             request.job_id,
             request.project_id,
-            request.style_id,
-            request.instruments,
-            request.density,
+            style_id,
+            instruments,
+            density,
             request.humanize,
             request.tempo_factor,
+            persona_id,
+            request.style_profile,
         )
     return {"jobId": request.job_id, "status": "queued", "worker": "celery" if celery_task_id else "inprocess"}
 
@@ -158,7 +183,9 @@ def run_analysis_pipeline(job_id: str, project_id: int, audio_file_path: str):
 
 def run_arrangement_pipeline(job_id: str, project_id: int, style_id: str,
                               instruments: Optional[List[str]], density: float,
-                              do_humanize: bool, tempo_factor: float):
+                              do_humanize: bool, tempo_factor: float,
+                              persona_id: Optional[str] = None,
+                              style_profile: Optional[dict] = None):
     """Run arrangement generation in background."""
     from api.database import get_db_connection
     import json
@@ -192,8 +219,20 @@ def run_arrangement_pipeline(job_id: str, project_id: int, style_id: str,
 
         update_job(job_id, "running", 30, "Generating arrangement structure")
 
+        # If StyleProfile provided, re-derive analysis patches via adapter
+        if style_profile:
+            try:
+                from orchestration.style_profile_adapter import adapt_profile_to_arranger_args
+                adapted = adapt_profile_to_arranger_args(style_profile, analysis, persona_id)
+                analysis = adapted["analysis"]
+                if not instruments:
+                    instruments = adapted.get("instruments", instruments)
+            except Exception as adapter_err:
+                logger.warning(f"StyleProfile adapter error in pipeline: {adapter_err}")
+
         arrangement = generate_arrangement(
-            analysis, style_id, instruments, density, do_humanize, tempo_factor
+            analysis, style_id, instruments, density, do_humanize, tempo_factor,
+            persona_id=persona_id, style_profile=style_profile,
         )
 
         update_job(job_id, "running", 80, "Saving arrangement")

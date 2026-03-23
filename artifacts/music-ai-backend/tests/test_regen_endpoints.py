@@ -37,8 +37,13 @@ pytestmark = pytest.mark.skipif(
 def project_with_arrangement():
     """Return a project ID that has an existing arrangement, or skip."""
     r = httpx.get(f"{BASE_URL}/projects", timeout=5)
-    projects = r.json() if r.status_code == 200 else []
-    arranged = [p for p in projects if p.get("status") in ("arranged", "analyzed")]
+    raw = r.json() if r.status_code == 200 else []
+    # Handle both paginated {"projects": [...]} and plain list responses
+    if isinstance(raw, dict):
+        projects = raw.get("projects", [])
+    else:
+        projects = raw if isinstance(raw, list) else []
+    arranged = [p for p in projects if isinstance(p, dict) and p.get("status") in ("arranged", "analyzed")]
     if not arranged:
         pytest.skip("No analysed/arranged project available for regen tests")
     pid = arranged[0]["id"]
@@ -90,8 +95,12 @@ class TestRegenSectionEndpoint:
 
     def test_regen_section_no_arrangement(self):
         r = httpx.get(f"{BASE_URL}/projects", timeout=5)
-        projects = r.json() if r.status_code == 200 else []
-        fresh = [p for p in projects if p.get("status") == "created"]
+        raw = r.json() if r.status_code == 200 else []
+        if isinstance(raw, dict):
+            projects = raw.get("projects", [])
+        else:
+            projects = raw if isinstance(raw, list) else []
+        fresh = [p for p in projects if isinstance(p, dict) and p.get("status") == "created"]
         if not fresh:
             pytest.skip("No fresh project available")
         pid = fresh[0]["id"]

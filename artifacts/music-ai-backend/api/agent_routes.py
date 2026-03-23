@@ -98,12 +98,33 @@ async def confirm_profile(req: ConfirmRequest):
         raise HTTPException(status_code=400, detail="Profile not ready yet; continue conversation")
 
     validation = _validator.validate(agent.profile)
+
+    arrangement_job_id = None
+    if req.project_id:
+        try:
+            import httpx
+            async with httpx.AsyncClient(timeout=10.0) as client:
+                r = await client.post(
+                    "http://localhost:8001/python-api/arrange",
+                    json={
+                        "job_id": f"agent-arrange-{req.session_id[:8]}",
+                        "project_id": int(req.project_id) if req.project_id else 0,
+                        "style_id": agent.profile.get("genre", "pop"),
+                        "style_profile": agent.profile,
+                    },
+                )
+                if r.status_code == 200:
+                    arrangement_job_id = r.json().get("jobId")
+        except Exception as e:
+            logger.warning(f"Could not auto-dispatch arrangement for session {req.session_id}: {e}")
+
     return {
         "confirmed": True,
         "profile": agent.profile,
         "valid": validation.valid,
         "warnings": validation.warnings,
         "errors": validation.errors,
+        "arrangement_job_id": arrangement_job_id,
         "session_id": req.session_id,
         "project_id": req.project_id,
         "message": "Profile confirmed. Send to arrangement pipeline.",

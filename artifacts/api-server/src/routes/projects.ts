@@ -454,13 +454,13 @@ router.post("/:id/regenerate-section", async (req, res) => {
 router.post("/:id/arrangement", async (req, res) => {
   const projectId = parseProjectId(req, res);
   if (projectId === null) return;
-  const { styleId, instruments, density, humanize, tempoFactor, personaId } = req.body;
+  const { styleId, instruments, density, humanize, tempoFactor, personaId, styleProfile } = req.body;
 
   const jobId = `arrangement-${uuidv4()}`;
   await db.insert(jobsTable).values({
     jobId, projectId, type: "arrangement", status: "queued", progress: 0,
     currentStep: "Queued", isMock: MOCK_MODE,
-    inputPayload: { styleId, personaId: personaId ?? null, density, humanize, tempoFactor },
+    inputPayload: { styleId, personaId: personaId ?? null, density, humanize, tempoFactor, hasStyleProfile: !!styleProfile },
   });
   broadcastJobUpdate(jobId, projectId, { status: "queued", progress: 0, currentStep: "Queued", isMock: MOCK_MODE });
 
@@ -479,6 +479,7 @@ router.post("/:id/arrangement", async (req, res) => {
         humanize: humanize ?? true,
         tempo_factor: tempoFactor ?? 1.0,
         persona_id: personaId ?? null,
+        style_profile: styleProfile ?? null,
         pipeline_version: PIPELINE_VERSION,
       });
     } catch (err) {

@@ -170,9 +170,19 @@ def _section_instruments(style_id: str, section_label: str, base_instruments: Li
 # ─── Pattern generators ────────────────────────────────────────────────────────
 
 def generate_drum_pattern(
-    beat_grid: List[float], time_sig: int, style: str, density: float
+    beat_grid: List[float], time_sig: int, style: str, density: float,
+    analysis: Optional[Dict] = None,
 ) -> List[Dict]:
     """Generate drum MIDI notes for a segment of the beat grid."""
+    analysis = analysis or {}
+    profile_ts = analysis.get("_profileTimeSignature", "4/4")
+    if profile_ts == "3/4":
+        time_sig = 3
+    elif profile_ts == "6/8":
+        time_sig = 6
+    elif profile_ts == "7/8":
+        time_sig = 7
+
     notes = []
     KICK = 36; SNARE = 38; CLOSED_HH = 42; OPEN_HH = 46
     CRASH = 49; TOM1 = 50; TOM2 = 47
@@ -357,6 +367,7 @@ def generate_arrangement(
     do_humanize: bool,
     tempo_factor: float,
     persona_id: Optional[str] = None,
+    style_profile: Optional[dict] = None,
 ) -> Dict[str, Any]:
     """Generate full multi-track MIDI arrangement with section-aware profiles.
 
@@ -364,8 +375,26 @@ def generate_arrangement(
         persona_id: Optional arranger persona ID (e.g. 'hasidic-wedding').
                     When provided, persona weights are applied to instrument volumes
                     and persona metadata is embedded in the result.
+        style_profile: Optional StyleProfile dict from ConversationAgent.
+                       When provided, its swing/ornament/time_signature data is
+                       injected into analysis so pattern generators pick it up.
     """
     logger.info(f"Generating arrangement: style={style_id}, density={density}, persona={persona_id}")
+
+    result_extra: Dict[str, Any] = {}
+    if style_profile:
+        analysis = dict(analysis)
+        analysis["_profileSwingFactor"] = style_profile.get("swingFactor", 0.0)
+        analysis["_profileOrnamentStyle"] = style_profile.get("ornamentStyle", "none")
+        analysis["_profileTimeSignature"] = style_profile.get("timeSignature", "4/4")
+        analysis["_profileGrooveTemplate"] = style_profile.get("grooveTemplate", "on_top")
+        result_extra = {
+            "styleProfileGenre": style_profile.get("genre", ""),
+            "styleProfileEra": style_profile.get("era", ""),
+            "styleProfileRegion": style_profile.get("region", ""),
+            "isFallback": style_profile.get("isFallback", False),
+        }
+        logger.info(f"StyleProfile injected: genre={result_extra['styleProfileGenre']}")
 
     style_config = STYLES.get(style_id, STYLES["pop"])
     profile = ARRANGER_PROFILES.get(style_id, {})
@@ -551,6 +580,9 @@ def generate_arrangement(
             "persona_id": persona_id,
         },
     }
+
+    # Merge StyleProfile metadata into result
+    result.update(result_extra)
 
     # Apply persona overlays (volume weights, metadata embedding)
     if persona_id:

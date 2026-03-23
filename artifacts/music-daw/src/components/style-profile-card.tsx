@@ -118,8 +118,8 @@ export default function StyleProfileCard({
               {String(p.genre ?? "סגנון מוזיקלי")}
             </h3>
             {p.isFallback && (
-              <Badge variant="outline" className="text-amber-400 border-amber-500/40 text-[10px]">
-                fallback
+              <Badge variant="outline" className="border-amber-500 text-amber-600 dark:text-amber-400 text-[10px]">
+                Fallback — AI data unavailable
               </Badge>
             )}
           </div>

@@ -10,13 +10,14 @@ import logging
 import threading
 from typing import Optional, List
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File
-from fastapi.responses import JSONResponse
+from fastapi import APIRouter, BackgroundTasks, HTTPException, UploadFile, File, Query
+from fastapi.responses import JSONResponse, FileResponse, RedirectResponse
 
 from api.schemas import AnalyzeRequest, ArrangeRequest, ExportRequest, RenderRequest
 from api.database import update_job, update_project_status, save_analysis_result, save_arrangement
 from orchestration.arranger import generate_arrangement
 from audio.style_loader import load_styles, get_style
+from model_registry import get_all_models, get_model_by_task
 
 EXPORTS_BASE_DIR = os.environ.get("EXPORTS_DIR", "/tmp/musicai_exports")
 RENDERS_BASE_DIR = os.environ.get("RENDERS_DIR", "/tmp/musicai_renders")
@@ -52,6 +53,56 @@ def _save_files_to_db(project_id: int, job_id: str, results: dict):
         logger.warning(f"Could not save file records: {e}")
     finally:
         conn.close()
+
+
+@router.get("/models")
+async def get_models_endpoint():
+    """Return the full ML model registry used by the analysis pipeline."""
+    return get_all_models()
+
+
+@router.get("/models/{task}")
+async def get_model_by_task_endpoint(task: str):
+    """Return the active model for a specific pipeline task (rhythm, key, chords, melody, etc.)."""
+    model = get_model_by_task(task)
+    if model is None:
+        raise HTTPException(status_code=404, detail=f"No active model found for task: {task}")
+    return model
+
+
+@router.get("/storage/serve")
+async def serve_storage_file(token: str = Query(...)):
+    """
+    Serve a LocalStorage file identified by a signed JWT token.
+    Validates: signature, expiry. Streams the file from LOCAL_STORAGE_PATH.
+    """
+    import jwt
+    import time as _time
+    from pathlib import Path
+
+    secret = os.environ.get("STORAGE_SECRET", "dev-local-storage-secret")
+    try:
+        payload = jwt.decode(token, secret, algorithms=["HS256"])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=403, detail="Download token has expired")
+    except jwt.InvalidTokenError as e:
+        raise HTTPException(status_code=403, detail=f"Invalid download token: {e}")
+
+    key: str = payload.get("key", "")
+    if not key:
+        raise HTTPException(status_code=400, detail="Token missing key claim")
+
+    base = Path(os.environ.get("LOCAL_STORAGE_PATH", "/tmp/muzikal"))
+    file_path = (base / key).resolve()
+
+    # Safety: ensure path stays within base directory
+    if not str(file_path).startswith(str(base.resolve())):
+        raise HTTPException(status_code=403, detail="Path traversal detected")
+    if not file_path.exists():
+        raise HTTPException(status_code=404, detail="File not found on storage")
+
+    logger.info("Serving signed storage file: %s", key)
+    return FileResponse(path=str(file_path), filename=file_path.name)
 
 
 @router.get("/styles")

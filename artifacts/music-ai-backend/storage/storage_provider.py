@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -34,6 +35,14 @@ class StorageProvider(ABC):
     @abstractmethod
     def get_url(self, key: str, expires: int = 3600) -> str:
         """Return a URL (presigned or direct) for the given key."""
+
+    @abstractmethod
+    def generate_presigned_url(self, key: str, expires: int = 3600) -> str:
+        """
+        Return a short-lived, authenticated download URL for the given key.
+        - LocalStorage: HMAC-signed JWT embedded in /api/storage/serve query string.
+        - S3Storage: boto3 generate_presigned_url with ExpiresIn.
+        """
 
     @abstractmethod
     def exists(self, key: str) -> bool:
@@ -67,6 +76,22 @@ class LocalStorage(StorageProvider):
 
     def get_url(self, key: str, expires: int = 3600) -> str:
         return f"/api/storage/{key}"
+
+    def generate_presigned_url(self, key: str, expires: int = 3600) -> str:
+        """
+        Generate a short-lived signed URL using PyJWT.
+        The URL encodes the key and expiry; the /api/storage/serve endpoint validates it.
+        """
+        try:
+            import jwt  # PyJWT
+            secret = os.environ.get("STORAGE_SECRET", "dev-local-storage-secret")
+            payload = {"key": key, "exp": int(time.time()) + expires, "iat": int(time.time())}
+            token = jwt.encode(payload, secret, algorithm="HS256")
+            logger.debug("LocalStorage.generate_presigned_url: key=%s expires=%ds", key, expires)
+            return f"/api/storage/serve?token={token}"
+        except ImportError:
+            logger.warning("PyJWT not available; falling back to plain storage URL")
+            return self.get_url(key, expires)
 
     def exists(self, key: str) -> bool:
         return self._path(key).exists()
@@ -115,6 +140,16 @@ class S3Storage(StorageProvider):
             Params={"Bucket": self.bucket, "Key": key},
             ExpiresIn=expires,
         )
+
+    def generate_presigned_url(self, key: str, expires: int = 3600) -> str:
+        """Use boto3 to generate an S3 presigned URL with the given expiry."""
+        url = self.client.generate_presigned_url(
+            "get_object",
+            Params={"Bucket": self.bucket, "Key": key},
+            ExpiresIn=expires,
+        )
+        logger.debug("S3Storage.generate_presigned_url: key=%s expires=%ds", key, expires)
+        return url
 
     def exists(self, key: str) -> bool:
         try:

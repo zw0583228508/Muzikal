@@ -323,6 +323,29 @@ export function AnalysisInspector({ analysis }: AnalysisInspectorProps) {
         </div>
       )}
 
+      {/* ── Model Versions ── */}
+      {analysis?.modelVersions && Object.keys(analysis.modelVersions).length > 0 && (
+        <div className="daw-panel p-4 space-y-2">
+          <div className="flex items-center gap-2 mb-1">
+            <Clock className="w-3.5 h-3.5 text-primary" />
+            <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("גרסאות מודלים")}</h4>
+          </div>
+          <div className="grid grid-cols-1 gap-1" dir="ltr">
+            {Object.entries(analysis.modelVersions as Record<string, string>).map(([task, version]) => (
+              <div key={task} className="flex items-center justify-between text-[10px]">
+                <span className="text-muted-foreground capitalize">{task}</span>
+                <span className="font-mono text-white/60 bg-white/5 px-1.5 py-0.5 rounded text-[9px]">{version}</span>
+              </div>
+            ))}
+          </div>
+          {typeof analysis?.cacheHitCount === "number" && (
+            <div className="text-[10px] text-muted-foreground/50 pt-1" dir="ltr">
+              cache hits: {analysis.cacheHitCount}/{Object.keys(analysis.modelVersions).length} steps
+            </div>
+          )}
+        </div>
+      )}
+
       {/* ── Pipeline metadata ── */}
       {analysis?.pipelineVersion && (
         <div className="text-[10px] text-muted-foreground/40 text-center" dir="ltr">

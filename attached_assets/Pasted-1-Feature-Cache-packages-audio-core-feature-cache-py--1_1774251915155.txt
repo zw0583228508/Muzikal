@@ -1,0 +1,87 @@
+1. חבר את Feature Cache לכל מודול (עדיפות גבוהה)
+packages/audio_core/feature_cache.py קיים ועובד.
+ב-audio/analyzer.py, כרגע הcache מחובר רק לחלק מהשלבים.
+ודא שכל 7 מודולי הניתוח (rhythm, key, chords, melody,
+structure, vocal_analysis, separator) עוברים דרך:
+
+  result = cache.get(checksum, step_name)
+  if result is None:
+      result = run_module(audio_path, ...)
+      cache.set(checksum, step_name, result)
+
+הוסף שדה cache_hits: dict לתגובת ה-analysis
+כדי שה-frontend יוכל להציג "מהמטמון".
+2. הפעל MOCK_MODE=false כברירת מחדל בדוקר
+ב-docker-compose.yml, שנה:
+  api-server:
+    environment:
+      MOCK_MODE: "false"   # היה "true"
+
+ב-artifacts/api-server/src/routes/projects.ts,
+כשPython backend מחזיר שגיאה — log ברור:
+  logger.error({ projectId, error: e.message }, "Python backend failed")
+  return res.status(502).json({ error: "Audio processing unavailable" })
+לא fallback שקט למock.
+3. Signed URLs לקבצי ייצוא (אבטחה)
+ב-storage/storage_provider.py, הוסף method:
+  def generate_presigned_url(self, path: str, expires_in: int = 3600) -> str
+
+LocalStorage: צור JWT חתום עם path + expiry
+  (import jwt; secret = os.getenv("STORAGE_SECRET"))
+S3Storage: השתמש ב-boto3 generate_presigned_url
+
+ב-api/routes.py, endpoint /files/:filename/download:
+  במקום לשלוח את הקובץ ישירות — החזר redirect ל-signed URL.
+
+ב-artifacts/api-server/src/routes/projects.ts,
+הוסף middleware שמוודא project ownership לפני כל /files/ route.
+4. Rate Limiting על ניתוח אודיו
+ב-artifacts/api-server/src/app.ts,
+הוסף rate limiter ספציפי לendpoints כבדים:
+
+import rateLimit from 'express-rate-limit';
+
+const analysisLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,  // שעה
+  max: 10,                    // 10 ניתוחים לשעה
+  message: { error: 'Too many analysis requests' }
+});
+
+const renderLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 5,   // render כבד יותר
+  message: { error: 'Too many render requests' }
+});
+
+app.use('/api/projects/:id/analyze', analysisLimiter);
+app.use('/api/projects/:id/render', renderLimiter);
+5. Frontend Tests — vitest
+ב-artifacts/music-daw/, הוסף vitest:
+  pnpm add -D vitest @testing-library/react @testing-library/user-event
+
+צור artifacts/music-daw/src/__tests__/ עם:
+  - chat-agent.test.tsx — בדיקת phase transitions (DISCOVERY→ENRICHMENT)
+  - style-profile-card.test.tsx — רנדור תקין של instruments badges
+  - midi-player.test.tsx — טעינה, mute/solo state
+  - use-job-polling.test.ts — polling interval, status transitions
+
+הוסף לpackage.json:
+  "test": "vitest run",
+  "test:watch": "vitest"
+6. Model Registry בסיסי
+צור artifacts/music-ai-backend/model_registry.py:
+  MODEL_REGISTRY = {
+    "demucs": {"version": "htdemucs", "task": "separation", "device": "cpu"},
+    "librosa_beat": {"version": "0.10.x", "task": "rhythm"},
+    "essentia_hpcp": {"version": "2.1-beta6", "task": "key"},
+    "pyin": {"version": "librosa-pyin", "task": "melody"},
+  }
+
+  def get_model_info(name: str) -> dict: ...
+  def list_models() -> list[dict]: ...
+
+הוסף endpoint ב-api/routes.py:
+  GET /models → returns MODEL_REGISTRY list
+
+הצג גרסאות מודלים ב-Analysis Inspector
+(כבר יש pipelineVersion — הוסף modelVersions).

@@ -94,6 +94,7 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     """
     logger.info(f"Starting full analysis for project {project_id}: {audio_file_path}")
     all_warnings = []
+    cache_hits: dict[str, bool] = {}
 
     def report(step: str, pct: float):
         logger.info(f"[{pct:.0f}%] {step}")
@@ -139,7 +140,9 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     rhythm = _cache_get(file_hash, "rhythm")
     if rhythm is not None:
         logger.info("Rhythm: cache hit")
+        cache_hits["rhythm"] = True
     else:
+        cache_hits["rhythm"] = False
         try:
             rhythm = analyze_rhythm(y, sr)
             _cache_set(file_hash, "rhythm", rhythm)
@@ -154,7 +157,9 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     key = _cache_get(file_hash, "key")
     if key is not None:
         logger.info("Key: cache hit")
+        cache_hits["key"] = True
     else:
+        cache_hits["key"] = False
         try:
             key = analyze_key(y, sr)
             _cache_set(file_hash, "key", key)
@@ -169,7 +174,9 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     chords = _cache_get(file_hash, "chords")
     if chords is not None:
         logger.info("Chords: cache hit")
+        cache_hits["chords"] = True
     else:
+        cache_hits["chords"] = False
         try:
             chords = analyze_chords(y, sr, rhythm, key)
             _cache_set(file_hash, "chords", chords)
@@ -183,7 +190,9 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     melody = _cache_get(file_hash, "melody")
     if melody is not None:
         logger.info("Melody: cache hit")
+        cache_hits["melody"] = True
     else:
+        cache_hits["melody"] = False
         try:
             melody = analyze_melody(y, sr, rhythm)
             _cache_set(file_hash, "melody", melody)
@@ -197,7 +206,9 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     vocal_analysis = _cache_get(file_hash, "vocals")
     if vocal_analysis is not None:
         logger.info("Vocals: cache hit")
+        cache_hits["vocals"] = True
     else:
+        cache_hits["vocals"] = False
         vocal_analysis = {}
         try:
             from audio.vocal_analysis import analyze_vocals
@@ -212,7 +223,9 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
     structure = _cache_get(file_hash, "structure")
     if structure is not None:
         logger.info("Structure: cache hit")
+        cache_hits["structure"] = True
     else:
+        cache_hits["structure"] = False
         try:
             structure = analyze_structure(y, sr, rhythm)
             _cache_set(file_hash, "structure", structure)
@@ -266,4 +279,6 @@ def run_full_analysis(audio_file_path: str, project_id: int, progress_callback=N
         },
         "warnings": all_warnings,
         "cacheEnabled": USE_CACHE,
+        "cacheHits": cache_hits,
+        "cacheHitCount": sum(1 for v in cache_hits.values() if v),
     }

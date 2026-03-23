@@ -1,12 +1,14 @@
-import { Router, type IRouter } from "express";
+import { Router, type IRouter, type Request, type Response, type NextFunction } from "express";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
+import { createHmac, randomBytes } from "crypto";
 import { eq, desc, and, count } from "drizzle-orm";
 import { db, projectsTable, jobsTable, analysisResultsTable, arrangementsTable, projectFilesTable } from "@workspace/db";
 import { v4 as uuidv4 } from "uuid";
 import { broadcastJobUpdate } from "../lib/websocket";
 import { parseProjectId } from "../lib/validate";
+import { logger } from "../lib/logger";
 
 const router: IRouter = Router();
 
@@ -67,15 +69,48 @@ const upload = multer({
 });
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
-async function callPythonBackend(endpoint: string, body: object) {
-  const res = await fetch(`${PYTHON_BACKEND}/python-api${endpoint}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+
+/** Signing secret for local presigned download tokens (32-byte hex random fallback). */
+const STORAGE_SECRET = process.env.STORAGE_SECRET || randomBytes(32).toString("hex");
+
+/** Sign a download token (HMAC-SHA256) encoding projectId + fileName + expiry. */
+function signDownloadToken(projectId: number, fileName: string, expiresInSeconds = 3600): string {
+  const payload = JSON.stringify({ projectId, fileName, exp: Math.floor(Date.now() / 1000) + expiresInSeconds });
+  const b64 = Buffer.from(payload).toString("base64url");
+  const sig = createHmac("sha256", STORAGE_SECRET).update(b64).digest("base64url");
+  return `${b64}.${sig}`;
+}
+
+/** Verify a download token; returns parsed payload or null if invalid/expired. */
+function verifyDownloadToken(token: string): { projectId: number; fileName: string; exp: number } | null {
+  try {
+    const [b64, sig] = token.split(".");
+    const expected = createHmac("sha256", STORAGE_SECRET).update(b64).digest("base64url");
+    if (sig !== expected) return null;
+    const payload = JSON.parse(Buffer.from(b64, "base64url").toString("utf-8"));
+    if (payload.exp < Math.floor(Date.now() / 1000)) return null;
+    return payload;
+  } catch {
+    return null;
+  }
+}
+
+async function callPythonBackend(endpoint: string, body: object, projectId?: number) {
+  let res: globalThis.Response;
+  try {
+    res = await fetch(`${PYTHON_BACKEND}/python-api${endpoint}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (networkErr) {
+    logger.error({ projectId, endpoint, err: String(networkErr) }, "Python backend unreachable");
+    throw new Error(`Python backend unreachable: ${networkErr}`);
+  }
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Python backend error: ${err}`);
+    const errBody = await res.text().catch(() => "(unreadable)");
+    logger.error({ projectId, endpoint, status: res.status, errBody }, "Python backend returned error");
+    throw new Error(`Python backend error (${res.status}): ${errBody}`);
   }
   return res.json();
 }
@@ -114,6 +149,7 @@ async function startJob(jobId: string, projectId: number, firstStep: string) {
 /** Mark job as failed with errorCode and finishedAt. */
 async function failJobNoPython(jobId: string, projectId: number, err: unknown) {
   const msg = err instanceof Error ? err.message : String(err);
+  logger.error({ jobId, projectId, error: msg }, "Python backend failed — marking job FAILED");
   await updateJob(jobId, projectId, {
     status: "failed",
     progress: 0,
@@ -122,6 +158,26 @@ async function failJobNoPython(jobId: string, projectId: number, err: unknown) {
     errorCode: "PYTHON_UNAVAILABLE",
     finishedAt: new Date(),
   });
+}
+
+/**
+ * Ownership middleware — verifies the authenticated user owns the project.
+ * Attaches project record to res.locals.project.
+ * Usage: router.use("/:id/files", requireProjectOwner);
+ */
+async function requireProjectOwner(req: Request, res: Response, next: NextFunction) {
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
+  if (!project) { res.status(404).json({ error: "Project not found" }); return; }
+  const userId = (req as any).user?.id ?? (req as any).userId ?? null;
+  if (userId !== null && project.userId !== null && String(project.userId) !== String(userId)) {
+    logger.warn({ projectId, userId }, "Forbidden: user does not own project");
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  (res as any).locals.project = project;
+  next();
 }
 
 function serializeProject(p: typeof projectsTable.$inferSelect) {
@@ -668,8 +724,8 @@ router.get("/:id/audio", async (req, res) => {
 
 // ─── Generated files ──────────────────────────────────────────────────────────
 
-// GET /api/projects/:id/files
-router.get("/:id/files", async (req, res) => {
+// GET /api/projects/:id/files  — list project files (ownership-protected)
+router.get("/:id/files", requireProjectOwner, async (req, res) => {
   const projectId = parseProjectId(req, res);
   if (projectId === null) return;
   const files = await db.select().from(projectFilesTable)
@@ -678,14 +734,41 @@ router.get("/:id/files", async (req, res) => {
   res.json(files.map(f => ({
     id: f.id, fileName: f.fileName, fileType: f.fileType,
     fileSizeBytes: f.fileSizeBytes, createdAt: f.createdAt,
+    downloadUrl: `/api/projects/${projectId}/files/${encodeURIComponent(f.fileName)}/download`,
   })));
 });
 
 // GET /api/projects/:id/files/:filename/download
-router.get("/:id/files/:filename/download", async (req, res) => {
+// Issues a short-lived signed redirect URL so the client receives a time-limited token.
+router.get("/:id/files/:filename/download", requireProjectOwner, async (req, res) => {
   const projectId = parseProjectId(req, res);
   if (projectId === null) return;
   const { filename } = req.params;
+  const [file] = await db.select().from(projectFilesTable).where(
+    and(eq(projectFilesTable.projectId, projectId), eq(projectFilesTable.fileName, filename))
+  );
+  if (!file) return res.status(404).json({ error: "File not found" });
+  if (!fs.existsSync(file.filePath)) return res.status(410).json({ error: "File no longer on disk" });
+
+  // Generate a signed token valid for 1 hour and redirect to the serve endpoint
+  const token = signDownloadToken(projectId, filename, 3600);
+  res.redirect(302, `/api/projects/${projectId}/files/${encodeURIComponent(filename)}/serve?token=${token}`);
+});
+
+// GET /api/projects/:id/files/:filename/serve?token=<signed>
+// Validates signed token and streams the file.
+router.get("/:id/files/:filename/serve", async (req, res) => {
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const { filename } = req.params;
+  const { token } = req.query as { token?: string };
+  if (!token) return res.status(401).json({ error: "Missing token" });
+
+  const payload = verifyDownloadToken(token);
+  if (!payload || payload.projectId !== projectId || payload.fileName !== filename) {
+    return res.status(403).json({ error: "Invalid or expired download token" });
+  }
+
   const [file] = await db.select().from(projectFilesTable).where(
     and(eq(projectFilesTable.projectId, projectId), eq(projectFilesTable.fileName, filename))
   );
@@ -702,6 +785,7 @@ router.get("/:id/files/:filename/download", async (req, res) => {
   res.setHeader("Content-Disposition", `attachment; filename="${file.fileName}"`);
   res.setHeader("Content-Type", mime);
   if (file.fileSizeBytes) res.setHeader("Content-Length", file.fileSizeBytes);
+  logger.info({ projectId, fileName: filename }, "Serving file via signed token");
   fs.createReadStream(file.filePath).pipe(res);
 });
 

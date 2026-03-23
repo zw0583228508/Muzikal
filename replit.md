@@ -469,6 +469,42 @@ All tests passing. Test breakdown by major feature:
 - +390 new tests from genre discovery (≈10 per genre file)
 - All existing 411 tests still green
 
+### Session — 6 Production Hardening Features (Step 9)
+
+**Feature 1: Feature Cache Tracking (`cache_hits`)**
+- `audio/analyzer.py`: Each of the 7 analysis steps now tracks a `cacheHits` boolean per step
+- Response includes `cacheHits: {rhythm: bool, key: bool, ...}` and `cacheHitCount: int`
+
+**Feature 2: Explicit Python Backend Error Logging**
+- `api-server/src/routes/projects.ts`: `callPythonBackend()` now logs network errors and HTTP errors at `logger.error` level with structured fields (projectId, endpoint, status, errBody)
+- `failJobNoPython()` also logs at `logger.error` before marking the job as FAILED
+
+**Feature 3: Signed Download URLs (HMAC / JWT)**
+- `storage/storage_provider.py`: New `generate_presigned_url()` abstract method; LocalStorage uses PyJWT (HS256, STORAGE_SECRET env), S3Storage uses boto3 presigned URL
+- `api/routes.py`: New `GET /python-api/storage/serve?token=<jwt>` endpoint — validates JWT and streams file from LocalStorage
+- `api-server/src/routes/projects.ts`: New `requireProjectOwner` middleware applied to all `/files/` routes; download endpoint now redirects to `/files/:name/serve?token=<hmac-token>`; new `/serve` endpoint validates HMAC token and streams file
+
+**Feature 4: Rate Limiting (`express-rate-limit`)**
+- `api-server/src/app.ts`: Three rate limiters:
+  - General API: 200 req/15min per IP
+  - `/analyze` endpoints: 10 req/min per IP
+  - `/render` endpoints: 5 req/min per IP
+- 429 responses include structured JSON error and structured log at `logger.warn`
+
+**Feature 5: Frontend Vitest Tests**
+- `vitest.config.ts` created for music-daw with jsdom environment
+- 4 test files in `src/__tests__/`: utils.test.ts (13 tests), job-progress.test.tsx (9 tests), language-toggle.test.tsx (4 tests), analysis-inspector.test.tsx (7 tests)
+- **33 tests total, all passing**
+- `package.json`: added `test`, `test:watch`, `test:coverage` scripts
+
+**Feature 6: Model Registry**
+- `model_registry.py`: Centralised registry of 7 ML models (madmom, essentia, chord-cnn, pyin, msaf, demucs, crepe) with full metadata in Hebrew and English
+- `api/routes.py`: `GET /python-api/models` returns full registry; `GET /python-api/models/{task}` returns single model
+- `api-server/src/routes/models.ts`: Node.js proxy for `/api/models` and `/api/models/:task`
+- `analysis-inspector.tsx`: New "גרסאות מודלים" panel showing model version per task + cache hit count
+
+### Final Test Counts: 834 passing, 10 skipped (Python) + 33 passing (vitest)
+
 ## Remaining Features (Future)
 
 - FluidSynth/soundfont rendering server-side (higher quality audio export)

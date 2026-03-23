@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.unit
+
 """Tests for chord substitution engine."""
 from audio.chords import get_chord_substitutions
 

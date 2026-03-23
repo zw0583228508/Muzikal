@@ -6,7 +6,13 @@
     "preinstall": "sh -c 'rm -f package-lock.json yarn.lock; case \"$npm_config_user_agent\" in pnpm/*) ;; *) echo \"Use pnpm instead\" >&2; exit 1 ;; esac'",
     "build": "pnpm run typecheck && pnpm -r --if-present run build",
     "typecheck:libs": "tsc --build",
-    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck"
+    "typecheck": "pnpm run typecheck:libs && pnpm -r --filter \"./artifacts/**\" --filter \"./scripts\" --if-present run typecheck",
+    "test": "python -m pytest artifacts/music-ai-backend/tests/ -q --tb=short",
+    "test:unit": "python -m pytest -m unit -q --tb=short",
+    "test:service": "python -m pytest -m service -q --tb=short",
+    "test:integration": "python -m pytest -m 'integration and not slow' -q --tb=short",
+    "test:all": "python -m pytest artifacts/music-ai-backend/tests/ -m 'not slow' -q --tb=short",
+    "test:frontend": "pnpm --filter @workspace/music-daw run test --run"
   },
   "private": true,
   "devDependencies": {

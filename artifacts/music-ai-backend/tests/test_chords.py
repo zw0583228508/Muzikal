@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.unit
+
 """
 Tests for audio/chords.py — chord detection.
 analyze_chords(y, sr, rhythm, key) → {"chords": [...], ...}

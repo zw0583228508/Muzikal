@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.service
+
 """
 Tests for storage/storage_provider.py — LocalStorage and factory.
 """

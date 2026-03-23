@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.service
+
 """
 Tests for YAML genre files in configs/styles/genres/.
 Validates structure, required fields, and data integrity.

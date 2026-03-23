@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.integration
+
 """
 Tests for API route handlers — projects, jobs, styles, analysis endpoints.
 Uses FastAPI's TestClient from the existing conftest setup.

@@ -1,3 +1,6 @@
+import pytest
+pytestmark = [pytest.mark.integration, pytest.mark.slow]
+
 """
 tests/test_arranger_integration.py — 8 integration tests for Step 8
 """

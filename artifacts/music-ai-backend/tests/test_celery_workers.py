@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.unit
+
 """
 Tests for workers/celery_app.py — task registration, graceful fallback, and signatures.
 """

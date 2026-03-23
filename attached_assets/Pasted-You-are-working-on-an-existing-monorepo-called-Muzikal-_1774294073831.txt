@@ -1,0 +1,520 @@
+You are working on an existing monorepo called Muzikal. Your job is not to add random features. Your job is to harden, clean, align, and productionize the current codebase.
+
+Primary goal
+
+Take the current project from “impressive but inconsistent” to “stable, clean, testable, and production-ready”.
+
+Do not do shallow fixes.
+Do not only patch tests.
+Do not add new complexity unless it removes existing inconsistency.
+Favor correctness, consistency, and maintainability over quick hacks.
+
+1) First: understand the current architecture
+
+This repository is a multi-part system with:
+
+Frontend UI: artifacts/music-daw
+Node/Express API layer: artifacts/api-server
+Python music backend: artifacts/music-ai-backend
+Shared contracts/schemas/libs: lib/*, packages/*
+Tests: root tests/ and Python backend tests under artifacts/music-ai-backend/tests
+
+Your first responsibility is to preserve the intended architecture:
+
+React frontend = presentation + orchestration UI
+Node API = app/business/API orchestration layer
+Python backend = audio analysis / music intelligence / rendering / export
+Shared schemas = single source of truth for contracts
+
+Do not collapse these layers together.
+
+2) Immediate critical issues to fix first
+2.1 Fix the Python environment and dependency integrity
+
+The Python environment is not clean enough right now.
+
+Problems found
+tests fail because modules like mido and psycopg2 are not reliably available at runtime
+pyproject.toml contains an absurdly polluted [tool.uv.sources] section with a huge list of irrelevant packages
+the dependency definition does not reflect a disciplined, reproducible environment
+Required actions
+Clean pyproject.toml completely.
+Remove the massive garbage from [tool.uv.sources] unless there is a real, explicit reason for each entry.
+Keep only real dependencies used by the project.
+Ensure these are correctly defined and installable:
+fastapi
+uvicorn
+psycopg2-binary
+mido
+librosa
+music21
+pretty-midi
+pydub
+soundfile
+scipy
+numpy
+celery
+redis
+python-multipart
+httpx
+python-dotenv
+demucs
+pedalboard
+If there are optional heavy dependencies, move them into optional extras instead of forcing everything globally.
+Make uv.lock and the actual environment match the cleaned dependency set.
+Add a documented, deterministic install path for local dev and CI.
+Acceptance criteria
+fresh install works
+Python tests no longer fail because of missing importable dependencies
+dependency file is readable, intentional, and minimal
+2.2 Fix the broken update_job(...) contract
+Problems found
+
+In artifacts/music-ai-backend/api/routes.py, there are calls like:
+
+update_job(..., extra={...})
+
+But in artifacts/music-ai-backend/api/database.py, update_job() does not accept extra.
+
+This is a real code bug.
+
+Required actions
+
+Choose one clean solution and apply it consistently:
+
+Preferred option:
+
+do not use ad-hoc extra
+map all structured payloads into existing explicit columns:
+result_data
+processing_metadata
+warnings
+is_mock
+
+Then change all invalid calls accordingly.
+
+Acceptance criteria
+no callsite passes unsupported parameters
+update_job() API is explicit and documented
+export/render/completion payloads are saved in structured fields only
+2.3 Fix API prefix / route contract inconsistency
+Problems found
+
+The Python backend currently mounts routes under:
+
+/python-api
+
+But some tests and assumptions expect:
+
+/api/...
+
+This causes contract confusion and failed expectations such as /styles or health endpoints.
+
+Required actions
+Decide the canonical external contract.
+If Node API is the public entrypoint, then Python should be internal-only and not pretend to be the public REST surface.
+Align all tests and internal clients with the chosen contract.
+Remove ambiguous duplication between:
+/api/...
+/python-api/...
+direct backend calls
+Recommended architecture
+public client-facing API should go through Node
+Python backend should expose internal service endpoints only
+frontend should not depend on unstable backend-only routes unless explicitly intended
+Acceptance criteria
+one clear API contract
+tests reflect the real contract
+no mystery 404s due to prefix mismatch
+2.4 Remove misleading placeholder root entrypoint
+Problem found
+
+Root main.py is just:
+
+print hello world
+
+This is misleading in a serious repo.
+
+Required actions
+
+Do one of these:
+
+either remove root main.py
+or replace it with a real launcher / CLI / clear bootstrap entrypoint
+or make it intentionally redirect to the real backend entrypoint with documentation
+Acceptance criteria
+no fake top-level entrypoint remains
+a new developer can understand what to run
+3) Refactor oversized files
+
+Several files are too large and carry too many responsibilities.
+
+3.1 Refactor artifacts/api-server/src/routes/projects.ts
+
+This file is too big and is acting like a god-route.
+
+Required split
+
+Break it into focused route/service modules, for example:
+
+projects.routes.ts
+projects.service.ts
+projects.repository.ts
+project-files.routes.ts
+project-analysis.routes.ts
+project-arrangement.routes.ts
+project-export.routes.ts
+project-render.routes.ts
+project-jobs.routes.ts
+download-tokens.service.ts
+Rules
+route files should contain HTTP handling only
+business logic goes into services
+DB access goes into repository/data layer
+request/response validation should be explicit
+shared response mapping should be centralized
+Acceptance criteria
+no mega-route file holding everything
+each route file has one responsibility
+easier testing of service logic without Express bootstrapping
+3.2 Refactor artifacts/music-daw/src/pages/project-studio.tsx
+
+This file is too large and likely owns too much state and UI logic.
+
+Required split
+
+Break into smaller feature components/hooks, for example:
+
+useProjectStudioState
+useAnalysisActions
+useArrangementActions
+useExportActions
+StudioHeader
+StudioSidebar
+StudioTimeline
+StudioInspector
+StudioTransport
+StudioJobStatusPanel
+Rules
+page component should orchestrate, not contain everything
+move derived state into hooks
+isolate async operations
+isolate UI-only state from server state
+use react-query properly for remote state
+Acceptance criteria
+page file becomes much smaller
+components become independently testable
+state flow becomes understandable
+3.3 Refactor artifacts/music-ai-backend/api/routes.py
+
+This file is also too big and mixes unrelated capabilities.
+
+Required split
+
+Break it into modules such as:
+
+health_routes.py
+analysis_routes.py
+arrangement_routes.py
+export_routes.py
+render_routes.py
+jobs_routes.py
+project_routes.py
+chords_routes.py
+storage_routes.py
+Rules
+keep FastAPI router per domain
+shared DB helpers in service modules
+shared response models in schemas
+no huge everything-router
+Acceptance criteria
+route responsibilities are separated
+import graph becomes simpler
+debugging becomes easier
+4) Fix startup/import fragility
+Problem
+
+Some app startup/import flows are too fragile because imports force DB modules too early.
+
+For example, importing the app can fail if psycopg2 or DB config is missing, even for tests that only need health behavior.
+
+Required actions
+Avoid hard failure during module import when possible.
+Move expensive or environment-dependent initialization into:
+startup hooks
+dependency injection
+lazy loading
+Make health endpoints able to report degraded mode if DB is unavailable, instead of crashing import-time.
+Distinguish:
+app import success
+service readiness
+DB availability
+worker availability
+Acceptance criteria
+importing the app does not unnecessarily explode
+health/readiness behavior is deliberate
+tests can isolate components without booting the entire world
+5) Make Celery/background execution consistent
+Problem
+
+The backend mixes:
+
+Celery
+in-process background tasks
+fallback behavior
+job status persistence
+
+The general idea is good, but it is not cleanly unified.
+
+Required actions
+Define one clear job-dispatch abstraction.
+For each operation:
+analysis
+arrangement
+export
+render
+the code should call one dispatcher interface
+Dispatcher decides:
+Celery available → queue task
+no Celery → in-process fallback
+Standardize job lifecycle statuses:
+queued
+running
+completed
+failed
+cancelled
+Ensure all task paths update DB using the same semantics.
+Ensure cancellation logic is consistent with stored task metadata.
+Acceptance criteria
+same lifecycle no matter how job was dispatched
+no duplicated flow logic
+easier to reason about job state transitions
+6) Align tests with real architecture, then make them pass honestly
+
+There are many tests, which is good, but currently they are not fully aligned.
+
+Problems found
+some integration tests assume routes that do not match actual prefixes
+some failures are real bugs
+some failures are environment/setup problems
+test strategy is mixed: pure unit, backend app tests, and external-server tests
+Required actions
+6.1 Categorize tests
+
+Create explicit test layers:
+
+Unit tests
+pure Python/TS logic
+no DB/network unless mocked
+Service tests
+app/service layer with lightweight fixtures
+Integration tests
+real API against booted service(s)
+End-to-end tests
+full workflow if desired
+6.2 Fix the failing Python tests honestly
+
+Start with:
+
+artifacts/music-ai-backend/tests/test_export_engine.py
+artifacts/music-ai-backend/tests/test_jobs.py
+artifacts/music-ai-backend/tests/test_regen_endpoints.py
+
+And also root:
+
+tests/test_api.py
+tests/test_export.py
+Required rules
+do not weaken assertions just to get green tests
+fix the code or fix the contract mismatch
+remove obsolete assumptions only if truly obsolete
+6.3 Improve test setup
+Provide proper fixtures for temp storage.
+Provide DB fixture or DB-free mode for tests that don’t need a real DB.
+Separate tests that require running services from tests that only import code.
+Make CI run the correct subset in the correct order.
+Acceptance criteria
+test failures are meaningful
+green tests represent real correctness
+no noisy false failures from bad setup
+7) Clean up documentation drift
+Problem
+
+Docs do not fully match reality.
+
+There are signs that docs describe an earlier state while the code has already moved forward.
+
+Required actions
+Audit all major docs:
+architecture docs
+backend docs
+setup docs
+testing docs
+Remove stale statements.
+Add one canonical “how to run the system” doc.
+Add one canonical “repo architecture” doc.
+Add one canonical “testing strategy” doc.
+Explicitly document:
+which server is public
+how frontend talks to Node
+how Node talks to Python
+what is optional
+what requires DB / Redis / Celery
+Acceptance criteria
+docs match current reality
+a new engineer can onboard without guessing
+8) Strengthen shared contracts
+
+The repo already has good intent around shared schemas and generated clients. Preserve that and tighten it.
+
+Required actions
+Make sure request/response types are generated from one source of truth where possible.
+Ensure Node and frontend agree on the same schema.
+Avoid handwritten duplicate types unless unavoidable.
+Review:
+lib/api-spec
+lib/api-client-react
+lib/api-zod
+packages/common-schemas
+Goals
+remove drift between backend and frontend expectations
+reduce runtime surprises
+improve confidence when refactoring
+9) Improve error handling and observability
+Required actions
+Standardize error responses across services.
+Add structured logging around:
+project creation
+file upload
+analysis start/end
+arrangement start/end
+export start/end
+render start/end
+worker dispatch
+job failure
+Never hide real exceptions under vague strings.
+Preserve structured failure data where useful.
+Add correlation identifiers:
+project id
+job id
+request id
+Acceptance criteria
+logs are useful for debugging
+failures are understandable
+support and ops can trace workflows
+10) Improve backend domain boundaries
+
+The Python backend contains good musical logic, but the app/service boundaries can be clearer.
+
+Required actions
+Separate core music logic from HTTP concerns.
+Keep audio/*, orchestration/*, agent/* as domain logic.
+Keep DB and route code out of core signal-processing logic.
+Make export/render/analysis functions callable independently of FastAPI.
+Acceptance criteria
+music engine code can be tested without HTTP app
+API layer becomes thin
+domain logic becomes reusable
+11) Storage and file handling hardening
+Required actions
+Review all file paths for uploads, renders, exports, stems.
+Ensure directories are created safely.
+Ensure temp files are cleaned up.
+Ensure DB references and on-disk files remain consistent.
+Validate file type and size rules explicitly.
+Prevent path traversal or invalid path input.
+Acceptance criteria
+file handling is safe and predictable
+no orphaned artifacts explosion
+storage behavior is documented
+12) Frontend quality improvements
+Required actions
+Audit server-state management in the React app.
+Use react-query consistently.
+Reduce prop drilling.
+Split presentation vs orchestration components.
+Add loading/error/empty states everywhere meaningful.
+Ensure analysis/arrangement/export job polling is robust.
+Review i18n coverage and consistency.
+Add component tests for the most important flows.
+Acceptance criteria
+UI code is easier to maintain
+async UX feels reliable
+failures are surfaced clearly to users
+13) Remove dead code, placeholders, and confusing scaffolding
+Required actions
+Identify fake or legacy placeholders.
+Remove anything that only creates noise.
+Rename ambiguous files/modules.
+Delete experimental leftovers if not part of current architecture.
+Be strict
+
+A serious codebase should not contain misleading top-level placeholders or half-connected dead paths without clear comments.
+
+14) CI and repo hygiene
+Required actions
+Add or improve CI for:
+TypeScript typecheck
+frontend tests
+Python tests
+lint/format if present
+Fail fast on broken contracts.
+Ensure reproducible install in CI.
+Add clear scripts for:
+install
+dev
+build
+test
+test:unit
+test:integration
+Acceptance criteria
+CI accurately represents repo health
+contributors know how to validate changes
+15) What not to do
+Do not rewrite the project from scratch
+Do not flatten Node and Python together
+Do not silence failing tests without real reason
+Do not leave giant files as-is
+Do not add more features before stabilizing the current platform
+Do not introduce hidden magic abstractions
+Do not solve architecture problems with comments only
+16) Deliverables required from you
+
+I want the work done in this exact order:
+
+Phase 1 — Stabilization
+clean Python dependencies
+remove polluted dependency config
+fix import/runtime failures
+fix update_job contract bug
+fix placeholder root entrypoint
+Phase 2 — Contract alignment
+decide and enforce canonical API prefixes
+align tests with real architecture
+make route behavior consistent
+Phase 3 — Refactor
+split oversized route files
+split oversized page/components
+separate HTTP / DB / domain responsibilities
+Phase 4 — Test hardening
+make failing tests pass honestly
+separate unit/service/integration layers
+improve fixtures and setup
+Phase 5 — Documentation and CI
+update docs to reality
+improve scripts and CI
+document exact run/test workflow
+17) Final output format I expect from you
+
+When you finish, provide:
+
+A concise summary of everything you changed
+A file-by-file list of modified files
+A list of bugs fixed
+A list of refactors completed
+Which tests were failing before and now pass
+Any remaining known issues
+Exact commands to run the full system locally
+
+Do not give vague summaries.
+Be concrete, technical, and complete.

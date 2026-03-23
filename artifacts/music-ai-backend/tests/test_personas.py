@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.unit
+
 """
 Unit tests for orchestration/persona_loader.py and the personas YAML.
 """

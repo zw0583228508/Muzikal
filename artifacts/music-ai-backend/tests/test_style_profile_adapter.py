@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.unit
+
 """
 Tests for orchestration/style_profile_adapter.py
 """

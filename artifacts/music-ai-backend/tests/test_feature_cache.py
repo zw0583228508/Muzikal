@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.service
+
 """
 Unit tests for packages/audio_core/feature_cache.py
 """

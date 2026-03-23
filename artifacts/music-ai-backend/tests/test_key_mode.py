@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.unit
+
 """
 Tests for audio/key_mode.py — key detection, mode, modulations, and alternatives.
 """

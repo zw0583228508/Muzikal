@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.integration
+
 """
 Unit tests for job-related API endpoints via FastAPI TestClient.
 

@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.unit
+
 """
 tests/test_harmonic_engine.py — 22 tests for Step 8 Harmonic Engine
 """

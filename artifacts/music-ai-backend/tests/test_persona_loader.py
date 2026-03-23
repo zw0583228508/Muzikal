@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.unit
+
 """
 Tests for orchestration/persona_loader.py — YAML loading, validation, and lookup.
 """

@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.service
+
 """
 Tests for StyleEnricher — LLM enrichment, cache, adapt_to_analysis, fallback.
 """

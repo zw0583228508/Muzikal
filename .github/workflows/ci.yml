@@ -2,50 +2,119 @@ name: Muzikal CI
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, master, develop]
   pull_request:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
-  python-tests:
-    name: Python Tests (834+)
+  # ── Python: unit + service tests (fast, no real DB or network) ────────────
+  python-unit:
+    name: Python Unit & Service Tests
     runs-on: ubuntu-latest
     defaults:
       run:
         working-directory: artifacts/music-ai-backend
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-python@v5
         with:
           python-version: "3.11"
           cache: pip
-      - run: pip install -r requirements.txt
-      - run: python -m pytest tests/ -v --tb=short --timeout=60
 
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run unit tests
+        run: |
+          python -m pytest ../.. \
+            -m "unit or service" \
+            --tb=short \
+            --timeout=30 \
+            -q
+
+  # ── Python: integration tests (may start FastAPI app) ─────────────────────
+  python-integration:
+    name: Python Integration Tests
+    runs-on: ubuntu-latest
+    needs: python-unit
+    defaults:
+      run:
+        working-directory: artifacts/music-ai-backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run integration tests (skip slow)
+        run: |
+          python -m pytest ../.. \
+            -m "integration and not slow" \
+            --tb=short \
+            --timeout=60 \
+            -q
+
+  # ── Python: all tests (gate before merge) ─────────────────────────────────
+  python-all:
+    name: Python All Tests (847+)
+    runs-on: ubuntu-latest
+    needs: [python-unit, python-integration]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install Python dependencies
+        run: pip install -r artifacts/music-ai-backend/requirements.txt
+
+      - name: Run full test suite (skip slow)
+        run: |
+          python -m pytest artifacts/music-ai-backend/tests/ \
+            -m "not slow" \
+            --tb=short \
+            --timeout=60 \
+            -q
+
+  # ── Frontend: Vitest ───────────────────────────────────────────────────────
   frontend-tests:
     name: Frontend Tests (Vitest)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
       - run: npm install -g pnpm
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/music-daw run test --run
 
+  # ── TypeScript typecheck ───────────────────────────────────────────────────
   typecheck:
     name: TypeScript Typecheck
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
       - run: npm install -g pnpm && pnpm install --frozen-lockfile
       - run: pnpm --filter @workspace/api-spec run codegen
       - run: pnpm tsc --noEmit
 
+  # ── Docker build smoke test ────────────────────────────────────────────────
   docker-build:
     name: Docker Build Smoke Test
     runs-on: ubuntu-latest

@@ -1,533 +1,61 @@
-import { useState, useRef, useCallback } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useParams, Link } from "wouter";
-import {
-  useGetProject,
-  useGetAnalysisResults,
-  useGetArrangement,
-  useUploadAudio,
-  useStartAnalysis,
-  useGenerateArrangement,
-  useExportProject,
-  useListStyles
-} from "@workspace/api-client-react";
-import { useJobPolling } from "@/hooks/use-job-polling";
-import { useJobWebSocket, type JobUpdate } from "@/hooks/use-job-websocket";
-import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
+import { useParams } from "wouter";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { JobProgress } from "@/components/job-progress";
-import {
-  Play, Pause, Square, SkipBack, Search, Volume2, Settings2,
-  ChevronLeft, Upload, Zap, Download, Layers, Activity, Music,
-  Settings, Loader2, FileMusic, FileAudio, FileText, HardDrive,
-  AlertTriangle, Edit3, CheckCircle2, XCircle, Lock, Unlock,
-  Piano
-} from "lucide-react";
 import { PianoRoll } from "@/components/piano-roll";
 import { AnalysisInspector } from "@/components/analysis-inspector";
 import ExportCenter from "@/pages/export-center";
 import ChatAgent from "@/components/chat-agent";
 import { WaveformPlayer } from "@/components/waveform-player";
-import { MidiPlayer } from "@/components/midi-player";
-import { formatTime, cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Upload, Loader2 } from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { LanguageToggle } from "@/components/language-toggle";
-import { AudioPlayer } from "@/components/audio-player";
 
-// ─── Transport Bar ────────────────────────────────────────────────────────────
-
-function TransportBar({ project, analysis }: { project: any; analysis: any }) {
-  const { t } = useTranslation();
-  const hasAudio = !!(project?.audioFilePath || project?.audioFileName);
-  const isMock = !!(analysis?.isMock || analysis?.rhythm?.isMock);
-
-  return (
-    <div className="border-b border-white/10 bg-background/95 backdrop-blur sticky top-0 z-40">
-      {/* Row 1: nav + metadata + language */}
-      <div className="h-12 flex items-center px-4 justify-between">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="icon" asChild className="ltr:rotate-0 rtl:rotate-180 h-8 w-8">
-            <Link href="/"><ChevronLeft className="w-4 h-4" /></Link>
-          </Button>
-          <h2 className="font-display font-semibold text-base text-white/80 truncate max-w-[200px]">{project?.name}</h2>
-          {isMock && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-amber-500/20 border border-amber-500/40 text-amber-400 text-[10px] font-bold tracking-widest uppercase">
-              <AlertTriangle className="w-3 h-3" />
-              {t("MOCK")}
-            </span>
-          )}
-        </div>
-
-        <div className="flex items-center gap-5 text-xs font-display uppercase tracking-widest text-muted-foreground" dir="ltr">
-          <div className="flex flex-col items-center">
-            <span className="text-white font-bold text-sm">{analysis?.rhythm?.bpm ? Math.round(analysis.rhythm.bpm) : '—'}</span>
-            <span className="text-[9px]">{t("BPM")}</span>
-          </div>
-          <div className="flex flex-col items-center">
-            <span className="text-primary font-bold text-sm">{analysis?.rhythm?.timeSignatureNumerator || '4'}/{analysis?.rhythm?.timeSignatureDenominator || '4'}</span>
-            <span className="text-[9px]">{t("TIME")}</span>
-          </div>
-          <div className="flex flex-col items-center">
-            <span className="text-accent font-bold text-sm">{analysis?.key?.globalKey ? `${analysis.key.globalKey} ${analysis.key.mode || 'Maj'}` : '—'}</span>
-            <span className="text-[9px]">{t("Key")}</span>
-          </div>
-          {analysis?.pipelineVersion && (
-            <div className="flex flex-col items-center" title={t("Pipeline version")}>
-              <span className="text-white/40 font-mono text-[9px]">v{analysis.pipelineVersion}</span>
-              <span className="text-[9px]">{t("ENGINE")}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex items-center gap-2">
-          <LanguageToggle />
-        </div>
-      </div>
-
-      {/* Row 2: Audio player */}
-      <div className="px-4 pb-2">
-        <AudioPlayer
-          projectId={project?.id || 0}
-          hasAudio={hasAudio}
-          className="bg-black/30 rounded-lg px-3 py-2 border border-white/5"
-        />
-      </div>
-    </div>
-  );
-}
-
-// ─── Mock Mode Banner ─────────────────────────────────────────────────────────
-
-function MockBanner({ onDismiss }: { onDismiss: () => void }) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-amber-500/15 border-b border-amber-500/30 text-amber-400 text-xs">
-      <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-      <span className="flex-1">
-        <strong>{t("MOCK MODE")}</strong> — {t("Python audio backend unavailable. Results are simulated for UI testing only and do not reflect real analysis.")}
-      </span>
-      <button onClick={onDismiss} className="text-amber-400/60 hover:text-amber-400 ml-2">
-        <XCircle className="w-4 h-4" />
-      </button>
-    </div>
-  );
-}
-
-// ─── Job Failed Banner ────────────────────────────────────────────────────────
-
-function FailedBanner({ message }: { message: string }) {
-  const { t } = useTranslation();
-  return (
-    <div className="flex items-center gap-3 px-4 py-2 bg-red-500/15 border-b border-red-500/30 text-red-400 text-xs">
-      <XCircle className="w-4 h-4 flex-shrink-0" />
-      <span><strong>{t("Job Failed")}</strong> — {message}</span>
-    </div>
-  );
-}
-
-// ─── Track Lane ───────────────────────────────────────────────────────────────
-
-function TrackLane({ track, isSelected, onSelect, onRegen }: { track: any; isSelected: boolean; onSelect: () => void; onRegen?: (trackId: string) => void }) {
-  const { t } = useTranslation();
-  return (
-    <div
-      className={cn("flex border-b border-white/5 h-24 group relative cursor-pointer", isSelected && "ring-1 ring-inset ring-primary/40")}
-      onClick={onSelect}
-    >
-      <div className={cn("w-64 border-r border-white/10 flex flex-col justify-center px-3 z-10 transition-colors", isSelected ? "bg-primary/10" : "bg-card")}>
-        <div className="flex justify-between items-center mb-2">
-          <span className="font-medium text-sm text-white truncate flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full" style={{ backgroundColor: track.color || '#00f0ff' }} />
-            {t(track.name)}
-          </span>
-          <div className="flex gap-1" dir="ltr" onClick={e => e.stopPropagation()}>
-            <button
-              className={cn("w-6 h-6 rounded text-xs font-bold transition-colors", track.muted ? "bg-accent/20 text-accent" : "bg-white/5 hover:bg-white/10")}
-              title={t("Mute")}
-            >M</button>
-            <button
-              className={cn("w-6 h-6 rounded text-xs font-bold transition-colors", track.soloed ? "bg-yellow-500/20 text-yellow-500" : "bg-white/5 hover:bg-white/10")}
-              title={t("Solo")}
-            >S</button>
-            {onRegen && (
-              <button
-                className="w-6 h-6 rounded text-xs font-bold transition-colors bg-accent/10 text-accent/70 hover:bg-accent/20 hover:text-accent"
-                title={t("Regenerate track")}
-                onClick={e => { e.stopPropagation(); onRegen(track.id); }}
-              >↺</button>
-            )}
-            <button
-              className="w-6 h-6 rounded text-xs font-bold transition-colors bg-primary/10 text-primary hover:bg-primary/20"
-              title={t("Open Piano Roll")}
-            ><Piano className="w-3 h-3 mx-auto" /></button>
-          </div>
-        </div>
-        <div className="flex items-center gap-2" dir="ltr" onClick={e => e.stopPropagation()}>
-          <Volume2 className="w-3 h-3 text-muted-foreground" />
-          <Slider defaultValue={[track.volume * 100]} max={100} className="w-full" />
-        </div>
-      </div>
-
-      {/* Mini piano roll preview */}
-      <div className="flex-1 bg-[#0a0a0c] relative overflow-hidden" dir="ltr">
-        <div className="absolute inset-0 bg-[linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:2rem_100%]" />
-        {track.notes?.slice(0, 100).map((note: any, i: number) => (
-          <div
-            key={i}
-            className="absolute rounded-sm"
-            style={{
-              left: `${note.startTime * 20}px`,
-              width: `${Math.max(note.duration * 20, 2)}px`,
-              bottom: `${Math.max(0, (note.pitch - 36) % 52) * 1.7 + 4}px`,
-              height: 3,
-              backgroundColor: track.color || '#00f0ff',
-              opacity: 0.4 + (note.velocity / 127) * 0.6,
-            }}
-          />
-        ))}
-        {isSelected && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="text-xs text-primary/60 bg-black/40 px-2 py-0.5 rounded">{t("Open Piano Roll")} ↓</span>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ─── Waveform — replaced by WaveformPlayer component ──────────────────────────
-
-// ─── Manual Corrections Modal ─────────────────────────────────────────────────
-
-function CorrectionsDrawer({
-  analysis,
-  projectId,
-  onClose,
-  onSaved,
-}: {
-  analysis: any;
-  projectId: number;
-  onClose: () => void;
-  onSaved: () => void;
-}) {
-  const { t } = useTranslation();
-  const [bpm, setBpm] = useState<string>(analysis?.rhythm?.bpm ? String(Math.round(analysis.rhythm.bpm)) : "");
-  const [globalKey, setGlobalKey] = useState<string>(analysis?.key?.globalKey || "");
-  const [mode, setMode] = useState<string>(analysis?.key?.mode || "major");
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  const KEYS = ["C", "C#", "Db", "D", "D#", "Eb", "E", "F", "F#", "Gb", "G", "G#", "Ab", "A", "A#", "Bb", "B"];
-  const MODES = ["major", "minor", "dorian", "phrygian", "lydian", "mixolydian", "aeolian", "locrian"];
-
-  const handleSave = async () => {
-    setSaving(true);
-    try {
-      await fetch(`/api/projects/${projectId}/corrections`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ bpm: bpm ? Number(bpm) : undefined, globalKey: globalKey || undefined, mode: mode || undefined }),
-      });
-      setSaved(true);
-      setTimeout(() => { onSaved(); onClose(); }, 800);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/70 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="w-full max-w-md bg-card border border-white/10 rounded-t-2xl sm:rounded-2xl p-6 shadow-2xl space-y-5"
-        onClick={e => e.stopPropagation()}
-      >
-        <div className="flex items-center justify-between">
-          <h3 className="font-display font-bold text-white flex items-center gap-2">
-            <Edit3 className="w-4 h-4 text-accent" /> {t("Manual Corrections")}
-          </h3>
-          <button onClick={onClose} className="text-muted-foreground hover:text-white"><XCircle className="w-5 h-5" /></button>
-        </div>
-
-        <p className="text-xs text-muted-foreground">{t("Override AI analysis results. Corrections apply to subsequent arrangement generation.")}</p>
-
-        <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wider text-muted-foreground">{t("BPM")}</label>
-            <input
-              type="number"
-              min={20} max={300}
-              value={bpm}
-              onChange={e => setBpm(e.target.value)}
-              className="w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-white text-sm focus:border-primary/60 outline-none"
-              placeholder="e.g. 120"
-              dir="ltr"
-            />
-          </div>
-
-          <div className="space-y-1">
-            <label className="text-xs uppercase tracking-wider text-muted-foreground">{t("Key")}</label>
-            <select
-              value={globalKey}
-              onChange={e => setGlobalKey(e.target.value)}
-              className="w-full bg-black/40 border border-white/10 rounded px-3 py-2 text-white text-sm focus:border-primary/60 outline-none"
-              dir="ltr"
-            >
-              <option value="">{t("Auto")}</option>
-              {KEYS.map(k => <option key={k} value={k}>{k}</option>)}
-            </select>
-          </div>
-
-          <div className="space-y-1 col-span-2">
-            <label className="text-xs uppercase tracking-wider text-muted-foreground">{t("Mode / Scale")}</label>
-            <div className="flex flex-wrap gap-2">
-              {MODES.map(m => (
-                <button
-                  key={m}
-                  onClick={() => setMode(m)}
-                  className={cn(
-                    "px-3 py-1 rounded-full text-xs border transition-colors",
-                    mode === m
-                      ? "border-accent text-accent bg-accent/15"
-                      : "border-white/10 text-muted-foreground hover:border-white/30"
-                  )}
-                >
-                  {m}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex gap-3">
-          <Button variant="outline" className="flex-1" onClick={onClose} disabled={saving}>{t("Cancel")}</Button>
-          <Button variant="glow" className="flex-1" onClick={handleSave} disabled={saving || saved}>
-            {saved ? <><CheckCircle2 className="w-4 h-4 mr-2" />{t("Saved!")}</> : saving ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : t("Apply Corrections")}
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Main Page ────────────────────────────────────────────────────────────────
+import { useProjectStudio } from "@/hooks/use-project-studio";
+import { TransportBar } from "@/components/studio/TransportBar";
+import { MockBanner, FailedBanner } from "@/components/studio/Banners";
+import { TrackLane } from "@/components/studio/TrackLane";
+import { CorrectionsDrawer } from "@/components/studio/CorrectionsDrawer";
+import { AnalysisTab } from "@/components/studio/AnalysisTab";
+import { ArrangeTab } from "@/components/studio/ArrangeTab";
 
 export default function ProjectStudio() {
   const { t } = useTranslation();
   const params = useParams();
   const projectId = parseInt(params.id || "0", 10);
-  const queryClient = useQueryClient();
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const [activeJobId, setActiveJobId] = useState<string | null>(null);
-  const [activeJobIsMock, setActiveJobIsMock] = useState(false);
-  const [jobFailedMsg, setJobFailedMsg] = useState<string | null>(null);
-  const [showMockBanner, setShowMockBanner] = useState(false);
-  const [showCorrections, setShowCorrections] = useState(false);
-  const [selectedStyle, setSelectedStyle] = useState("pop");
-  const [selectedPersona, setSelectedPersona] = useState<string | null>(null);
-  const [selectedTrack, setSelectedTrack] = useState<any | null>(null);
-  // Lock/unlock system (Step 19): locked fields won't be regenerated during re-arrangement
-  const [lockedFields, setLockedFields] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState("analysis");
-  const [selectedFormats, setSelectedFormats] = useState<Record<string, boolean>>({
-    midi: true, musicxml: false, pdf: false,
-    wav: true, flac: false, mp3: false, stems: false,
-  });
-  const [editingChordIdx, setEditingChordIdx] = useState<number | null>(null);
-  const [chordOverrides, setChordOverrides] = useState<Record<number, string>>({});
+  const studio = useProjectStudio(projectId);
+  const fileInputRef = studio.fileInputRef;
 
-  const toggleLock = useCallback((field: string) => {
-    setLockedFields(prev => {
-      const next = new Set(prev);
-      if (next.has(field)) next.delete(field);
-      else next.add(field);
-      return next;
-    });
-  }, []);
-
-  // ─ Data
-  const { data: project, isLoading: isProjLoading } = useGetProject(projectId);
-  const { data: analysis } = useGetAnalysisResults(projectId, { query: { retry: false } });
-  const { data: arrangement } = useGetArrangement(projectId, { query: { retry: false } });
-  const { data: styles } = useListStyles();
-  const filesQueryKey = [`/api/projects/${projectId}/files`];
-  const { data: projectFiles = [] } = useQuery<any[]>({
-    queryKey: filesQueryKey,
-    queryFn: () => fetch(`/api/projects/${projectId}/files`).then(r => r.json()),
-    refetchInterval: 0,
-  });
-
-  const { data: modeData } = useQuery<{ isMock: boolean; pipelineVersion?: string; modelVersions?: Record<string, string> }>({
-    queryKey: ["/api/projects/mock-mode"],
-    queryFn: () => fetch("/api/projects/mock-mode").then(r => r.json()),
-    staleTime: Infinity,
-  });
-  const isMockMode = modeData?.isMock ?? false;
-  const modelVersions = modeData?.modelVersions ?? {};
-
-  const { data: personas = [] } = useQuery<any[]>({
-    queryKey: ["/api/styles/personas"],
-    queryFn: () => fetch("/api/styles/personas").then(r => r.json()),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  // ─ Mutations
-  const uploadMut = useUploadAudio();
-  const analyzeMut = useStartAnalysis();
-  const arrangeMut = useGenerateArrangement();
-  const exportMut = useExportProject();
-
-  // ─ Invalidate helper
-  const invalidateAll = useCallback(() => {
-    queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}`] });
-    queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/analysis`] });
-    queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/arrangement`] });
-    queryClient.invalidateQueries({ queryKey: filesQueryKey });
-  }, [queryClient, projectId]);
-
-  // ─ Job completion handler
-  const onJobComplete = useCallback(() => {
-    invalidateAll();
-    setActiveJobId(null);
-    setJobFailedMsg(null);
-  }, [invalidateAll]);
-
-  // ─ WebSocket (real-time updates, primary mechanism)
-  const { subscribeToJob } = useJobWebSocket({
-    projectId,
-    onJobUpdate: useCallback((update: JobUpdate) => {
-      if (update.isMock) {
-        setActiveJobIsMock(true);
-        setShowMockBanner(true);
-      }
-      if (update.status === "completed") {
-        onJobComplete();
-      }
-      if (update.status === "failed") {
-        setJobFailedMsg(update.errorMessage || "Unknown error");
-        setActiveJobId(null);
-        setActiveJobIsMock(false);
-      }
-    }, [onJobComplete]),
-  });
-
-  // ─ Polling (fallback / backup)
-  const { job: activeJob } = useJobPolling(activeJobId, onJobComplete);
-
-  // ─ Job starter helper
-  const startJob = useCallback((jobId: string) => {
-    setActiveJobId(jobId);
-    setActiveJobIsMock(false);
-    setJobFailedMsg(null);
-    subscribeToJob(jobId);
-  }, [subscribeToJob]);
-
-  // ─ Handlers
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    try {
-      const res = await uploadMut.mutateAsync({ projectId, data: { file } });
-      startJob(res.jobId);
-      invalidateAll();
-    } catch (err) {
-      console.error(err);
-      alert(t("Upload failed"));
-    }
-  };
-
-  const handleAnalyze = async () => {
-    try {
-      const res = await analyzeMut.mutateAsync({ projectId });
-      startJob(res.jobId);
-    } catch (err) {
-      console.error(err);
-      alert(t("Analysis failed to start"));
-    }
-  };
-
-  const handleArrange = async () => {
-    try {
-      const res = await arrangeMut.mutateAsync({
-        projectId,
-        data: {
-          styleId: selectedStyle,
-          density: 0.8,
-          humanize: true,
-          lockedFields: Array.from(lockedFields),
-          personaId: selectedPersona ?? undefined,
-        }
-      });
-      startJob(res.jobId);
-    } catch (err) {
-      console.error(err);
-    }
-  };
-
-  const handleRegenSection = async (sectionLabel: string) => {
-    try {
-      const res = await fetch(`/api/projects/${projectId}/arrangement/section/${encodeURIComponent(sectionLabel)}/regenerate`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ styleId: selectedStyle, personaId: selectedPersona }),
-      });
-      const data = await res.json();
-      if (data.jobId) startJob(data.jobId);
-    } catch (err) { console.error(err); }
-  };
-
-  const handleRegenTrack = async (trackId: string) => {
-    try {
-      const res = await fetch(`/api/projects/${projectId}/arrangement/track/${encodeURIComponent(trackId)}/regenerate`, {
-        method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ styleId: selectedStyle, personaId: selectedPersona }),
-      });
-      const data = await res.json();
-      if (data.jobId) startJob(data.jobId);
-    } catch (err) { console.error(err); }
-  };
-
-  const handleExport = () => {
-    const formats = ["midi", "musicxml", "pdf"].filter(f => selectedFormats[f]);
-    if (!formats.length) return;
-    exportMut.mutate({ projectId, data: { formats } }, {
-      onSuccess: (res: any) => startJob(res.jobId),
-    });
-  };
-
-  const handleRender = async () => {
-    const formats = ["wav", "flac", "mp3", "stems"].filter(f => selectedFormats[f]);
-    if (!formats.length) return;
-    try {
-      const res = await fetch(`/api/projects/${projectId}/render`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ formats }),
-      });
-      const data = await res.json();
-      startJob(data.jobId);
-    } catch (e) { console.error(e); }
-  };
-
-  if (isProjLoading) return <div className="h-screen flex items-center justify-center bg-background"><Loader2 className="w-8 h-8 animate-spin text-primary" /></div>;
-  if (!project) return <div className="p-8 text-center text-white">{t("Project not found")}</div>;
+  if (studio.isProjLoading) {
+    return (
+      <div className="h-screen flex items-center justify-center bg-background">
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+  if (!studio.project) {
+    return <div className="p-8 text-center text-white">{t("Project not found")}</div>;
+  }
 
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden selection:bg-primary/30 text-foreground">
-      {/* Banners */}
-      {showMockBanner && <MockBanner onDismiss={() => setShowMockBanner(false)} />}
-      {jobFailedMsg && <FailedBanner message={jobFailedMsg} />}
 
-      <JobProgress job={activeJob} />
+      {/* ── Banners ── */}
+      {studio.showMockBanner && <MockBanner onDismiss={() => studio.setShowMockBanner(false)} />}
+      {studio.jobFailedMsg && <FailedBanner message={studio.jobFailedMsg} />}
 
-      <TransportBar project={project} analysis={analysis} />
+      <JobProgress job={studio.activeJob} />
+
+      <TransportBar project={studio.project} analysis={studio.analysis} />
 
       <div className="flex-1 flex overflow-hidden">
-        {/* ─ Main Editor ─ */}
+
+        {/* ── Main Editor (timeline + tracks) ── */}
         <div className="flex-1 flex flex-col min-w-0 bg-[#060608]">
+
           {/* Timeline: chord + section labels */}
           <div className="h-20 bg-card border-b border-white/5 flex flex-col justify-end px-4 relative overflow-hidden" dir="ltr">
-            {analysis?.structure?.sections?.map((sec: any, i: number) => (
+            {studio.analysis?.structure?.sections?.map((sec: any, i: number) => (
               <div
                 key={i}
                 className="absolute top-0 h-6 border-l border-white/20 px-2 text-[10px] font-bold tracking-widest text-white/50 uppercase"
@@ -538,7 +66,7 @@ export default function ProjectStudio() {
               </div>
             ))}
             <div className="flex h-8 items-end gap-1 relative z-10 bottom-2">
-              {analysis?.chords?.chords?.slice(0, 30).map((chord: any, i: number) => (
+              {studio.analysis?.chords?.chords?.slice(0, 30).map((chord: any, i: number) => (
                 <div
                   key={i}
                   className="bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded text-xs font-medium shadow-[0_0_10px_rgba(0,240,255,0.1)] whitespace-nowrap"
@@ -550,52 +78,51 @@ export default function ProjectStudio() {
             </div>
           </div>
 
-          {/* Tracks */}
+          {/* Tracks area */}
           <div className="flex-1 overflow-y-auto overflow-x-hidden relative">
-            {!project.audioFileName && !arrangement ? (
+            {!studio.project.audioFileName && !studio.arrangement ? (
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center p-8">
                 <div className="w-24 h-24 rounded-full bg-white/5 flex items-center justify-center mb-6 border border-white/10 border-dashed">
                   <Upload className="w-10 h-10 text-muted-foreground" />
                 </div>
                 <h3 className="text-xl font-display font-semibold mb-2">{t("Drop Audio File to Analyze")}</h3>
                 <p className="text-muted-foreground max-w-md mb-6">{t("Upload a track to extract chords, BPM, stems, and structure. Or go straight to arrangement generation.")}</p>
-                <input type="file" ref={fileInputRef} className="hidden" accept="audio/*" onChange={handleUpload} />
                 <Button variant="glow" onClick={() => fileInputRef.current?.click()}>
                   <Upload className="w-4 h-4 mr-2" /> {t("Upload Audio")}
                 </Button>
               </div>
             ) : (
               <div className="w-full">
-                {project.audioFileName && (
+                {studio.project.audioFileName && (
                   <div className="flex border-b border-white/10 h-32 group">
                     <div className="w-64 bg-card border-r border-white/10 flex items-center px-4">
                       <span className="font-medium text-sm text-white">{t("Original Audio")}</span>
                     </div>
                     <div className="flex-1 bg-[#0a0a0c] relative px-2 py-1">
-                      {analysis?.waveformData ? (
+                      {studio.analysis?.waveformData ? (
                         <WaveformPlayer
-                          audioUrl={project.audioFileName ? `/api/projects/${projectId}/audio` : undefined}
-                          peaks={analysis.waveformData}
-                          duration={analysis.duration ?? project.audioDurationSeconds}
+                          audioUrl={studio.project.audioFileName ? `/api/projects/${projectId}/audio` : undefined}
+                          peaks={studio.analysis.waveformData}
+                          duration={studio.analysis.duration ?? studio.project.audioDurationSeconds}
                         />
                       ) : (
                         <div className="absolute inset-0 flex items-center justify-center">
-                          {activeJobId
+                          {studio.activeJobId
                             ? <Loader2 className="w-6 h-6 animate-spin text-primary" />
-                            : <Button size="sm" variant="outline" onClick={handleAnalyze}>{t("Analyze Audio")}</Button>
+                            : <Button size="sm" variant="outline" onClick={studio.handleAnalyze}>{t("Analyze Audio")}</Button>
                           }
                         </div>
                       )}
                     </div>
                   </div>
                 )}
-                {arrangement?.tracks?.map((track: any) => (
+                {studio.arrangement?.tracks?.map((track: any) => (
                   <TrackLane
                     key={track.id}
                     track={track}
-                    isSelected={selectedTrack?.id === track.id}
-                    onSelect={() => setSelectedTrack(prev => prev?.id === track.id ? null : track)}
-                    onRegen={arrangement ? handleRegenTrack : undefined}
+                    isSelected={studio.selectedTrack?.id === track.id}
+                    onSelect={() => studio.setSelectedTrack((prev: any) => prev?.id === track.id ? null : track)}
+                    onRegen={studio.arrangement ? studio.handleRegenTrack : undefined}
                   />
                 ))}
               </div>
@@ -603,9 +130,10 @@ export default function ProjectStudio() {
           </div>
         </div>
 
-        {/* ─ Right Panel ─ */}
+        {/* ── Right Panel (tabs) ── */}
         <div className="w-[340px] border-l border-white/10 bg-card flex flex-col z-20 shadow-2xl relative">
-          <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
+          <Tabs value={studio.activeTab} onValueChange={studio.setActiveTab} className="flex-1 flex flex-col">
+
             <div className="p-4 border-b border-white/5">
               <TabsList className="w-full grid grid-cols-5 text-[11px]">
                 <TabsTrigger value="analysis">{t("Analyze")}</TabsTrigger>
@@ -618,468 +146,90 @@ export default function ProjectStudio() {
 
             <div className="flex-1 overflow-y-auto p-4 custom-scrollbar">
 
-              {/* ── ANALYSIS TAB ── */}
+              {/* Analysis Tab */}
               <TabsContent value="analysis" className="space-y-6 mt-0">
-                {!analysis ? (
-                  <div className="text-center py-10 space-y-4">
-                    <Activity className="w-12 h-12 text-muted-foreground mx-auto opacity-20" />
-                    <p className="text-sm text-muted-foreground">{t("No analysis data yet.")}</p>
-                    <Button onClick={handleAnalyze} disabled={(!!activeJobId) || (!project.audioFileName && !isMockMode)} className="w-full">
-                      <Zap className="w-4 h-4 mr-2" /> {t("Start Analysis")}
-                    </Button>
-                    {!project.audioFileName && !isMockMode && (
-                      <>
-                        <input type="file" ref={fileInputRef} className="hidden" accept="audio/*" onChange={handleUpload} />
-                        <Button variant="outline" className="w-full" onClick={() => fileInputRef.current?.click()}>
-                          <Upload className="w-4 h-4 mr-2" /> {t("Upload Audio")}
-                        </Button>
-                      </>
-                    )}
-                    {!project.audioFileName && isMockMode && (
-                      <p className="text-xs text-amber-400/70">{t("MOCK MODE — analysis runs on simulated data")}</p>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    {/* Mock indicator on analysis card */}
-                    {(analysis.rhythm as any)?.isMock && (
-                      <div className="flex items-center gap-2 text-amber-400 text-xs bg-amber-500/10 border border-amber-500/20 rounded px-3 py-2">
-                        <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                        {t("These are simulated results (MOCK MODE)")}
-                      </div>
-                    )}
-
-                    {/* Key & Tempo card */}
-                    <div className={cn("daw-panel p-4 transition-all", lockedFields.has("key") && "ring-1 ring-primary/40 shadow-[0_0_10px_rgba(0,240,255,0.08)]")}>
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Key & Tempo")}</h4>
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => toggleLock("key")}
-                            className={cn("w-6 h-6 rounded flex items-center justify-center transition-colors", lockedFields.has("key") ? "text-primary bg-primary/20" : "text-muted-foreground hover:text-white bg-white/5 hover:bg-white/10")}
-                            title={lockedFields.has("key") ? t("Unlock field") : t("Lock field")}
-                          >
-                            {lockedFields.has("key") ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                          </button>
-                          <button
-                            onClick={() => setShowCorrections(true)}
-                            className="flex items-center gap-1 text-xs text-muted-foreground hover:text-accent transition-colors"
-                          >
-                            <Edit3 className="w-3 h-3" /> {t("Edit")}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-2 gap-4" dir="ltr">
-                        <div className="bg-black/30 rounded p-3 text-center border border-white/5">
-                          <div className="text-2xl font-bold text-accent text-glow-accent">{analysis.key.globalKey} {analysis.key.mode}</div>
-                          <div className="text-[10px] uppercase text-muted-foreground mt-1">{t("Key")}</div>
-                        </div>
-                        <div className="bg-black/30 rounded p-3 text-center border border-white/5">
-                          <div className="text-2xl font-bold text-primary text-glow-primary">{Math.round(analysis.rhythm.bpm)}</div>
-                          <div className="text-[10px] uppercase text-muted-foreground mt-1">{t("BPM")}</div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Structure card */}
-                    <div className={cn("daw-panel p-4 transition-all", lockedFields.has("sections") && "ring-1 ring-primary/40 shadow-[0_0_10px_rgba(0,240,255,0.08)]")}>
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Structure")}</h4>
-                        <button
-                          onClick={() => toggleLock("sections")}
-                          className={cn("w-6 h-6 rounded flex items-center justify-center transition-colors", lockedFields.has("sections") ? "text-primary bg-primary/20" : "text-muted-foreground hover:text-white bg-white/5 hover:bg-white/10")}
-                          title={lockedFields.has("sections") ? t("Unlock field") : t("Lock field")}
-                        >
-                          {lockedFields.has("sections") ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                        </button>
-                      </div>
-                      <div className="space-y-1">
-                        {analysis.structure.sections.map((sec: any, i: number) => (
-                          <div key={i} className={cn(
-                            "flex justify-between items-center text-sm px-2 py-1.5 rounded group",
-                            sec.regenerate ? "bg-accent/10 border border-accent/30" : "bg-white/5 hover:bg-white/8"
-                          )}>
-                            <div className="flex items-center gap-2">
-                              {sec.locked
-                                ? <Lock className="w-3 h-3 text-primary flex-shrink-0" />
-                                : <div className="w-2 h-2 rounded-full flex-shrink-0" style={{ backgroundColor: sec.label === "chorus" ? "#00f0ff" : sec.label === "verse" ? "#a855f7" : "#888" }} />
-                              }
-                              <span className="capitalize text-white/80 text-xs">{t(sec.label)}</span>
-                              {sec.regenerate && <span className="text-[9px] text-accent uppercase">{t("Queued")}</span>}
-                            </div>
-                            <div className="flex items-center gap-2" dir="ltr">
-                              <span className="text-muted-foreground font-mono text-[10px]">{formatTime(sec.startTime)}</span>
-                              {sec.confidence !== undefined && (
-                                <span className={cn("text-[9px] font-mono", sec.confidence > 0.75 ? "text-green-400" : sec.confidence > 0.5 ? "text-yellow-400" : "text-red-400")}>
-                                  {Math.round(sec.confidence * 100)}%
-                                </span>
-                              )}
-                              <button
-                                className="opacity-0 group-hover:opacity-100 transition-opacity text-accent/70 hover:text-accent"
-                                title={t("Regenerate this section")}
-                                onClick={() => {
-                                  fetch(`/api/projects/${projectId}/regenerate-section`, {
-                                    method: "POST",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ sectionIndex: i }),
-                                  }).then(() => queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/analysis`] }));
-                                }}
-                              >
-                                <Zap className="w-3 h-3" />
-                              </button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Confidence overview */}
-                    {analysis.confidenceData && (
-                      <div className="daw-panel p-4">
-                        <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-3">{t("Analysis Confidence")}</h4>
-                        <div className="space-y-1.5">
-                          {(["rhythm", "key", "chords", "melody", "structure"] as const).map(mod => {
-                            const val = analysis.confidenceData[mod];
-                            if (val === undefined) return null;
-                            const pct = Math.round(val * 100);
-                            return (
-                              <div key={mod} className="flex items-center gap-2 text-xs">
-                                <span className="w-16 text-muted-foreground capitalize">{t(mod)}</span>
-                                <div className="flex-1 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                                  <div
-                                    className={cn("h-full rounded-full transition-all", pct > 75 ? "bg-green-500" : pct > 50 ? "bg-yellow-500" : "bg-red-500")}
-                                    style={{ width: `${pct}%` }}
-                                  />
-                                </div>
-                                <span className="w-8 text-right font-mono text-white/50" dir="ltr">{pct}%</span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* Chord Progression card — click any chord to edit */}
-                    <div className={cn("daw-panel p-4 transition-all", lockedFields.has("chords") && "ring-1 ring-primary/40 shadow-[0_0_10px_rgba(0,240,255,0.08)]")}>
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Chord Progression")}</h4>
-                        <div className="flex items-center gap-2">
-                          {Object.keys(chordOverrides).length > 0 && (
-                            <button
-                              onClick={() => setChordOverrides({})}
-                              className="text-[10px] text-accent/70 hover:text-accent transition-colors"
-                              title={t("Reset all chord edits")}
-                            >
-                              {t("Reset")}
-                            </button>
-                          )}
-                          <button
-                            onClick={() => toggleLock("chords")}
-                            className={cn("w-6 h-6 rounded flex items-center justify-center transition-colors", lockedFields.has("chords") ? "text-primary bg-primary/20" : "text-muted-foreground hover:text-white bg-white/5 hover:bg-white/10")}
-                            title={lockedFields.has("chords") ? t("Unlock field") : t("Lock field")}
-                          >
-                            {lockedFields.has("chords") ? <Lock className="w-3 h-3" /> : <Unlock className="w-3 h-3" />}
-                          </button>
-                        </div>
-                      </div>
-                      {analysis.chords?.chords?.length > 0 ? (
-                        <div className="flex flex-wrap gap-1" dir="ltr">
-                          {(analysis.chords.chords as any[]).slice(0, 16).map((c: any, i: number) => {
-                            const displayed = chordOverrides[i] ?? c.chord;
-                            const isEditing = editingChordIdx === i;
-                            return (
-                              <div key={i} className="relative">
-                                <button
-                                  onClick={() => setEditingChordIdx(isEditing ? null : i)}
-                                  className={cn(
-                                    "px-2 py-1 rounded text-xs font-mono border transition-all",
-                                    chordOverrides[i]
-                                      ? "bg-accent/20 border-accent/50 text-accent"
-                                      : "bg-primary/15 border-primary/30 text-primary/90 hover:bg-primary/25 hover:border-primary/60",
-                                    isEditing && "ring-1 ring-accent shadow-[0_0_8px_rgba(0,240,255,0.3)]"
-                                  )}
-                                  title={c.alternatives?.length ? `${t("Alternatives")}: ${c.alternatives.join(", ")}` : undefined}
-                                >
-                                  {displayed}
-                                  {c.confidence !== undefined && c.confidence < 0.5 && (
-                                    <span className="ml-1 text-[8px] text-yellow-400/70">?</span>
-                                  )}
-                                </button>
-                                {isEditing && (
-                                  <div className="absolute bottom-full mb-1 left-0 z-50 bg-card border border-white/20 rounded shadow-xl p-2 min-w-[120px]">
-                                    <p className="text-[10px] text-muted-foreground mb-1.5">{t("Select chord")}</p>
-                                    <div className="space-y-1">
-                                      {[c.chord, ...(c.alternatives ?? [])].map((alt: string) => (
-                                        <button
-                                          key={alt}
-                                          onClick={() => {
-                                            setChordOverrides(prev => ({ ...prev, [i]: alt }));
-                                            setEditingChordIdx(null);
-                                          }}
-                                          className={cn(
-                                            "w-full text-left px-2 py-1 rounded text-xs font-mono transition-colors",
-                                            alt === displayed
-                                              ? "bg-primary/20 text-primary"
-                                              : "hover:bg-white/10 text-white/80"
-                                          )}
-                                        >
-                                          {alt}
-                                        </button>
-                                      ))}
-                                    </div>
-                                    {c.confidence !== undefined && (
-                                      <p className="text-[9px] text-muted-foreground mt-1.5 border-t border-white/10 pt-1">
-                                        {t("Confidence")}: {Math.round(c.confidence * 100)}%
-                                      </p>
-                                    )}
-                                  </div>
-                                )}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <p className="text-sm font-mono text-white/80 leading-relaxed" dir="ltr">
-                          {analysis.chords?.leadSheet}
-                        </p>
-                      )}
-                    </div>
-
-                    <Button variant="outline" className="w-full" onClick={handleAnalyze} disabled={!!activeJobId}>
-                      <Zap className="w-4 h-4 mr-2" /> {t("Re-analyze")}
-                    </Button>
-
-                    {Object.keys(modelVersions).length > 0 && (
-                      <div className="daw-panel p-3 space-y-1">
-                        <h4 className="text-[10px] font-display font-bold text-muted-foreground uppercase tracking-widest mb-2">{t("Models")}</h4>
-                        {Object.entries(modelVersions).map(([model, version]) => (
-                          <div key={model} className="flex justify-between text-[10px]" dir="ltr">
-                            <span className="text-muted-foreground">{model}</span>
-                            <span className="text-primary/70 font-mono">{String(version)}</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </>
-                )}
+                <AnalysisTab
+                  analysis={studio.analysis}
+                  project={studio.project}
+                  projectId={projectId}
+                  activeJobId={studio.activeJobId}
+                  isMockMode={studio.isMockMode}
+                  modelVersions={studio.modelVersions}
+                  lockedFields={studio.lockedFields}
+                  chordOverrides={studio.chordOverrides}
+                  editingChordIdx={studio.editingChordIdx}
+                  onAnalyze={studio.handleAnalyze}
+                  onUploadClick={() => fileInputRef.current?.click()}
+                  onToggleLock={studio.toggleLock}
+                  onSetChordOverride={studio.handleSetChordOverride}
+                  onSetEditingChordIdx={studio.setEditingChordIdx}
+                />
               </TabsContent>
 
-              {/* ── INSPECT TAB ── */}
+              {/* Inspect Tab */}
               <TabsContent value="inspect" className="mt-0">
-                <AnalysisInspector analysis={analysis} />
+                <AnalysisInspector analysis={studio.analysis} />
               </TabsContent>
 
-              {/* ── ARRANGE TAB ── */}
+              {/* Arrange Tab */}
               <TabsContent value="arrange" className="space-y-4 mt-0">
-                <div className="daw-panel p-4">
-                  <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest mb-4">{t("Style")}</h4>
-                  <div className="grid grid-cols-2 gap-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
-                    {styles?.map((style: any) => (
-                      <button
-                        key={style.id}
-                        onClick={() => setSelectedStyle(style.id)}
-                        className={cn(
-                          "p-3 text-left rounded border transition-all ltr:text-left rtl:text-right",
-                          selectedStyle === style.id
-                            ? "border-primary/70 bg-primary/20 shadow-[0_0_12px_rgba(0,240,255,0.2)]"
-                            : "border-white/10 bg-white/5 hover:bg-primary/10 hover:border-primary/30"
-                        )}
-                      >
-                        <div className={cn("text-sm font-bold", selectedStyle === style.id ? "text-primary" : "text-white")}>{t(style.name)}</div>
-                        <div className="text-[10px] text-muted-foreground">{t(style.genre)}</div>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
-                {/* Persona Picker */}
-                {personas.length > 0 && (
-                  <div className="daw-panel p-4">
-                    <div className="flex items-center justify-between mb-3">
-                      <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Persona")}</h4>
-                      {selectedPersona && (
-                        <button onClick={() => setSelectedPersona(null)} className="text-[10px] text-muted-foreground hover:text-white transition-colors">{t("ביטול")}</button>
-                      )}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2 max-h-56 overflow-y-auto custom-scrollbar pr-1">
-                      {personas.map((persona: any) => (
-                        <button
-                          key={persona.id}
-                          onClick={() => setSelectedPersona(prev => prev === persona.id ? null : persona.id)}
-                          className={cn(
-                            "p-2.5 text-right rounded border transition-all text-xs",
-                            selectedPersona === persona.id
-                              ? "border-accent/70 bg-accent/15 shadow-[0_0_10px_rgba(255,160,80,0.15)]"
-                              : "border-white/10 bg-white/5 hover:bg-accent/10 hover:border-accent/30"
-                          )}
-                        >
-                          <div className={cn("font-bold text-[11px] truncate", selectedPersona === persona.id ? "text-accent" : "text-white")}>{persona.name}</div>
-                          <div className="text-[9px] text-muted-foreground truncate">{persona.nameEn}</div>
-                          {persona.tags?.length > 0 && (
-                            <div className="flex gap-0.5 mt-1 flex-wrap">
-                              {persona.tags.slice(0, 2).map((tag: string) => (
-                                <span key={tag} className="px-1 py-0 rounded-full bg-white/5 text-[8px] text-muted-foreground">{tag}</span>
-                              ))}
-                            </div>
-                          )}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                <div className="daw-panel p-4 space-y-4">
-                  <div>
-                    <div className="flex justify-between mb-2">
-                      <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Density")}</h4>
-                      <span className="text-xs text-primary" dir="ltr">80%</span>
-                    </div>
-                    <Slider defaultValue={[80]} max={100} dir="ltr" />
-                  </div>
-                  <div>
-                    <div className="flex justify-between mb-2">
-                      <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Tempo Factor")}</h4>
-                      <span className="text-xs text-white" dir="ltr">1.0x</span>
-                    </div>
-                    <Slider defaultValue={[50]} max={100} dir="ltr" />
-                  </div>
-                </div>
-
-                {/* ── MIDI Playback Engine ── */}
-                {arrangement?.tracks?.length > 0 && (
-                  <div className="daw-panel p-4 space-y-3">
-                    <div className="flex items-center gap-2 mb-1">
-                      <Music className="w-3.5 h-3.5 text-primary/70" />
-                      <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("MIDI Preview")}</h4>
-                    </div>
-                    <MidiPlayer
-                      tracks={arrangement.tracks.map((tr: any) => ({
-                        id: tr.id ?? String(tr.instrument),
-                        instrument: tr.instrument,
-                        midiProgram: tr.midiProgram,
-                        notes: tr.notes ?? [],
-                        volume: 80,
-                      }))}
-                      totalDuration={arrangement.totalDuration ?? arrangement.durationSeconds}
-                    />
-                  </div>
-                )}
-
-                {arrangement?.arrangementPlan?.harmonicPlan && (
-                  <div className="daw-panel p-4 space-y-2">
-                    <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Harmonic Plan")}</h4>
-                    <p className="text-xs font-mono text-white/70 leading-relaxed" dir="ltr">
-                      {Array.isArray(arrangement.arrangementPlan.harmonicPlan)
-                        ? arrangement.arrangementPlan.harmonicPlan.join(" → ")
-                        : String(arrangement.arrangementPlan.harmonicPlan)}
-                    </p>
-                    {arrangement.arrangementPlan.profileUsed && (
-                      <p className="text-[10px] text-muted-foreground">
-                        {t("Profile")}: <span className="text-primary/80">{arrangement.arrangementPlan.profileUsed}</span>
-                      </p>
-                    )}
-                  </div>
-                )}
-
-                {(() => {
-                  const transitions = (arrangement as any)?.generationMetadata?.transitions ?? (arrangement as any)?.transitions;
-                  if (!transitions?.length) return null;
-                  return (
-                    <div className="daw-panel p-4 space-y-2">
-                      <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Transitions")}</h4>
-                      <div className="space-y-1" dir="ltr">
-                        {transitions.map((tr: any, i: number) => (
-                          <div key={i} className="flex items-center gap-2 text-xs">
-                            <span className="text-white/60 capitalize">{tr.fromSection}</span>
-                            <span className="text-primary/60">→</span>
-                            <span className="text-white/60 capitalize">{tr.toSection}</span>
-                            <span className="ml-auto text-accent/60 font-mono bg-accent/10 px-1.5 py-0.5 rounded text-[9px]">{tr.type}</span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                {(() => {
-                  const plan = (arrangement as any)?.generationMetadata?.instrumentationPlan ?? (arrangement as any)?.instrumentationPlan;
-                  if (!plan?.tracks?.length) return null;
-                  return (
-                    <div className="daw-panel p-4 space-y-2">
-                      <h4 className="text-xs font-display font-bold text-muted-foreground uppercase tracking-widest">{t("Instrumentation")}</h4>
-                      <div className="space-y-1" dir="ltr">
-                        {plan.tracks.map((tr: any, i: number) => (
-                          <div key={i} className="flex items-center justify-between text-xs">
-                            <span className="text-white/70 capitalize">{tr.instrument}</span>
-                            <span className="text-muted-foreground">{tr.role}</span>
-                            <div className="w-16 h-1.5 bg-white/5 rounded-full overflow-hidden">
-                              <div className="h-full bg-primary/50 rounded-full" style={{ width: `${Math.round((tr.density ?? 0) * 100)}%` }} />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })()}
-
+                <ArrangeTab
+                  arrangement={studio.arrangement}
+                  styles={studio.styles ?? []}
+                  personas={studio.personas}
+                  selectedStyle={studio.selectedStyle}
+                  selectedPersona={studio.selectedPersona}
+                  activeJobId={studio.activeJobId}
+                  onSelectStyle={studio.setSelectedStyle}
+                  onSelectPersona={studio.setSelectedPersona}
+                  onArrange={studio.handleArrange}
+                />
               </TabsContent>
 
-              {/* ── AGENT TAB ── */}
+              {/* Agent Tab */}
               <TabsContent value="agent" className="mt-0 h-[calc(100vh-200px)] min-h-[400px]">
                 <ChatAgent
                   projectId={projectId}
-                  onProfileReady={(profile) => {
-                    console.log("[ChatAgent] Profile confirmed:", profile);
-                  }}
+                  onProfileReady={(profile) => { console.log("[ChatAgent] Profile confirmed:", profile); }}
                   className="h-full"
                 />
               </TabsContent>
 
-              {/* ── EXPORT TAB ── */}
+              {/* Export Tab */}
               <TabsContent value="export" className="mt-0">
-                <ExportCenter projectId={projectId} hasArrangement={!!arrangement} />
+                <ExportCenter projectId={projectId} hasArrangement={!!studio.arrangement} />
               </TabsContent>
-            </div>
 
-            {/* ── Pinned Action Footer — always visible regardless of scroll position ── */}
-            {activeTab === "arrange" && (
-              <div className="shrink-0 p-4 border-t border-white/5 bg-card space-y-2">
-                {arrangement && (
-                  <p className="text-xs text-center text-green-400/80 flex items-center justify-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> {t("Arrangement ready")} — {styles?.find((s: any) => s.id === arrangement.styleId)?.name}
-                  </p>
-                )}
-                <Button variant="glow" className="w-full" onClick={handleArrange} disabled={!!activeJobId}>
-                  <Layers className="w-4 h-4 mr-2" /> {t("Generate Arrangement")}
-                </Button>
-              </div>
-            )}
+            </div>
           </Tabs>
         </div>
       </div>
 
-      {/* Piano Roll panel — opens at bottom when a track is selected */}
-      {selectedTrack && (
+      {/* Piano Roll */}
+      {studio.selectedTrack && (
         <PianoRoll
-          track={selectedTrack}
-          bpm={analysis?.rhythm?.bpm ?? 120}
-          totalDurationSeconds={project?.audioDurationSec ?? 180}
-          onClose={() => setSelectedTrack(null)}
+          track={studio.selectedTrack}
+          bpm={studio.analysis?.rhythm?.bpm ?? 120}
+          totalDurationSeconds={studio.project?.audioDurationSec ?? 180}
+          onClose={() => studio.setSelectedTrack(null)}
         />
       )}
 
-      {/* Manual Corrections modal */}
-      {showCorrections && (
+      {/* Manual Corrections Modal */}
+      {studio.showCorrections && (
         <CorrectionsDrawer
-          analysis={analysis}
+          analysis={studio.analysis}
           projectId={projectId}
-          onClose={() => setShowCorrections(false)}
+          onClose={() => studio.setShowCorrections(false)}
           onSaved={() => {
-            invalidateAll();
-            setShowCorrections(false);
+            studio.invalidateAll();
+            studio.setShowCorrections(false);
           }}
         />
       )}
+
+      {/* Hidden file input */}
+      <input type="file" ref={fileInputRef} className="hidden" accept="audio/*" onChange={studio.handleUpload} />
     </div>
   );
 }

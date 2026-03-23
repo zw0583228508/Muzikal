@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.service
+
 """
 Tests for ConversationAgent — DISCOVERY, ENRICHMENT, EXECUTION phases.
 """

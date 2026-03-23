@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.unit
+
 """
 Tests for audio/rhythm.py — BPM detection, time signature, beat grid.
 """

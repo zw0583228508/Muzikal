@@ -1,3 +1,6 @@
+import pytest
+pytestmark = pytest.mark.unit
+
 """
 Tests for audio/structure.py — segment/section detection.
 analyze_structure(y, sr, rhythm) → {"sections": [...] or similar}

@@ -119,6 +119,13 @@ export default {
     "genres.tango": "Tango",
     "genres.jazz_bebop": "Bebop Jazz",
     "genres.celtic": "Celtic",
-    "genres.sephardic": "Sephardic / Ladino"
+    "genres.sephardic": "Sephardic / Ladino",
+    "Download All as ZIP": "Download All as ZIP",
+    "Creating ZIP bundle...": "Creating ZIP bundle...",
+    "Select formats first": "Select formats first",
+    "Python backend unavailable": "Python backend unavailable",
+    "MOCK MODE active": "MOCK MODE active",
+    "Chord substitutions for": "Chord substitutions for",
+    "No substitutions available": "No substitutions available"
   }
 };

@@ -49,3 +49,8 @@ timeoutMs = 20000
 [nix]
 channel = "stable-25_05"
 packages = ["ffmpeg", "ffmpeg-full", "libsndfile", "libxcrypt", "pkg-config", "portmidi", "xsimd"]
+
+[userenv]
+
+[userenv.development]
+LOCAL_STORAGE_PATH = "/tmp/musicai_storage"

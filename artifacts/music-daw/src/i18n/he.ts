@@ -150,6 +150,13 @@ export default {
     "genres.tango": "טנגו",
     "genres.jazz_bebop": "ג'אז ביבופ",
     "genres.celtic": "קלטי",
-    "genres.sephardic": "ספרדי / לדינו"
+    "genres.sephardic": "ספרדי / לדינו",
+    "Download All as ZIP": "הורד הכל כ-ZIP",
+    "Creating ZIP bundle...": "יוצר חבילת ZIP...",
+    "Select formats first": "בחר פורמטים תחילה",
+    "Python backend unavailable": "Python backend לא זמין",
+    "MOCK MODE active": "מצב MOCK פעיל",
+    "Chord substitutions for": "החלפות ל",
+    "No substitutions available": "אין החלפות זמינות"
   }
 };

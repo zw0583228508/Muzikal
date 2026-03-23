@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils";
 import {
@@ -68,7 +69,11 @@ function SectionTimeline({ sections }: { sections: any[] }) {
   );
 }
 
-function ChordTimeline({ chords }: { chords: any[] }) {
+function ChordTimeline({ chords, onChordClick, selectedChord }: {
+  chords: any[];
+  onChordClick?: (chord: string) => void;
+  selectedChord?: string | null;
+}) {
   if (!chords?.length) return null;
   const total = chords[chords.length - 1]?.endTime ?? chords[chords.length - 1]?.startTime + 4 ?? 1;
   return (
@@ -82,13 +87,15 @@ function ChordTimeline({ chords }: { chords: any[] }) {
         return (
           <div
             key={i}
-            className="absolute top-0 h-full flex items-center justify-center text-[8px] font-mono text-white/80 border-r border-black/50"
+            className="absolute top-0 h-full flex items-center justify-center text-[8px] font-mono text-white/80 border-r border-black/50 cursor-pointer hover:brightness-125 transition-all"
             style={{
               left: `${left}%`,
               width: `${width}%`,
               backgroundColor: `rgba(0,240,255,${0.15 + conf * 0.35})`,
+              outline: selectedChord === c.chord ? "2px solid rgba(0,240,255,0.8)" : undefined,
             }}
-            title={`${c.chord} (conf: ${Math.round(conf * 100)}%)`}
+            title={`${c.chord} (conf: ${Math.round(conf * 100)}%) — לחץ לראות החלפות`}
+            onClick={() => onChordClick?.(c.chord)}
           >
             {width > 4 && <span className="truncate px-0.5">{c.chord}</span>}
           </div>
@@ -124,6 +131,21 @@ function MelodyPitchRange({ notes }: { notes: any[] }) {
 
 export function AnalysisInspector({ analysis }: AnalysisInspectorProps) {
   const { t } = useTranslation();
+  const [selectedChord, setSelectedChord] = useState<string | null>(null);
+  const [chordSubs, setChordSubs] = useState<{chord:string,type:string,description:string}[]>([]);
+  const [subsLoading, setSubsLoading] = useState(false);
+
+  const handleChordClick = async (chordName: string) => {
+    if (selectedChord === chordName) { setSelectedChord(null); return; }
+    setSelectedChord(chordName);
+    setSubsLoading(true);
+    try {
+      const resp = await fetch(`/api/chords/${encodeURIComponent(chordName)}/substitutions?style=jazz`);
+      const data = await resp.json();
+      setChordSubs(data.substitutions ?? []);
+    } catch { setChordSubs([]); }
+    finally { setSubsLoading(false); }
+  };
 
   if (!analysis) {
     return (
@@ -224,7 +246,32 @@ export function AnalysisInspector({ analysis }: AnalysisInspectorProps) {
         </div>
         {chordList.length > 0 ? (
           <>
-            <ChordTimeline chords={chordList} />
+            <ChordTimeline
+              chords={chordList}
+              onChordClick={handleChordClick}
+              selectedChord={selectedChord}
+            />
+            {selectedChord && (
+              <div className="mt-2 p-2 rounded-lg border border-white/10 bg-black/30 text-xs">
+                <div className="flex items-center gap-2 mb-1.5">
+                  <span className="font-mono font-bold text-primary">{selectedChord}</span>
+                  <span className="text-white/40">— {t("Chord substitutions for")}</span>
+                  {subsLoading && <span className="text-white/40 animate-pulse">טוען...</span>}
+                  <button onClick={() => setSelectedChord(null)} className="ml-auto text-white/30 hover:text-white/60">✕</button>
+                </div>
+                {chordSubs.length === 0 && !subsLoading && (
+                  <span className="text-white/30">{t("No substitutions available")}</span>
+                )}
+                <div className="flex flex-wrap gap-1.5">
+                  {chordSubs.map(s => (
+                    <div key={s.chord} className="px-2 py-1 rounded bg-white/5 border border-white/10">
+                      <span className="font-mono font-bold text-cyan-400">{s.chord}</span>
+                      <span className="text-white/40 ml-1.5">{s.description}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
             <div className="text-[10px] text-muted-foreground" dir="ltr">
               {chords.leadSheet ?? chordList.slice(0, 8).map((c: any) => c.chord).join(" | ")}
             </div>

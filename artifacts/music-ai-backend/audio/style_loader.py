@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # Locate the YAML file relative to workspace root
 _WORKSPACE_ROOT = os.environ.get(
     "WORKSPACE_ROOT",
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")),
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..")),
 )
 _STYLES_YAML = os.path.join(_WORKSPACE_ROOT, "configs", "styles", "genres.yaml")
 

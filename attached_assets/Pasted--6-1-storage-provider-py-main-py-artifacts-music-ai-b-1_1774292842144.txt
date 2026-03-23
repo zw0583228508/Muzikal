@@ -1,0 +1,162 @@
+הוראות מדויקות — 6 שינויים
+
+1 · storage_provider.py + main.py — שתי שורות
+קובץ: artifacts/music-ai-backend/storage/storage_provider.py — שורה 60
+שנה:
+pythonself.base = Path(base_path or os.environ.get("LOCAL_STORAGE_PATH", "/tmp/musicai_storage"))
+ל:
+pythonself.base = Path(base_path or os.environ.get("LOCAL_STORAGE_PATH", "/app/storage"))
+קובץ: artifacts/music-ai-backend/main.py — שורה 25
+שנה:
+pythonstorage_path = os.environ.get("LOCAL_STORAGE_PATH", "/tmp/musicai_storage")
+ל:
+pythonstorage_path = os.environ.get("LOCAL_STORAGE_PATH", "/app/storage")
+
+2 · arranger.py — שורה אחת להוסיף
+קובץ: artifacts/music-ai-backend/orchestration/arranger.py
+מצא את השורה (שורה ~75):
+python    if conflicts:
+        # Shared channels are intentional (different styles) — log a debug notice, not an error
+        import logging as _log
+        _log.getLogger(__name__).debug(
+            "Intentional MIDI channel sharing (different styles only): %s", conflicts
+        )
+מיד אחרי סגירת ה-_validate_instrument_channels() (השורה הריקה שאחרי הפונקציה), הוסף:
+python_validate_instrument_channels()   # called at import time
+
+3 · מחק configs/ מה-root
+bashrm -rf configs/
+(WORKSPACE_ROOT כבר מצביע נכון ל-artifacts/music-ai-backend/ — זה בטוח)
+
+4 · analysis-inspector.tsx — הוסף chord substitutions ל-ChordTimeline
+קובץ: artifacts/music-daw/src/components/analysis-inspector.tsx
+שלב א — הוסף state ו-handler בתוך הקומפוננט הראשי AnalysisInspector. מצא את השורה:
+typescriptexport function AnalysisInspector({
+והוסף בתוכה, אחרי ה-state הקיים:
+typescriptconst [selectedChord, setSelectedChord] = useState<string | null>(null);
+const [chordSubs, setChordSubs] = useState<{chord:string,type:string,description:string}[]>([]);
+const [subsLoading, setSubsLoading] = useState(false);
+
+const handleChordClick = async (chordName: string) => {
+  if (selectedChord === chordName) { setSelectedChord(null); return; }
+  setSelectedChord(chordName);
+  setSubsLoading(true);
+  try {
+    const resp = await fetch(`/api/chords/${encodeURIComponent(chordName)}/substitutions?style=jazz`);
+    const data = await resp.json();
+    setChordSubs(data.substitutions ?? []);
+  } catch { setChordSubs([]); }
+  finally { setSubsLoading(false); }
+};
+שלב ב — עדכן את ChordTimeline לקבל את ה-handler ולהציג popover. מצא:
+typescriptfunction ChordTimeline({ chords }: { chords: any[] }) {
+שנה ל:
+typescriptfunction ChordTimeline({ chords, onChordClick, selectedChord }: {
+  chords: any[];
+  onChordClick?: (chord: string) => void;
+  selectedChord?: string | null;
+}) {
+בתוך ה-<div> של כל אקורד (זה שיש לו className="absolute top-0 h-full..."), הוסף:
+typescriptonClick={() => onChordClick?.(c.chord)}
+className="... cursor-pointer hover:brightness-125 transition-all"
+style={{
+  ...
+  outline: selectedChord === c.chord ? "2px solid rgba(0,240,255,0.8)" : undefined,
+}}
+שלב ג — מצא את המקום שקורא ל-ChordTimeline (שורה ~227):
+typescript<ChordTimeline chords={chordList} />
+שנה ל:
+typescript<ChordTimeline
+  chords={chordList}
+  onChordClick={handleChordClick}
+  selectedChord={selectedChord}
+/>
+{selectedChord && (
+  <div className="mt-2 p-2 rounded-lg border border-white/10 bg-black/30 text-xs">
+    <div className="flex items-center gap-2 mb-1.5">
+      <span className="font-mono font-bold text-primary">{selectedChord}</span>
+      <span className="text-white/40">— החלפות הרמוניות</span>
+      {subsLoading && <span className="text-white/40 animate-pulse">טוען...</span>}
+      <button onClick={() => setSelectedChord(null)} className="ml-auto text-white/30 hover:text-white/60">✕</button>
+    </div>
+    {chordSubs.length === 0 && !subsLoading && (
+      <span className="text-white/30">אין החלפות זמינות</span>
+    )}
+    <div className="flex flex-wrap gap-1.5">
+      {chordSubs.map(s => (
+        <div key={s.chord} className="px-2 py-1 rounded bg-white/5 border border-white/10">
+          <span className="font-mono font-bold text-cyan-400">{s.chord}</span>
+          <span className="text-white/40 ml-1.5">{s.description}</span>
+        </div>
+      ))}
+    </div>
+  </div>
+)}
+
+5 · en.ts + he.ts — הוסף מפתחות
+קובץ: artifacts/music-daw/src/i18n/en.ts — הוסף לפני הסגירה הסופית }
+typescript"Download All as ZIP": "Download All as ZIP",
+"Creating ZIP bundle...": "Creating ZIP bundle...",
+"Select formats first": "Select formats first",
+"Python backend unavailable": "Python backend unavailable",
+"MOCK MODE active": "MOCK MODE active",
+"Chord substitutions for": "Chord substitutions for",
+"No substitutions available": "No substitutions available",
+קובץ: artifacts/music-daw/src/i18n/he.ts — הוסף לפני הסגירה הסופית }
+typescript"Download All as ZIP": "הורד הכל כ-ZIP",
+"Creating ZIP bundle...": "יוצר חבילת ZIP...",
+"Select formats first": "בחר פורמטים תחילה",
+"Python backend unavailable": "Python backend לא זמין",
+"MOCK MODE active": "מצב MOCK פעיל",
+"Chord substitutions for": "החלפות ל",
+"No substitutions available": "אין החלפות זמינות",
+
+6 · tests/test_chord_substitutions.py — קובץ חדש
+צור קובץ: artifacts/music-ai-backend/tests/test_chord_substitutions.py
+python"""Tests for chord substitution engine."""
+from audio.chords import get_chord_substitutions
+
+
+def test_returns_list():
+    assert isinstance(get_chord_substitutions("C"), list)
+
+def test_known_chord_has_subs():
+    subs = get_chord_substitutions("C")
+    assert len(subs) > 0
+
+def test_sub_has_required_keys():
+    subs = get_chord_substitutions("Am")
+    for s in subs:
+        assert "chord" in s and "type" in s and "description" in s
+
+def test_unknown_chord_returns_empty_list():
+    subs = get_chord_substitutions("Xyz_unknown_99")
+    assert isinstance(subs, list)
+
+def test_jazz_includes_tritone():
+    subs = get_chord_substitutions("G7", style="jazz")
+    types = [s["type"] for s in subs]
+    assert "tritone_sub" in types
+
+def test_pop_excludes_tritone():
+    subs = get_chord_substitutions("G7", style="pop")
+    types = [s["type"] for s in subs]
+    assert "tritone_sub" not in types
+
+def test_classical_only_voice_leading():
+    subs = get_chord_substitutions("C", style="classical")
+    allowed = {"inversion", "relative", "mediant"}
+    for s in subs:
+        assert s["type"] in allowed
+
+def test_extension_chord_root_fallback():
+    # "Cmaj7" not in dict as root "C" — should still return subs
+    subs_full = get_chord_substitutions("Cmaj7")
+    assert isinstance(subs_full, list)
+
+def test_max_results_reasonable():
+    subs = get_chord_substitutions("C")
+    assert len(subs) <= 6
+
+לאחר כל השינויים:
+bashcd artifacts/music-ai-backend && python -m pytest tests/ -v

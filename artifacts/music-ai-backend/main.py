@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting MusicAI Backend...")
-    storage_path = os.environ.get("LOCAL_STORAGE_PATH", "/tmp/musicai_storage")
+    storage_path = os.environ.get("LOCAL_STORAGE_PATH", "/app/storage")
     for subdir in ["exports", "stems", "renders", "uploads"]:
         os.makedirs(os.path.join(storage_path, subdir), exist_ok=True)
     logger.info(f"Storage initialized at {storage_path}")

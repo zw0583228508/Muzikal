@@ -88,6 +88,8 @@ def _validate_instrument_channels() -> None:
             "Intentional MIDI channel sharing (different styles only): %s", conflicts
         )
 
+_validate_instrument_channels()   # called at import time
+
 # ─── Base style configs (fallback when profiles don't cover a style) ──────────
 STYLES: Dict[str, Any] = {
     "pop":           {"instruments": ["drums", "bass", "piano", "guitar", "strings", "pad"], "density": 0.75},

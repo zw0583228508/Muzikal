@@ -1,4 +1,4 @@
-import { pgTable, text, serial, integer, real, jsonb, timestamp, pgEnum, bigint, boolean, index } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, integer, real, jsonb, timestamp, pgEnum, bigint, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod/v4";
 
@@ -113,8 +113,6 @@ export const projectFilesTable = pgTable("project_files", {
 
 export const insertProjectSchema = createInsertSchema(projectsTable).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertJobSchema = createInsertSchema(jobsTable).omit({ id: true, createdAt: true, updatedAt: true });
-
-export const projectsByUserIdx = index("projects_user_id_idx").on(projectsTable.userId);
 
 export type Project = typeof projectsTable.$inferSelect;
 export type InsertProject = z.infer<typeof insertProjectSchema>;

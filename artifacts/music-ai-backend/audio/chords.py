@@ -198,3 +198,65 @@ def analyze_chords(y: np.ndarray, sr: int, rhythm: dict, key: dict) -> Dict[str,
         "warnings": warnings,
         "model": "chroma-cqt-template",
     }
+
+
+# ─── Chord Substitution Engine ─────────────────────────────────────────────────
+
+CHORD_SUBSTITUTIONS: dict[str, list[dict]] = {
+    "C":    [{"chord": "Em",   "type": "mediant",      "description": "Mediant substitution"},
+             {"chord": "Am",   "type": "relative",     "description": "Relative minor"},
+             {"chord": "C/E",  "type": "inversion",    "description": "First inversion"}],
+    "Am":   [{"chord": "C",    "type": "relative",     "description": "Relative major"},
+             {"chord": "Am7",  "type": "extension",    "description": "Add 7th"},
+             {"chord": "Am/E", "type": "inversion",    "description": "First inversion"}],
+    "G":    [{"chord": "G7",   "type": "extension",    "description": "Dominant 7th"},
+             {"chord": "Bdim", "type": "tritone_sub",  "description": "Leading tone dim"},
+             {"chord": "Db7",  "type": "tritone_sub",  "description": "Tritone substitution"}],
+    "G7":   [{"chord": "Db7",  "type": "tritone_sub",  "description": "Tritone sub"},
+             {"chord": "Bdim", "type": "diminished",   "description": "Diminished sub"}],
+    "F":    [{"chord": "Dm",   "type": "parallel",     "description": "Parallel minor"},
+             {"chord": "F7",   "type": "extension",    "description": "Subdominant 7th"}],
+    "Dm":   [{"chord": "F",    "type": "relative",     "description": "Relative major"},
+             {"chord": "Dm7",  "type": "extension",    "description": "Add 7th"}],
+    "Em":   [{"chord": "C",    "type": "mediant",      "description": "Mediant sub"},
+             {"chord": "Em7",  "type": "extension",    "description": "Add 7th"}],
+    "E":    [{"chord": "E7",   "type": "extension",    "description": "Dominant 7th"},
+             {"chord": "Bb7",  "type": "tritone_sub",  "description": "Tritone substitution"}],
+    "D":    [{"chord": "D7",   "type": "extension",    "description": "Dominant 7th"},
+             {"chord": "F#m",  "type": "mediant",      "description": "Mediant sub"}],
+    "A":    [{"chord": "A7",   "type": "extension",    "description": "Dominant 7th"},
+             {"chord": "Eb7",  "type": "tritone_sub",  "description": "Tritone substitution"}],
+    "Am7":  [{"chord": "C",    "type": "relative",     "description": "Relative major"},
+             {"chord": "Fmaj7","type": "subdominant",  "description": "Subdominant maj7"}],
+    "Cmaj7":[{"chord": "Em7",  "type": "mediant",      "description": "Mediant maj7"},
+             {"chord": "Am7",  "type": "relative",     "description": "Relative minor 7th"}],
+}
+
+
+def get_chord_substitutions(chord_name: str, style: str = "jazz") -> list[dict]:
+    """
+    Return substitution options for a given chord.
+
+    Args:
+        chord_name: Chord symbol e.g. "Am", "G7", "Cmaj7"
+        style: "jazz" | "pop" | "classical" — affects which subs are returned
+
+    Returns:
+        List of dicts with keys: chord, type, description
+    """
+    # Try exact match first, then root-only match
+    subs = CHORD_SUBSTITUTIONS.get(chord_name)
+    if subs is None:
+        # Strip extensions to find root
+        root = chord_name
+        for suffix in ["maj7", "m7b5", "m7", "dim7", "dim", "aug", "sus4", "sus2", "7", "m"]:
+            root = root.replace(suffix, "")
+        subs = CHORD_SUBSTITUTIONS.get(root, [])
+
+    # Filter by style
+    if style == "pop":
+        subs = [s for s in subs if s["type"] not in ["tritone_sub", "diminished"]]
+    elif style == "classical":
+        subs = [s for s in subs if s["type"] in ["inversion", "relative", "mediant"]]
+
+    return subs[:4]  # max 4 suggestions

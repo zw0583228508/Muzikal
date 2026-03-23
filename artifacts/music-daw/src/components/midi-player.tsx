@@ -1,10 +1,33 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import * as Tone from "tone";
 import Soundfont from "soundfont-player";
+
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { Play, Pause, Square, Volume2, VolumeX, Music2, Loader2 } from "lucide-react";
 import { cn, formatTime } from "@/lib/utils";
+
+// ─── Soundfont CDN fallback chain ─────────────────────────────────────────────
+const SOUNDFONT_CDNS = ["MusyngKite", "FluidR3_GM"] as const;
+
+async function loadSoundfontWithFallback(
+  ac: AudioContext,
+  name: string,
+): Promise<any> {
+  for (const sf of SOUNDFONT_CDNS) {
+    try {
+      return await Soundfont.instrument(ac, name as any, {
+        soundfont: sf,
+        gain: 2,
+        destination: ac.destination,
+      });
+    } catch {
+      console.warn(`[MidiPlayer] CDN "${sf}" failed for "${name}", trying next...`);
+    }
+  }
+  console.error(`[MidiPlayer] All CDNs failed for "${name}" — track will be muted`);
+  return null;
+}
 
 // ─── GM Program → Soundfont instrument name ──────────────────────────────────
 const GM_PROGRAM_MAP: Record<number, string> = {
@@ -135,18 +158,11 @@ export function MidiPlayer({ tracks, totalDuration, className }: MidiPlayerProps
 
       await Promise.all(needed.map(async (name) => {
         if (instrumentsRef.current[name]) { done++; return; }
-        try {
-          instrumentsRef.current[name] = await Soundfont.instrument(ac, name as any, {
-            soundfont: "MusyngKite",
-            gain: 2,
-          });
-        } catch {
-          // Fallback to piano
-          instrumentsRef.current[name] = await Soundfont.instrument(ac, "acoustic_grand_piano" as any, {
-            soundfont: "MusyngKite",
-            gain: 2,
-          });
+        let loaded = await loadSoundfontWithFallback(ac, name);
+        if (!loaded) {
+          loaded = await loadSoundfontWithFallback(ac, "acoustic_grand_piano");
         }
+        instrumentsRef.current[name] = loaded;
         done++;
         setLoadProgress(Math.round((done / needed.length) * 100));
       }));

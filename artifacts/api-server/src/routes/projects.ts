@@ -867,6 +867,38 @@ router.post("/:id/export", async (req, res) => {
   res.json(serializeJob(job));
 });
 
+// POST /api/projects/:id/export/bundle — ZIP of all exported files
+router.post("/:id/export/bundle", requireProjectOwner, async (req, res) => {
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const { formats = ["midi", "musicxml", "wav"] } = req.body;
+
+  const pythonRes = await fetch(
+    `${PYTHON_BACKEND}/python-api/projects/${projectId}/export/bundle`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ formats }),
+    }
+  ).catch((err) => {
+    logger.error({ projectId, err: String(err) }, "Export bundle fetch failed");
+    return null;
+  });
+
+  if (!pythonRes || !pythonRes.ok) {
+    const status = pythonRes?.status ?? 502;
+    const body = pythonRes ? await pythonRes.text().catch(() => "") : "Python unreachable";
+    logger.error({ projectId, status, body }, "Export bundle Python error");
+    res.status(status === 404 ? 404 : 502).json({ error: "Bundle generation failed", detail: body });
+    return;
+  }
+
+  res.setHeader("Content-Type", "application/zip");
+  res.setHeader("Content-Disposition", `attachment; filename="project_${projectId}_bundle.zip"`);
+  const buf = await pythonRes.arrayBuffer();
+  res.send(Buffer.from(buf));
+});
+
 // ═════════════════════════════════════════════════════════════════════════════
 // MOCK SIMULATION HELPERS
 // These run only when MOCK_MODE=true (development default).

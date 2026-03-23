@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 _HERE = os.path.dirname(os.path.abspath(__file__))
 WORKSPACE_ROOT = os.environ.get(
     "WORKSPACE_ROOT",
-    os.path.normpath(os.path.join(_HERE, "..", "..", "..")),
+    os.path.normpath(os.path.join(_HERE, "..")),  # = artifacts/music-ai-backend/
 )
 
 
@@ -619,9 +619,9 @@ def generate_arrangement(
         "lead_synth":{"name": "Lead Synth",     "instrument": "Synth Lead",     "channel": 6, "color": INSTRUMENTS["lead_synth"]["color"],"volume": 0.68, "pan": 0.0},
         "brass":     {"name": "Brass",          "instrument": "Brass Section",  "channel": 7, "color": INSTRUMENTS["brass"]["color"],     "volume": 0.65, "pan": -0.1},
         "pad":       {"name": "Pad",            "instrument": "Synth Pad",      "channel": 5, "color": INSTRUMENTS["pad"]["color"],       "volume": 0.55, "pan": 0.0},
-        "violin":    {"name": "Violin",         "instrument": "Violin",         "channel": 4, "color": INSTRUMENTS.get("violin", {}).get("color", "#d35400"), "volume": 0.72, "pan": 0.15},
-        "accordion": {"name": "Accordion",      "instrument": "Accordion",      "channel": 5, "color": INSTRUMENTS.get("accordion", {}).get("color", "#7f8c8d"), "volume": 0.68, "pan": -0.15},
-        "oud":       {"name": "Oud",            "instrument": "Oud/Guitar",     "channel": 3, "color": INSTRUMENTS.get("oud", {}).get("color", "#795548"), "volume": 0.70, "pan": 0.1},
+        "violin":    {"name": "Violin",         "instrument": "Violin",    "channel": INSTRUMENTS["violin"]["channel"],    "color": INSTRUMENTS.get("violin",    {}).get("color", "#d35400"), "volume": 0.72, "pan":  0.15},
+        "accordion": {"name": "Accordion",      "instrument": "Accordion", "channel": INSTRUMENTS["accordion"]["channel"], "color": INSTRUMENTS.get("accordion", {}).get("color", "#7f8c8d"), "volume": 0.68, "pan": -0.15},
+        "oud":       {"name": "Oud",            "instrument": "Oud/Guitar","channel": INSTRUMENTS["oud"]["channel"],       "color": INSTRUMENTS.get("oud",       {}).get("color", "#795548"), "volume": 0.70, "pan":  0.10},
     }
 
     tracks = []

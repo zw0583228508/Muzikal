@@ -516,3 +516,57 @@ def run_render_pipeline(job_id: str, project_id: int, formats: List[str],
     except Exception as e:
         logger.exception(f"Render failed for job {job_id}: {e}")
         update_job(job_id, "failed", 0, "Render failed", str(e))
+
+
+# ── Chord Substitution Endpoint ──────────────────────────────────────────────
+
+@router.get("/chords/{chord_name}/substitutions")
+async def chord_substitutions(chord_name: str, style: str = "pop"):
+    """Return harmonic substitution suggestions for a given chord."""
+    from audio.chords import get_chord_substitutions
+    subs = get_chord_substitutions(chord_name, style=style)
+    return {"chord": chord_name, "style": style, "substitutions": subs}
+
+
+# ── Export Bundle Endpoint ────────────────────────────────────────────────────
+
+@router.post("/projects/{project_id}/export/bundle")
+async def export_bundle(project_id: int, formats: List[str] = None):
+    """
+    Create a ZIP bundle with all requested export formats.
+    formats: list of "midi" | "musicxml" | "wav" | "mp3" | "flac" | "stems"
+    """
+    import zipfile as _zipfile
+    import tempfile
+    from fastapi.responses import StreamingResponse
+    import io
+
+    if formats is None:
+        formats = ["midi", "musicxml", "wav"]
+
+    output_dir = os.path.join(EXPORTS_BASE_DIR, f"project_{project_id}")
+    if not os.path.isdir(output_dir):
+        raise HTTPException(status_code=404, detail="No exports found for this project — export first")
+
+    # Collect matching files
+    found_files: list[tuple[str, str]] = []
+    for fmt in formats:
+        for fname in os.listdir(output_dir):
+            if fname.lower().endswith(f".{fmt}"):
+                found_files.append((fname, os.path.join(output_dir, fname)))
+
+    if not found_files:
+        raise HTTPException(status_code=404, detail="No exported files found for the requested formats")
+
+    # Build ZIP in memory
+    buf = io.BytesIO()
+    with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as zf:
+        for fname, fpath in found_files:
+            zf.write(fpath, arcname=f"project_{project_id}/{fname}")
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="project_{project_id}_bundle.zip"'},
+    )

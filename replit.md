@@ -505,8 +505,57 @@ All tests passing. Test breakdown by major feature:
 
 ### Final Test Counts: 834 passing, 10 skipped (Python) + 33 passing (vitest)
 
+### Session — 12 Issues from Improvement Plans v11 + v12 (Step 10)
+
+**BUG-1: TRACK_META Hardcoded Channels Fixed**
+- `arranger.py` TRACK_META dict now reads channels from canonical `INSTRUMENTS` dict for violin (ch8), accordion (ch10), oud (ch11) — no more hardcoded conflicts
+
+**BUG-2: requirements.txt Complete**
+- Added `mido>=1.3.0` (MIDI export) and `pyjwt>=2.8.0` (signed URLs) — Docker builds will no longer fail on import
+
+**BUG-3: Storage Path Fixed**
+- `storage_provider.py`: default changed from `/tmp/muzikal` → `/tmp/musicai_storage`
+- `main.py` lifespan: creates `exports/`, `stems/`, `renders/`, `uploads/` subdirs on startup + logs path
+
+**BUG-4: Configs/ Deduplication**
+- Copied root `configs/styles/arranger_profiles.yaml` + `genres.yaml` to `artifacts/music-ai-backend/configs/styles/`
+- Updated `WORKSPACE_ROOT` in `arranger.py` to point to `artifacts/music-ai-backend/` (was project root)
+- 521 YAML genre tests pass with new path ✅
+
+**INFRA-1: GitHub Actions CI**
+- `.github/workflows/ci.yml` created: 4 jobs — Python tests, Vitest, TypeScript typecheck, Docker build smoke test
+
+**INFRA-2: Celery Flower Monitoring**
+- `docker-compose.yml`: Added `flower` service (mher/flower:2.0) + `flower_data` volume — dashboard at localhost:5555
+
+**INFRA-3: System Health UI**
+- `health.ts`: Now pings `http://localhost:8001/python-api/health` with 3s timeout → returns `{pythonBackend, pythonLatencyMs, mockMode, uptime}`
+- New component `system-health.tsx`: Shows red banner if Python unreachable, amber banner if MOCK MODE
+- `App.tsx`: `<SystemHealth />` added above Router — always visible in header
+
+**FEATURE-1: Soundfont CDN Multi-Fallback**
+- `midi-player.tsx`: New `loadSoundfontWithFallback()` tries `MusyngKite` → `FluidR3_GM` in sequence
+- Graceful degradation: if all CDNs fail, track is muted (not crashed)
+
+**FEATURE-2: Export ZIP Bundle**
+- Python: `POST /python-api/projects/{id}/export/bundle` streams ZIP with all exported files
+- Node proxy: `POST /api/projects/:id/export/bundle` (with `requireProjectOwner`)
+- Frontend: "הורד הכל כ-ZIP" button in Export Center
+
+**FEATURE-3: Chord Substitution Engine**
+- `audio/chords.py`: `CHORD_SUBSTITUTIONS` dict + `get_chord_substitutions(chord, style)` — supports jazz/pop/classical filtering
+- Backend: `GET /python-api/chords/{chord_name}/substitutions?style=pop` endpoint
+
+**DB Migration: userId column added to projects table** (push-force executed ✅)
+- `projects` table: new nullable `user_id TEXT` column — projects scoped to authenticated user
+- GET /api/projects: filters by `userId` when authenticated (or shows all if no auth)
+- POST /api/projects: saves `userId` from request
+
+### Final Test Counts: 838 Python passing, 6 skipped + 33 vitest passing
+
 ## Remaining Features (Future)
 
 - FluidSynth/soundfont rendering server-side (higher quality audio export)
 - 100+ additional genres
 - AI-generated soundfont samples per cultural instrument
+- Piano roll Chord substitution UI (click chord → see suggestions)

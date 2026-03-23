@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, Loader2, CheckCircle2, FileMusic, Music2, FileText, Volume2, Disc3 } from "lucide-react";
+import { Download, Loader2, CheckCircle2, FileMusic, Music2, FileText, Volume2, Disc3, Archive } from "lucide-react";
 import { useExportProject } from "@workspace/api-client-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
@@ -35,6 +35,7 @@ export default function ExportCenter({ projectId, hasArrangement }: ExportCenter
   const queryClient = useQueryClient();
   const [selectedFormats, setSelectedFormats] = useState<string[]>([]);
   const [activeJobId, setActiveJobId] = useState<string | null>(null);
+  const [bundling, setBundling] = useState(false);
 
   const filesKey = [`/api/projects/${projectId}/files`];
   const { data: files = [] } = useQuery<any[]>({
@@ -88,6 +89,34 @@ export default function ExportCenter({ projectId, hasArrangement }: ExportCenter
     }
     if (audioSelected.length) {
       handleRenderAudio(audioSelected);
+    }
+  };
+
+  const handleExportBundle = async () => {
+    if (!selectedFormats.length) return;
+    setBundling(true);
+    try {
+      const resp = await fetch(`/api/projects/${projectId}/export/bundle`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ formats: selectedFormats }),
+      });
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        alert(err.detail ?? "שגיאה ביצירת ZIP bundle");
+        return;
+      }
+      const blob = await resp.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `project_${projectId}_bundle.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (e: any) {
+      alert(e.message ?? "שגיאת רשת ביצירת bundle");
+    } finally {
+      setBundling(false);
     }
   };
 
@@ -156,6 +185,19 @@ export default function ExportCenter({ projectId, hasArrangement }: ExportCenter
         {isLoading
           ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t("Exporting...")}</>
           : <><Download className="w-4 h-4 mr-2" />{t("Export")} {selectedFormats.length > 0 ? `(${selectedFormats.length})` : ""}</>
+        }
+      </Button>
+
+      <Button
+        variant="outline"
+        className="w-full bg-primary/10 border border-primary/30 hover:bg-primary/20 text-primary"
+        disabled={bundling || selectedFormats.length === 0 || !hasArrangement}
+        onClick={handleExportBundle}
+        title="הורד את כל הפורמטים בקובץ ZIP אחד"
+      >
+        {bundling
+          ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />יוצר ZIP...</>
+          : <><Archive className="w-4 h-4 mr-2" />הורד הכל כ-ZIP ({selectedFormats.length})</>
         }
       </Button>
 

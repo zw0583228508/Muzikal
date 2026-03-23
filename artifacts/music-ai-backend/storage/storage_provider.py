@@ -57,7 +57,7 @@ class LocalStorage(StorageProvider):
     """File-system storage — suitable for development and single-node deployments."""
 
     def __init__(self, base_path: str | None = None):
-        self.base = Path(base_path or os.environ.get("LOCAL_STORAGE_PATH", "/tmp/muzikal"))
+        self.base = Path(base_path or os.environ.get("LOCAL_STORAGE_PATH", "/tmp/musicai_storage"))
         self.base.mkdir(parents=True, exist_ok=True)
         logger.info("LocalStorage initialised at %s", self.base)
 

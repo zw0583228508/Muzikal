@@ -1,0 +1,50 @@
+id: klezmer
+display_name: "קלזמר"
+era: "1880s-1940s"
+region: "Eastern Europe / Jewish Diaspora"
+parent_genre: "jewish_folk"
+
+harmony:
+  scale_type: "freygish"
+  characteristic_intervals: ["b2", "M3", "b6"]
+  typical_progressions:
+    - ["i", "bVII", "bVI", "V7"]
+    - ["i", "iv", "V7", "i"]
+    - ["i", "bVII", "i", "V7"]
+  cadences: ["phrygian", "authentic"]
+
+rhythm:
+  time_signature: "2/4"
+  bpm_range: [100, 160]
+  feel: "straight_with_push"
+  characteristic_patterns:
+    - name: "freylekhs"
+      pattern: "1+2+"
+    - name: "bulgar"
+      pattern: "1-2-"
+
+instrumentation:
+  core: ["clarinet", "violin", "tsimbl", "double_bass", "tuba"]
+  optional: ["accordion", "trumpet", "flute", "piano"]
+  avoid: ["electric_guitar", "synthesizer", "drum_kit"]
+
+ornaments:
+  - type: "krekhts"
+    description: "יבבה — ירידת טון כרומטית"
+    instruments: ["clarinet", "violin"]
+  - type: "tshok"
+    description: "טריל מהיר"
+    instruments: ["clarinet"]
+  - type: "glissando"
+    description: "גלישה בין טונים"
+    instruments: ["violin", "clarinet"]
+
+reference_artists: ["Naftule Brandwein", "Dave Tarras", "Kapelye", "Klezmatics"]
+reference_pieces: ["Dona Dona freilach", "Hava Nagila", "Der Nayer Sher", "Lebedik un Freylekh"]
+
+gm_programs:
+  clarinet: 71
+  violin: 40
+  accordion: 21
+  bass: 32
+  tuba: 58

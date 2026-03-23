@@ -1,0 +1,65 @@
+id: flamenco
+display_name: "פלמנקו"
+era: "18th century - present"
+region: "Andalusia, Spain"
+parent_genre: "spanish_folk"
+
+harmony:
+  scale_type: "phrygian"
+  characteristic_intervals: ["b2", "b6", "b7"]
+  typical_progressions:
+    - ["i", "bVII", "bVI", "V"]
+    - ["i", "iv", "V", "i"]
+    - ["bVI", "bVII", "i"]
+  cadences: ["phrygian", "flamenco_cadence"]
+  flamenco_cadence: ["Am", "G", "F", "E"]
+
+rhythm:
+  time_signature: "12/8"
+  bpm_range: [60, 200]
+  feel: "compas"
+  characteristic_patterns:
+    - name: "soleares"
+      pattern: "12-beat: 1.2.3.4.5.6.7.8.9.10.11.12 (accents: 3,6,8,10,12)"
+    - name: "bulerías"
+      pattern: "fast 12-beat with reversed accents"
+    - name: "seguiriya"
+      pattern: "5/4+5/4+2/4 compound"
+
+instrumentation:
+  core: ["guitar_flamenco", "palmas", "cajon", "voice_cante"]
+  optional: ["violin", "bass", "flute", "piano"]
+  avoid: ["synthesizer", "electric_bass_heavy"]
+
+ornaments:
+  - type: "picado"
+    description: "פיקדו — ניגון מהיר עם אצבעות מתחלפות"
+    instruments: ["guitar_flamenco"]
+  - type: "rasgueado"
+    description: "ראסגיאדו — מריטת כל המיתרים בתנועה מהירה"
+    instruments: ["guitar_flamenco"]
+  - type: "zapateado"
+    description: "זפאטאדו — נקישות רגל"
+    instruments: ["dancer"]
+  - type: "quejio"
+    description: "קוויחו — קריאת כאב וואוקלית"
+    instruments: ["voice_cante"]
+
+palos:
+  - soleares
+  - bulerías
+  - seguiriya
+  - tangos
+  - fandango
+  - farruca
+  - petenera
+
+reference_artists: ["Paco de Lucía", "Camarón de la Isla", "Tomatito", "Vicente Amigo"]
+reference_pieces: ["Entre dos Aguas", "Como el Agua", "Bulerias", "Zyryab"]
+
+gm_programs:
+  guitar_flamenco: 25
+  bass: 32
+  violin: 40
+  flute: 73
+  piano: 0

@@ -130,6 +130,33 @@ router.get("/personas", (_req, res) => {
   })));
 });
 
+// ─── Genre routes (Universal Style Engine) ───────────────────────────────────
+const PYTHON_BACKEND = `http://localhost:${process.env.PYTHON_BACKEND_PORT ?? 8001}`;
+
+async function pythonGet(path: string): Promise<{ status: number; data: unknown }> {
+  try {
+    const res = await fetch(`${PYTHON_BACKEND}${path}`);
+    const data = await res.json().catch(() => ({}));
+    return { status: res.status, data };
+  } catch {
+    return { status: 502, data: { error: "Python backend unavailable" } };
+  }
+}
+
+// GET /api/styles/genres — list all YAML genre files
+router.get("/genres", async (_req, res) => {
+  const { status, data } = await pythonGet("/agent/genres");
+  return res.status(status).json(data);
+});
+
+// GET /api/styles/:id/profile — get one genre YAML
+router.get("/:id/profile", async (req, res) => {
+  const { id } = req.params;
+  if (id === "personas") return; // skip — handled by /personas route above
+  const { status, data } = await pythonGet(`/agent/styles/${id}/profile`);
+  return res.status(status).json(data);
+});
+
 export default router;
 
 // ─── Fallbacks — used if YAML files are unavailable ──────────────────────────

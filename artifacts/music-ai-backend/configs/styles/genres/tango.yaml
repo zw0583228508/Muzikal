@@ -1,0 +1,57 @@
+id: tango
+display_name: "טנגו"
+era: "1880s-present"
+region: "Argentina / Buenos Aires"
+parent_genre: "rio_de_la_plata"
+
+harmony:
+  scale_type: "minor"
+  characteristic_intervals: ["b2", "b6", "M7"]
+  typical_progressions:
+    - ["i", "V7", "i", "iv"]
+    - ["i", "bII7", "V7", "i"]
+    - ["i", "VI7", "ii7b5", "V7"]
+  cadences: ["authentic", "deceptive", "phrygian"]
+  drama_level: "high"
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [55, 75]
+  feel: "marcato_2"
+  characteristic_patterns:
+    - name: "tango_rhythm"
+      pattern: "quarter_quarter_half (LONG SHORT SHORT LONG)"
+    - name: "habanera"
+      pattern: "dotted_8th_16th_quarter_quarter"
+    - name: "milonga_clave"
+      pattern: "3+3+2"
+
+instrumentation:
+  core: ["bandoneon", "violin", "piano", "double_bass"]
+  optional: ["second_violin", "viola", "cello", "flute"]
+  avoid: ["drums_standard", "electric_guitar", "synthesizer"]
+  orquesta_tipica: ["bandoneones", "violins", "cello", "piano", "bass"]
+
+ornaments:
+  - type: "portamento"
+    description: "פורטמנטו — גלישה בין תווים"
+    instruments: ["violin", "bandoneon"]
+  - type: "staccato_marcato"
+    description: "ניגון חד ומסומן"
+    instruments: ["bandoneon", "piano"]
+  - type: "rubato"
+    description: "חופש קצבי מכוון"
+  - type: "arrabal"
+    description: "נגיעת כאב עירוני מהפרברים"
+
+styles: ["tango", "milonga", "vals_criollo", "neotango"]
+
+reference_artists: ["Astor Piazzolla", "Carlos Gardel", "Aníbal Troilo", "Osvaldo Pugliese"]
+reference_pieces: ["La Cumparsita", "Libertango", "Por Una Cabeza", "Adios Nonino"]
+
+gm_programs:
+  bandoneon: 23
+  violin: 40
+  piano: 0
+  bass: 32
+  cello: 42

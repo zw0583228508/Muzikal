@@ -1,0 +1,53 @@
+id: hasidic_nigun
+display_name: "ניגון חסידי"
+era: "18th century - present"
+region: "Eastern Europe / Israel"
+parent_genre: "jewish_folk"
+
+harmony:
+  scale_type: "freygish"
+  characteristic_intervals: ["b2", "M3", "b6", "b7"]
+  typical_progressions:
+    - ["i", "bVII", "bVI", "V"]
+    - ["i", "iv", "i", "V"]
+    - ["i", "bIII", "bVII", "i"]
+  cadences: ["phrygian", "authentic", "deceptive"]
+
+rhythm:
+  time_signature: "3/4"
+  bpm_range: [60, 160]
+  feel: "waltz_with_rubato"
+  characteristic_patterns:
+    - name: "nigun_waltz"
+      pattern: "1 2 3 (with building intensity)"
+    - name: "dance_section"
+      pattern: "freylekhs_2_4"
+  has_acceleration: true
+  sections: ["slow_intro", "main_nigun", "dance_section"]
+
+instrumentation:
+  core: ["violin", "accordion"]
+  optional: ["clarinet", "double_bass", "piano", "drums", "voice_wordless"]
+  characteristic: "wordless_melody"
+
+ornaments:
+  - type: "kvetch"
+    description: "כווץ — לחץ רגשי על הטון"
+    instruments: ["violin", "clarinet"]
+  - type: "nusach_motif"
+    description: "מוטיב ליטורגי מוכר"
+  - type: "accelerando"
+    description: "האצה הדרגתית לקראת הסיום"
+
+moods: ["contemplative", "joyful", "ecstatic", "devotional"]
+sub_styles: ["Chabad", "Breslov", "Karlin", "Modzitz"]
+
+reference_artists: ["Shlomo Carlebach", "Levi Yitzhak of Berditchev (composer)", "Avraham Fried"]
+reference_pieces: ["Niggun Chabad", "Ya Ribon Olam", "Tzama Nafshi", "Yah Ribon"]
+
+gm_programs:
+  violin: 40
+  accordion: 21
+  clarinet: 71
+  bass: 32
+  piano: 0

@@ -1,0 +1,58 @@
+id: sephardic
+display_name: "ספרדי / לדינו"
+era: "15th century - present"
+region: "Mediterranean / Ottoman Empire / Balkans"
+parent_genre: "jewish_folk"
+
+harmony:
+  scale_type: "phrygian"
+  characteristic_intervals: ["b2", "b6", "b7"]
+  typical_progressions:
+    - ["i", "bII", "V", "i"]
+    - ["i", "bVII", "bVI", "V"]
+    - ["i", "iv", "bII", "V7"]
+  cadences: ["phrygian", "authentic"]
+  modal: true
+  middle_eastern_influence: true
+
+rhythm:
+  time_signature: "3/4"
+  bpm_range: [60, 130]
+  feel: "waltz_mediterranean"
+  characteristic_patterns:
+    - name: "buleria_sephardic"
+      pattern: "12-beat compound"
+    - name: "karsilamas"
+      pattern: "9/8: 2+2+2+3"
+    - name: "simple_waltz"
+      pattern: "3/4 straight"
+
+instrumentation:
+  core: ["oud", "violin", "darbuka", "voice"]
+  optional: ["kanun", "nay", "guitar", "piano", "cello"]
+  avoid: []
+  typical_ensemble: "small_chamber"
+
+ornaments:
+  - type: "melisma"
+    description: "מליסמה — הרחבה וואוקלית של הברה אחת"
+    instruments: ["voice"]
+  - type: "muwashshah_refrain"
+    description: "פזמון בסגנון מוואשאח"
+  - type: "quarter_tone_ornament"
+    description: "קישוטי ריבעי-טון"
+    instruments: ["oud", "violin"]
+
+languages: ["ladino", "hebrew", "greek", "turkish", "arabic"]
+sub_styles: ["romancero", "coplas", "muwashshah", "pizmonim"]
+
+reference_artists: ["Yasmin Levy", "Dudu Tasa", "Flory Jagoda", "Noa (Achinoam Nini)"]
+reference_pieces: ["Luna Lunera", "Adio Kerida", "Morenika", "Una Matica de Ruda"]
+
+gm_programs:
+  oud: 105
+  violin: 40
+  voice: 85
+  darbuka: 116
+  nay: 73
+  kanun: 107

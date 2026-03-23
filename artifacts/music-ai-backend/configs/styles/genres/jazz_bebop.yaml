@@ -1,0 +1,56 @@
+id: jazz_bebop
+display_name: "ג'אז ביבופ"
+era: "1940s-1960s"
+region: "New York / USA"
+parent_genre: "jazz"
+
+harmony:
+  scale_type: "dorian"
+  characteristic_intervals: ["M7", "M9", "#11", "13", "b9", "#9"]
+  typical_progressions:
+    - ["ii7", "V7", "Imaj7"]
+    - ["iii7", "VI7", "ii7", "V7"]
+    - ["Imaj7", "bVII7", "bIIImaj7", "bVI7"]
+  cadences: ["ii-V-I", "tritone_substitution", "backdoor"]
+  harmonic_density: "high"
+  reharmonization: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [180, 320]
+  feel: "swung_16ths"
+  swing_factor: 0.65
+  characteristic_patterns:
+    - name: "bebop_ride"
+      pattern: "ride_cymbal_swing_8ths"
+    - name: "comping"
+      pattern: "sparse_syncopated_voicings"
+  walking_bass: true
+
+instrumentation:
+  core: ["alto_sax", "trumpet", "piano", "double_bass", "drums"]
+  optional: ["tenor_sax", "trombone", "guitar", "vibraphone"]
+  avoid: ["synthesizer", "electric_bass_heavy"]
+
+ornaments:
+  - type: "chromatic_approach"
+    description: "גישה כרומטית לתו מטרה"
+    instruments: ["alto_sax", "trumpet", "piano"]
+  - type: "bebop_scale_run"
+    description: "ריצות סולם ביבופ מהירות"
+  - type: "chord_substitution"
+    description: "תחלוף אקורדים על-הרגל"
+    instruments: ["piano"]
+  - type: "drop2"
+    description: "ווייסינג דרופ-2"
+    instruments: ["piano"]
+
+reference_artists: ["Charlie Parker", "Dizzy Gillespie", "Thelonious Monk", "Bud Powell", "Miles Davis"]
+reference_pieces: ["Anthropology", "Ko-Ko", "Round Midnight", "A Night in Tunisia", "Ornithology"]
+
+gm_programs:
+  alto_sax: 65
+  trumpet: 56
+  piano: 0
+  bass: 32
+  drums: 0

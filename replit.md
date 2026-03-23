@@ -317,10 +317,74 @@ pnpm --filter @workspace/api-spec run codegen
 - Pagination footer shown when `pages > 1`
 - `x-correlation-id` header propagated on every request (generated if missing)
 
+## Universal Style Engine (Phase 3) ✅
+
+### Python Agent Package (`agent/`)
+- `agent/__init__.py` — exports ConversationAgent, StyleEnricher, ProfileValidator, StyleDatabase, prompts
+- `agent/conversation_agent.py` — 3-phase agent: DISCOVERY → ENRICHMENT → EXECUTION
+  - In-memory session store (session_id → ConversationAgent)
+  - `create_session()`, `get_session()`, `delete_session()` session management
+  - `_extract_params_heuristic()` — Hebrew + English keyword extraction fallback
+  - `HEBREW_GENRE_ALIASES` — maps Hebrew genre names to genre IDs
+  - Calls LLM via OpenAI SDK (Replit AI proxy) when `AI_INTEGRATIONS_OPENAI_BASE_URL` is set
+- `agent/style_enricher.py` — LLM enrichment + 30-day cache (`configs/ai_knowledge_cache.json`)
+  - `_adapt_to_analysis()` — adjusts BPM range, sets detectedKey, sets scaleType from analysis
+  - `_build_from_yaml()` — YAML fallback with volume weight budget ≤ 4.0
+  - Cache key: `{genre}:{era}:{region}`, TTL=30 days
+- `agent/profile_validator.py` — validates StyleProfile before arrangement
+  - Required roles: BASS, RHYTHM_KICK, MELODY_LEAD
+  - `midiProgram` must be 0–127; `volumeWeight` sum ≤ 4.0; `bpmRange[0]` < `[1]`
+- `agent/prompts.py` — EXTRACTION_PROMPT + ENRICHMENT_PROMPT + CLARIFICATION_QUESTIONS
+- `agent/style_database.py` — YAML loader with search, fallback, find_by_parent
+
+### YAML Genre Database (`configs/styles/genres/`)
+11 genres: klezmer, bossa_nova, flamenco, maqam_hijaz, afrobeat, hasidic_nigun, tango, jazz_bebop, celtic, sephardic, generic_world_music (fallback)
+Each file: harmony (scale_type, progressions, cadences), rhythm (bpm_range, time_signature, patterns), instrumentation (core, optional, avoid), ornaments, reference_artists, gm_programs
+
+### Python API Routes (`api/agent_routes.py`)
+- `POST /agent/chat` — sends message to agent, creates/resumes session
+- `GET /agent/session/:id` — returns session state and collected_params
+- `POST /agent/confirm` — confirms StyleProfile, validates it
+- `GET /agent/genres` — lists all YAML genres with metadata
+- `GET /agent/styles/:id/profile` — returns raw YAML for a genre
+- `POST /agent/enrich` — direct LLM enrichment endpoint
+
+### Node.js API Routes (`api-server/src/routes/agent.ts`)
+Mounted at `/api/agent`, proxies to Python backend:
+- POST /api/agent/chat, GET /api/agent/session/:id, POST /api/agent/confirm, POST /api/agent/enrich
+Also added to stylesRouter: GET /api/styles/genres, GET /api/styles/:id/profile
+
+### Frontend Components
+- `components/chat-agent.tsx` — Hebrew RTL chat UI with:
+  - Bubble messages (user/assistant), loading states, phase indicator
+  - Auto-scrolls to latest message
+  - Shows StyleProfileCard when profile is ready
+  - Sends to `/api/agent/chat`, calls `/api/agent/confirm`
+- `components/style-profile-card.tsx` — visual preview of StyleProfile with:
+  - Instrument badges with role-colored pills + icons
+  - Rhythm panel (time signature, BPM, swing) + harmony panel (scale, chords)
+  - Section labels, texture, reverb, humanization fields
+  - "Confirm & Process" button
+- **5th tab added to project-studio.tsx** — "AI Style Agent" / "סוכן AI"
+
+### i18n Updates
+- en.ts + he.ts: agent.* keys (title, phases, placeholder, confirm) + genres.* keys (10 genres)
+
+### Tests: 360 passing (from 188), 6 skipped
+- `test_yaml_genres.py` — 30+ tests: YAML structure, bpm_range validity, id=filename, StyleDatabase CRUD
+- `test_conversation_agent.py` — 24 tests: sessions, AgentResponse, heuristic extraction (Hebrew+English), process_message
+- `test_style_enricher.py` — 24 tests: cache TTL, adapt_to_analysis, build_from_yaml, enrich fallback
+
+### OpenAI Integration
+- `AI_INTEGRATIONS_OPENAI_BASE_URL` + `AI_INTEGRATIONS_OPENAI_API_KEY` provisioned via Replit AI proxy
+- Python `openai>=1.40.0` package added to requirements.txt
+- LLM calls use `gpt-5-mini` with `max_completion_tokens=2048`
+- Graceful fallback: if no LLM client, uses YAML + heuristic extraction
+
 ## Remaining Features (Future)
 
 - WaveSurfer.js waveform visualisation (currently custom WaveformVisualizer)
 - FluidSynth/soundfont rendering (higher quality audio)
-- torchcrepe / basic-pitch for more accurate melody extraction
-- Transformer-based chord recognition model
-- Full pipeline integration test (end-to-end with real audio)
+- StyleProfile → arranger.py pipeline integration (pass StyleProfile to generate_arrangement)
+- 50+ additional genres (per spec section 4.2)
+- Soundfont (SF2) per instrument for culturally-authentic playback

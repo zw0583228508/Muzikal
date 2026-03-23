@@ -1,0 +1,41 @@
+id: generic_world_music
+display_name: "מוזיקת עולם כללית"
+era: "Contemporary"
+region: "Global"
+parent_genre: null
+is_fallback: true
+
+harmony:
+  scale_type: "minor"
+  characteristic_intervals: ["b3", "b7"]
+  typical_progressions:
+    - ["i", "bVII", "bVI", "V"]
+    - ["i", "iv", "V7", "i"]
+  cadences: ["authentic", "plagal"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [80, 120]
+  feel: "straight"
+  characteristic_patterns:
+    - name: "basic_groove"
+      pattern: "kick_1_3_snare_2_4"
+
+instrumentation:
+  core: ["piano", "bass", "drums", "strings"]
+  optional: ["guitar", "flute", "trumpet"]
+  avoid: []
+
+ornaments:
+  - type: "vibrato"
+    description: "ויברטו כללי"
+
+reference_artists: []
+reference_pieces: []
+
+gm_programs:
+  piano: 0
+  bass: 32
+  drums: 0
+  strings: 48
+  flute: 73

@@ -1,0 +1,63 @@
+id: maqam_hijaz
+display_name: "מקאם חיג'אז"
+era: "Medieval - present"
+region: "Middle East / Arab World / Turkey"
+parent_genre: "maqam"
+
+harmony:
+  scale_type: "maqam_hijaz"
+  characteristic_intervals: ["b2", "A2", "b6"]
+  root_note: "D"
+  typical_progressions:
+    - ["i", "bII", "V7", "i"]
+    - ["i", "bVII", "bVI", "bII"]
+    - ["i", "iv", "bII", "i"]
+  cadences: ["maqam_cadence", "authentic"]
+  microtones: true
+  quarter_tones: ["E half-flat", "B half-flat"]
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [60, 140]
+  feel: "rubato_to_steady"
+  characteristic_patterns:
+    - name: "maqsum"
+      pattern: "D..T.D.T"
+    - name: "wahda"
+      pattern: "D....T.."
+    - name: "ciftetelli"
+      pattern: "8/4: D.D..T.D.D..T.."
+
+instrumentation:
+  core: ["oud", "violin", "qanun", "riq", "darbuka"]
+  optional: ["nay", "cello", "double_bass", "accordion"]
+  avoid: ["electric_guitar", "synthesizer", "western_percussion"]
+
+ornaments:
+  - type: "glissando_maqam"
+    description: "גלישה בין ריבעי-טון"
+    instruments: ["oud", "violin", "nay"]
+  - type: "taqsim"
+    description: "תאקסים — אימפרוביזציה מודאלית חופשית"
+    instruments: ["oud", "nay", "qanun"]
+  - type: "tahrir"
+    description: "טהריר — גרון מוזיקלי וואוקלי"
+    instruments: ["voice"]
+  - type: "vibrato_maqam"
+    description: "ויברטו אופייני למקאם"
+
+sub_maqams:
+  - hijaz
+  - hijaz_kar
+  - shahnaz
+  - zanjaran
+
+reference_artists: ["Fairouz", "Umm Kulthum", "Marcel Khalife", "Simon Shaheen", "Naseer Shamma"]
+reference_pieces: ["Longa Farahfaza", "Ya Msafer Wahdak", "Ana Fi Intizarak"]
+
+gm_programs:
+  oud: 105
+  violin: 40
+  nay: 73
+  darbuka: 116
+  qanun: 107

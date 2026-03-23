@@ -1,0 +1,58 @@
+id: afrobeat
+display_name: "אפרוביט"
+era: "1960s-present"
+region: "West Africa / Nigeria"
+parent_genre: "african_popular"
+
+harmony:
+  scale_type: "dorian"
+  characteristic_intervals: ["b3", "M6"]
+  typical_progressions:
+    - ["i7", "IV7"]
+    - ["i7", "bVII7", "IV7"]
+    - ["i7", "bIII", "IV7", "i7"]
+  cadences: ["modal", "plagal"]
+  extended_harmony: true
+  groove_based: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [90, 130]
+  feel: "polyrhythmic_groove"
+  characteristic_patterns:
+    - name: "clave_son"
+      pattern: "x..x..x...x.x..."
+    - name: "afrobeat_kick"
+      pattern: "on_1_and_3_with_ghost_notes"
+    - name: "highlife_rhythm"
+      pattern: "guitar_offbeat_chop"
+  polyrhythm: true
+  layers: 4
+
+instrumentation:
+  core: ["electric_guitar", "bass", "drums", "talking_drum", "tenor_sax", "trumpet", "vocals"]
+  optional: ["keyboards", "shekere", "congas", "trombone", "baritone_sax"]
+  avoid: []
+  brass_section: true
+
+ornaments:
+  - type: "call_response"
+    description: "קריאה ותשובה בין כלים"
+    instruments: ["voice", "brass"]
+  - type: "polyrhythm_layer"
+    description: "שכבות קצב מתחלפות"
+    instruments: ["talking_drum", "shekere", "congas"]
+  - type: "guitar_chop"
+    description: "חיתוך גיטרה על הופ"
+    instruments: ["electric_guitar"]
+
+reference_artists: ["Fela Kuti", "Tony Allen", "Seun Kuti", "Antibalas", "Antibalas Afrobeat Orchestra"]
+reference_pieces: ["Water No Get Enemy", "Zombie", "Lady", "Shakara", "Colonial Mentality"]
+
+gm_programs:
+  electric_guitar: 27
+  bass: 33
+  tenor_sax: 66
+  trumpet: 56
+  drums: 0
+  congas: 116

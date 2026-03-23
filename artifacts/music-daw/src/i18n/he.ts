@@ -129,6 +129,27 @@ export default {
     "notes": "תווים",
     "Lock field": "נעל (שמור בעיבוד מחדש)",
     "Unlock field": "בטל נעילה (אפשר שינוי)",
-    "Log in": "התחבר"
+    "Log in": "התחבר",
+    "agent.title": "סוכן מוזיקל",
+    "agent.subtitle": "בינה מלאכותית לסגנון מוזיקה",
+    "agent.phase.DISCOVERY": "שלב גילוי",
+    "agent.phase.ENRICHMENT": "העשרת מידע",
+    "agent.phase.EXECUTION": "מוכן לעיבוד",
+    "agent.welcome": "שלום! אני סוכן מוזיקל. ספר לי — איזה סגנון מוזיקה אתה מחפש?",
+    "agent.placeholder": "תאר את הסגנון המוזיקלי שאתה מחפש...",
+    "agent.send": "שלח",
+    "agent.profile.confirm": "אשר ובצע עיבוד",
+    "agent.profile.confirming": "שולח...",
+    "agent.tab": "סוכן AI",
+    "genres.klezmer": "קלזמר",
+    "genres.bossa_nova": "בוסה נובה",
+    "genres.flamenco": "פלמנקו",
+    "genres.maqam_hijaz": "מקאם חיג'אז",
+    "genres.afrobeat": "אפרוביט",
+    "genres.hasidic_nigun": "ניגון חסידי",
+    "genres.tango": "טנגו",
+    "genres.jazz_bebop": "ג'אז ביבופ",
+    "genres.celtic": "קלטי",
+    "genres.sephardic": "ספרדי / לדינו"
   }
 };

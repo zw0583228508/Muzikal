@@ -98,6 +98,27 @@ export default {
     "notes": "notes",
     "Lock field": "Lock (preserve during re-arrangement)",
     "Unlock field": "Unlock (allow regeneration)",
-    "Log in": "Log in"
+    "Log in": "Log in",
+    "agent.title": "Muzikal Agent",
+    "agent.subtitle": "AI Style Intelligence",
+    "agent.phase.DISCOVERY": "Discovery",
+    "agent.phase.ENRICHMENT": "Enriching data",
+    "agent.phase.EXECUTION": "Ready to process",
+    "agent.welcome": "Hello! I'm the Muzikal Agent. Tell me — what musical style are you looking for?",
+    "agent.placeholder": "Describe the musical style you're looking for...",
+    "agent.send": "Send",
+    "agent.profile.confirm": "Confirm & Process",
+    "agent.profile.confirming": "Processing...",
+    "agent.tab": "AI Style Agent",
+    "genres.klezmer": "Klezmer",
+    "genres.bossa_nova": "Bossa Nova",
+    "genres.flamenco": "Flamenco",
+    "genres.maqam_hijaz": "Maqam Hijaz",
+    "genres.afrobeat": "Afrobeat",
+    "genres.hasidic_nigun": "Hasidic Nigun",
+    "genres.tango": "Tango",
+    "genres.jazz_bebop": "Bebop Jazz",
+    "genres.celtic": "Celtic",
+    "genres.sephardic": "Sephardic / Ladino"
   }
 };

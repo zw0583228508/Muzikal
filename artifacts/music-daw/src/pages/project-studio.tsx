@@ -27,6 +27,7 @@ import {
 import { PianoRoll } from "@/components/piano-roll";
 import { AnalysisInspector } from "@/components/analysis-inspector";
 import ExportCenter from "@/pages/export-center";
+import ChatAgent from "@/components/chat-agent";
 import { formatTime, cn } from "@/lib/utils";
 import { useTranslation } from "react-i18next";
 import { LanguageToggle } from "@/components/language-toggle";
@@ -617,10 +618,11 @@ export default function ProjectStudio() {
         <div className="w-[340px] border-l border-white/10 bg-card flex flex-col z-20 shadow-2xl relative">
           <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col">
             <div className="p-4 border-b border-white/5">
-              <TabsList className="w-full grid grid-cols-4 text-[11px]">
+              <TabsList className="w-full grid grid-cols-5 text-[11px]">
                 <TabsTrigger value="analysis">{t("Analyze")}</TabsTrigger>
                 <TabsTrigger value="inspect">{t("Inspect")}</TabsTrigger>
                 <TabsTrigger value="arrange">{t("Arrange")}</TabsTrigger>
+                <TabsTrigger value="agent">{t("agent.tab")}</TabsTrigger>
                 <TabsTrigger value="export">{t("Export")}</TabsTrigger>
               </TabsList>
             </div>
@@ -1011,6 +1013,17 @@ export default function ProjectStudio() {
                   );
                 })()}
 
+              </TabsContent>
+
+              {/* ── AGENT TAB ── */}
+              <TabsContent value="agent" className="mt-0 h-[calc(100vh-200px)] min-h-[400px]">
+                <ChatAgent
+                  projectId={projectId}
+                  onProfileReady={(profile) => {
+                    console.log("[ChatAgent] Profile confirmed:", profile);
+                  }}
+                  className="h-full"
+                />
               </TabsContent>
 
               {/* ── EXPORT TAB ── */}

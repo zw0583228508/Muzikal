@@ -1,0 +1,48 @@
+id: bossa_nova
+display_name: "בוסה נובה"
+era: "1958-1970s"
+region: "Brazil / Rio de Janeiro"
+parent_genre: "brazilian_popular"
+
+harmony:
+  scale_type: "major"
+  characteristic_intervals: ["M7", "M9", "#11", "13"]
+  typical_progressions:
+    - ["Imaj7", "IVmaj7", "ii7", "V7"]
+    - ["Imaj7", "bVII7", "iii7", "VI7"]
+    - ["ii7", "V7", "Imaj7", "bVIImaj7"]
+  cadences: ["deceptive", "plagal", "authentic"]
+  extended_harmony: true
+
+rhythm:
+  time_signature: "4/4"
+  bpm_range: [65, 100]
+  feel: "laid_back_samba"
+  characteristic_patterns:
+    - name: "bossa_clave"
+      pattern: "x.x.x..x.x.x..."
+    - name: "violao_pattern"
+      pattern: "thumb_bass_with_finger_strum"
+
+instrumentation:
+  core: ["acoustic_guitar", "double_bass", "voice"]
+  optional: ["piano", "flute", "trumpet", "drums_brushes", "vibraphone"]
+  avoid: ["electric_guitar_distorted", "heavy_drums", "synthesizer"]
+
+ornaments:
+  - type: "silence"
+    description: "שתיקה מכוונת — הסאונד האופייני של בוסה נובה"
+  - type: "syncopation"
+    description: "הדגשת החצי-שניה"
+  - type: "voice_whisper"
+    description: "שירה ברחשה אינטימית"
+
+reference_artists: ["João Gilberto", "Antônio Carlos Jobim", "Stan Getz", "Astrud Gilberto"]
+reference_pieces: ["Garota de Ipanema", "Corcovado", "Desafinado", "Wave", "Aguas de Março"]
+
+gm_programs:
+  acoustic_guitar: 25
+  bass: 32
+  flute: 73
+  piano: 0
+  vibraphone: 11

@@ -1,0 +1,68 @@
+id: celtic
+display_name: "קלטי"
+era: "Traditional - present"
+region: "Ireland / Scotland / Brittany"
+parent_genre: "european_folk"
+
+harmony:
+  scale_type: "dorian"
+  characteristic_intervals: ["M6", "b7"]
+  typical_progressions:
+    - ["i", "bVII", "IV", "i"]
+    - ["i", "bIII", "bVII", "i"]
+    - ["I", "IV", "V", "I"]
+  cadences: ["modal", "authentic"]
+  modes_used: ["dorian", "mixolydian", "aeolian", "ionian"]
+  drones: true
+
+rhythm:
+  time_signature: "6/8"
+  bpm_range: [80, 180]
+  feel: "jig_compound"
+  characteristic_patterns:
+    - name: "jig"
+      pattern: "6/8: 123 456"
+    - name: "reel"
+      pattern: "4/4 with 8th note drive"
+    - name: "hornpipe"
+      pattern: "4/4 with dotted feel"
+    - name: "polka"
+      pattern: "2/4 bouncy"
+
+instrumentation:
+  core: ["tin_whistle", "uilleann_pipes", "fiddle", "bodhran", "bouzouki"]
+  optional: ["harp", "flute", "accordion", "guitar", "piano"]
+  avoid: ["electric_guitar_distorted", "heavy_drums"]
+
+ornaments:
+  - type: "treble"
+    description: "טרבל — שלישיית תווים מהירה"
+    instruments: ["fiddle", "flute", "tin_whistle"]
+  - type: "cut"
+    description: "קאט — קיצור תו עם גלוטאל"
+    instruments: ["fiddle"]
+  - type: "roll"
+    description: "רול — ווריאציה מסביב לתו"
+  - type: "cran"
+    description: "קראן — קישוט אופייני לחצוצרה אירית"
+    instruments: ["uilleann_pipes"]
+  - type: "drone"
+    description: "בורדון מתמשך מתחת למלודיה"
+
+sub_styles:
+  - irish_traditional
+  - scottish_traditional
+  - breton
+  - cape_breton
+  - welsh
+
+reference_artists: ["Chieftains", "Altan", "Solas", "Capercaillie", "Sharon Shannon"]
+reference_pieces: ["Danny Boy", "The Morning Dew", "Si Bheag Si Mhor", "Drowsy Maggie"]
+
+gm_programs:
+  tin_whistle: 72
+  fiddle: 110
+  harp: 46
+  bodhran: 116
+  flute: 73
+  accordion: 21

@@ -12,6 +12,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.routes import router
+from api.agent_routes import router as agent_router
 from api.database import init_db
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -42,6 +43,7 @@ app.add_middleware(
 )
 
 app.include_router(router, prefix="/python-api")
+app.include_router(agent_router, prefix="/agent")
 
 
 @app.get("/python-api/health")

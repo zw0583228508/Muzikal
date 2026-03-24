@@ -1,20 +1,16 @@
-import pytest
-pytestmark = pytest.mark.service
-
 """
 Tests for YAML genre files in configs/styles/genres/.
 Validates structure, required fields, and data integrity.
 """
 
+import pytest
+pytestmark = pytest.mark.service
+
 import os
 import glob
-import pytest
 import yaml
 
-GENRES_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)),
-    "configs", "styles", "genres"
-)
+from config_paths import GENRES_DIR
 
 
 def load_all_genres():

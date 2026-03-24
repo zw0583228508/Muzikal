@@ -1,0 +1,312 @@
+🔴 FINAL CLOSURE DIRECTIVE — ONLY 3 REMAINING ISSUES
+
+You have already completed major refactors and partial hardening.
+
+At this point, the project is close — but it is still NOT closed.
+
+There are now ONLY THREE remaining critical issues.
+You must fix them completely and consistently.
+
+You are forbidden from making unrelated changes.
+Do not add features.
+Do not refactor for style only.
+Do not touch stable areas.
+
+Your entire task is now:
+
+Close these 3 remaining gaps and bring the system to a genuinely testable, internally consistent state.
+
+ISSUE 1 — CONFIG PATH MISMATCH MUST BE ELIMINATED
+Current problem
+
+The config files exist under:
+
+artifacts/music-ai-backend/configs/styles/
+
+But some tests and assumptions still expect:
+
+configs/styles/
+
+This means the system still has two competing truths.
+
+That is unacceptable.
+
+REQUIRED ACTION
+
+You must choose ONE canonical path for style configs.
+
+Canonical path to use:
+artifacts/music-ai-backend/configs/styles/
+
+This should be the only source of truth.
+
+DO THIS EXACTLY
+1. Centralize config path logic
+
+Create or use a single module such as:
+
+artifacts/music-ai-backend/config/config_paths.py
+
+This module must define the canonical path for:
+
+genres.yaml
+arranger_profiles.yaml
+
+No other file may hardcode config paths directly.
+
+2. Update all loaders
+
+Every loader/service/router/test helper that reads style configs must use the centralized path logic.
+
+Do not let any file do its own local path guessing.
+
+3. Update all tests
+
+Any test that still checks for:
+
+configs/styles/genres.yaml
+configs/styles/arranger_profiles.yaml
+
+must be updated to use the canonical backend path or the shared path helper.
+
+Do not keep legacy root-path expectations unless you intentionally support them.
+
+4. Remove ambiguity
+
+At the end:
+
+either fully support only the backend path
+or explicitly implement a compatibility fallback and document it
+
+But do not leave mixed expectations in different parts of the repo.
+
+Definition of Done
+no test expects stale root-level configs/styles/*
+all runtime code loads config from one centralized source
+no FileNotFoundError for style configs anywhere
+there is exactly one truth for config location
+ISSUE 2 — PUBLIC API FLOW MUST WORK END-TO-END WITH NO 404
+Current problem
+
+The route files exist, but integration tests still show that the actual running API flow is not closed properly.
+
+There is still a mismatch between:
+
+the code structure
+the mounted runtime routes
+the test targets
+the actual boot path
+
+This means the public API contract is still not proven to work.
+
+That is a release blocker.
+
+MANDATORY ARCHITECTURE
+
+This must now be enforced fully:
+
+Node = PUBLIC API
+
+All client-facing endpoints must be under:
+
+/api/*
+Python = INTERNAL SERVICE
+
+Python routes must remain internal, such as:
+
+/python-api/*
+
+Frontend and public integration tests must not depend on Python routes directly unless explicitly marked backend-only.
+
+REQUIRED ACTIONS
+1. Verify actual route mounting in Node
+
+Confirm that the Node server really mounts these endpoints at runtime:
+
+GET /api/styles
+GET /api/styles/personas
+GET /api/projects
+POST /api/projects
+GET /api/projects/mock-mode
+POST /api/projects/:id/analysis
+POST /api/projects/:id/arrangement
+POST /api/projects/:id/export
+
+Do not assume the route files are enough.
+Verify the actual Express mount tree.
+
+2. Verify actual server startup path
+
+Make sure the test environment starts the same server that defines the above routes.
+
+If tests hit localhost:8080, ensure that:
+
+the correct Node app is actually running there
+it mounts /api
+it has the required environment/configuration to expose those routes
+3. Fix broken mount wiring
+
+If route files exist but are not correctly mounted into the app, fix the app bootstrap / router registration.
+
+Do not patch tests before proving the runtime server is wired correctly.
+
+4. Fix integration tests to target the correct public layer
+
+If a test is intended as public API integration, it must hit:
+
+/api/*
+
+Do not let public integration tests target Python internal endpoints.
+
+5. Prove these endpoints return real responses
+
+At minimum, these must stop producing 404 in integration tests:
+
+/api/styles
+/api/styles/personas
+/api/projects
+/api/projects/mock-mode
+
+If an endpoint requires DB or setup, return the correct controlled response — not 404 caused by broken wiring.
+
+Definition of Done
+public integration tests hit Node only
+Node mounts /api/* correctly at runtime
+no 404 caused by broken router mounting
+public API flow is proven, not assumed
+ISSUE 3 — MIDI EXPORT MUST BE HARDENED AND WORK RELIABLY
+Current problem
+
+The MIDI export path is still fragile because mido is not reliably available at runtime/testing time.
+
+Even though it is declared as a dependency, the actual system behavior still fails with:
+
+ModuleNotFoundError: No module named 'mido'
+
+That means the MIDI export pipeline is still not production-safe.
+
+REQUIRED ACTIONS
+1. Fix the environment for real
+
+Ensure mido is installed in the real test/runtime environment, not just declared in a file.
+
+You must verify actual installation in the environment used by tests.
+
+Do not stop at editing dependency files.
+
+2. Harden export_midi()
+
+Do not leave raw dependency failure behavior like this:
+
+import mido
+
+inside the critical flow with no handling.
+
+Instead:
+
+either guarantee the dependency exists in the tested environment
+or catch the import failure and raise a clear, controlled application-level error
+
+Example acceptable behavior:
+
+MIDI export dependency missing: mido is not installed
+
+Not acceptable:
+
+raw unhandled ModuleNotFoundError
+3. Update tests accordingly
+
+If MIDI export is a required feature, tests must pass with the dependency installed.
+
+If dependency absence is a supported degraded mode, then tests must assert the controlled failure behavior explicitly.
+
+You must choose one truth and implement it consistently.
+
+4. Make the export path deterministic
+
+Make sure the MIDI export tests do not depend on random environment state.
+
+If necessary:
+
+add a specific test dependency group
+document setup clearly
+ensure CI installs what MIDI export needs
+Definition of Done
+no raw ModuleNotFoundError from mido
+MIDI export either works fully or fails in a controlled documented way
+export tests reflect the intended behavior honestly
+CI/test environment installs required MIDI dependencies
+🚫 ABSOLUTE RULES
+
+You must NOT:
+
+touch unrelated code
+introduce new features
+do cosmetic refactors
+weaken tests to fake green status
+hide failures behind vague exceptions
+leave dual behavior undocumented
+✅ REQUIRED VALIDATION BEFORE YOU CLAIM COMPLETION
+
+Before you say “done”, you must verify all of the following:
+
+Config path
+all config loads use one canonical source
+no stale configs/styles/* expectation remains
+API flow
+Node server actually exposes /api/*
+no public integration test gets 404 because of bad mounting
+MIDI export
+mido is truly available in test/runtime or handled explicitly
+no raw import crash remains
+📦 FINAL OUTPUT FORMAT
+
+When you finish, you must provide exactly this:
+
+1. Modified files
+
+List every file changed
+
+2. Config path resolution
+
+Explain exactly how you unified config loading
+
+3. API closure
+
+Explain exactly how you verified and fixed public /api/* routing
+
+4. MIDI hardening
+
+Explain exactly how mido / MIDI export was fixed
+
+5. Tests fixed
+
+List which tests failed before and now pass
+
+6. Remaining issues
+
+If anything is still open, say it clearly
+
+7. Exact run instructions
+
+Provide exact commands to run:
+
+Node API
+Python backend
+tests
+FINAL INSTRUCTION
+
+You are no longer “improving the project”.
+
+You are now doing final closure work.
+
+That means:
+
+remove ambiguity
+enforce one truth
+prove the public API actually runs
+prove MIDI export actually works
+leave no unresolved mismatch behind
+
+Do not return with partial progress.
+Return only with a closed, verified, technically honest result.

@@ -95,7 +95,13 @@ def export_midi(
     Supports note quantization before export.
     Returns bytes of the MIDI file.
     """
-    import mido
+    try:
+        import mido
+    except ImportError as exc:
+        raise RuntimeError(
+            "MIDI export dependency missing: 'mido' is not installed. "
+            "Install it with: pip install mido"
+        ) from exc
 
     bpm = float(bpm) if bpm else 120.0
     mid = mido.MidiFile(type=1, ticks_per_beat=480)

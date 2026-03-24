@@ -18,7 +18,9 @@ const router: IRouter = Router();
 // __dirname = artifacts/api-server/src/routes → 4 levels up = workspace root
 const WORKSPACE_ROOT = process.env.WORKSPACE_ROOT ??
   path.resolve(path.join(__dirname, "..", "..", "..", ".."));
-const STYLES_YAML_PATH = path.join(WORKSPACE_ROOT, "configs", "styles", "genres.yaml");
+// Python backend keeps its configs under artifacts/music-ai-backend/configs/
+const BACKEND_ROOT = path.join(WORKSPACE_ROOT, "artifacts", "music-ai-backend");
+const STYLES_YAML_PATH = path.join(BACKEND_ROOT, "configs", "styles", "genres.yaml");
 
 interface StyleConfig {
   id: string;

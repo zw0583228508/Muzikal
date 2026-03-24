@@ -1,0 +1,299 @@
+🔥 SYSTEM CORRECTION DIRECTIVE — NON-NEGOTIABLE
+
+You were previously instructed to harden, clean, and productionize the Muzikal codebase.
+
+You did NOT complete the task.
+
+You made partial, superficial changes while leaving critical architectural, runtime, and correctness issues unresolved — and even introduced regressions.
+
+This is not acceptable.
+
+From this point forward, you must operate with strict correctness, full-system awareness, and zero tolerance for partial fixes.
+
+❌ CURRENT STATE — CRITICAL FAILURES
+
+You must internalize these facts:
+
+1. Dependency system is still broken
+pyproject.toml is still polluted with irrelevant entries
+Environment is not reproducible
+Tests fail due to missing modules (psycopg2, mido)
+
+👉 You were explicitly told to fix this. You did not.
+
+2. Real bug still exists: update_job(..., extra=...)
+Code still passes unsupported argument extra
+Database layer does not accept it
+
+👉 This is a real runtime bug, not cosmetic.
+
+3. Root entrypoint is still fake
+main.py in root is still a useless placeholder
+
+👉 This is misleading and unacceptable in a serious repo.
+
+4. No structural refactor was done
+
+The following files are still oversized and unmaintainable:
+
+projects.ts (Node API)
+project-studio.tsx (~1000+ lines)
+api/routes.py (Python backend)
+
+👉 You ignored a core requirement.
+
+5. API contract is still inconsistent
+/python-api vs /api
+tests vs runtime mismatch
+endpoints returning 404
+
+👉 System boundaries are still undefined.
+
+6. Import-time crashes still happen
+DB dependencies break app import
+no graceful degradation
+
+👉 This prevents reliable testing and deployment.
+
+7. You introduced a regression
+configs/styles/* missing
+tests fail because required YAML files are gone
+
+👉 This is worse than before.
+
+8. Tests are NOT passing
+
+Current state:
+
+dozens of failures
+errors
+missing modules
+broken endpoints
+
+👉 The system is NOT stable.
+
+🎯 YOUR NEW OBJECTIVE
+
+You are NOT allowed to:
+
+add features
+change direction
+“improve UX”
+introduce new abstractions
+
+You MUST:
+👉 stabilize, align, and clean the entire system until it is internally consistent and testable
+
+🧱 EXECUTION PLAN — STRICT ORDER
+
+You MUST follow this order. Do not skip.
+
+PHASE 1 — DEPENDENCY SANITY (BLOCKING)
+DO THIS FIRST — NOTHING ELSE BEFORE THIS
+1. Clean pyproject.toml
+REMOVE the entire polluted [tool.uv.sources] section
+keep ONLY real dependencies actually used
+2. Ensure required packages are properly defined
+
+At minimum:
+
+fastapi
+uvicorn
+psycopg2-binary
+mido
+librosa
+numpy
+scipy
+pydub
+soundfile
+celery
+redis
+python-dotenv
+httpx
+python-multipart
+3. Make environment reproducible
+fresh install MUST work
+no missing imports
+tests must not fail due to missing modules
+
+✅ Definition of Done:
+
+pip install (or uv) works clean
+imports succeed
+no ModuleNotFoundError
+PHASE 2 — CRITICAL BUG FIXES
+2.1 FIX update_job BUG — NO EXCUSES
+
+You must:
+
+REMOVE all usage of extra=...
+map data into structured fields:
+result_data
+processing_metadata
+warnings
+
+If needed, extend DB schema — but DO NOT pass unknown params.
+
+✅ Definition of Done:
+
+no callsite uses unsupported arguments
+code is consistent everywhere
+2.2 RESTORE configs/styles/*
+restore:
+genres.yaml
+arranger_profiles.yaml
+ensure loader paths are correct
+ensure runtime uses them
+
+✅ Definition of Done:
+
+no file-not-found errors
+style system works again
+2.3 REMOVE OR FIX ROOT main.py
+
+Choose ONE:
+
+delete it
+or make it a real entrypoint
+
+DO NOT leave fake code.
+
+PHASE 3 — API CONTRACT ALIGNMENT
+You MUST define ONE truth:
+OPTION A (RECOMMENDED)
+Node = public API
+Python = internal service
+THEN:
+frontend talks ONLY to Node
+Node talks to Python
+Python routes are internal
+ACTIONS:
+fix route prefixes
+fix tests to match reality
+remove ambiguous endpoints
+
+✅ Definition of Done:
+
+no 404 from mismatched assumptions
+single consistent API contract
+PHASE 4 — IMPORT & STARTUP HARDENING
+You MUST prevent import-time crashes
+ACTIONS:
+move DB initialization to runtime
+avoid crashing on import if DB not available
+allow degraded mode
+REQUIRE:
+app can start without DB
+health endpoint reflects real status
+
+✅ Definition of Done:
+
+importing app never crashes due to environment
+tests can import modules safely
+PHASE 5 — STRUCTURAL REFACTOR (MANDATORY)
+5.1 SPLIT projects.ts
+
+Break into:
+
+routes
+services
+repository
+5.2 SPLIT project-studio.tsx
+
+Break into:
+
+hooks
+UI components
+logic layers
+5.3 SPLIT api/routes.py
+
+Break into:
+
+analysis routes
+export routes
+job routes
+etc.
+
+🚫 DO NOT SKIP THIS
+
+✅ Definition of Done:
+
+no “god files”
+clear separation of concerns
+PHASE 6 — TEST RECOVERY (HONEST)
+
+You MUST:
+
+Fix failing tests properly
+NOT weaken assertions
+NOT delete tests unless invalid
+Categorize tests:
+unit
+service
+integration
+Fix root causes:
+missing dependencies
+broken endpoints
+contract mismatches
+logic bugs
+
+✅ Definition of Done:
+
+tests pass honestly
+failures reflect real issues only
+PHASE 7 — FINAL HARDENING
+You MUST:
+clean dead code
+remove placeholders
+fix logging
+stabilize file handling
+ensure predictable behavior
+🚫 ABSOLUTE RULES
+
+You are FORBIDDEN from:
+
+doing partial fixes
+ignoring previous issues
+leaving TODOs without resolution
+introducing new inconsistencies
+“making tests pass” by weakening logic
+📦 FINAL OUTPUT REQUIREMENTS
+
+When you finish, you MUST provide:
+
+1. FULL CHANGE SUMMARY
+
+What you fixed, grouped by category
+
+2. FILE-BY-FILE MODIFICATIONS
+
+Exact list of changed files
+
+3. BUG FIX LIST
+
+Explicit bugs you fixed
+
+4. REFACTOR LIST
+
+What was split / cleaned
+
+5. TEST STATUS
+
+Before vs after
+
+6. REMAINING ISSUES
+
+Be honest
+
+7. EXACT RUN INSTRUCTIONS
+
+How to run everything locally
+
+🧠 FINAL INSTRUCTION
+
+Think like a senior engineer preparing a system for production,
+not like a tool trying to “respond quickly”.
+
+If something is inconsistent — FIX IT.
+If something is unclear — RESOLVE IT.
+If something is broken — DO NOT MOVE FORWARD until it is fixed.

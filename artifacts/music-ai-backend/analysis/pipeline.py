@@ -1,5 +1,5 @@
 """
-High-accuracy multi-stage music analysis pipeline.
+High-accuracy multi-stage music analysis pipeline — v2.0.0
 
 Usage:
     from analysis.pipeline import analyze
@@ -8,28 +8,30 @@ Usage:
     legacy_dict = result.to_legacy_format()
 
 Modes:
-    'fast'          — Single-pass librosa only, skips stem separation.
-                      Good for previews and quick scans. ~5s
-    'balanced'      — Full Demucs separation + madmom + Essentia + torchcrepe.
+    'fast'          — Single-pass librosa only, skips stem separation. ~5s
+    'balanced'      — Full Demucs + madmom + Essentia + torchcrepe + basic-pitch.
                       Recommended for production. ~30–90s first run.
-    'high_accuracy' — Same as balanced + ensemble key + stronger smoothing.
-                      Best accuracy, same runtime as balanced after first run.
+    'high_accuracy' — Same as balanced + ensemble voting + stronger smoothing.
+                      Best accuracy, same runtime as balanced (cached).
 
 Caching:
-    All stages are cached per file hash. Subsequent calls on the same file
-    return results instantly (stems cache has a 7-day TTL).
+    All stages are cached per file hash (7-day TTL).
+    Subsequent calls on the same file return results instantly.
 
-Pipeline stages:
-    1. Preprocess        — load, normalize, resample
-    2. Stem separation   — Demucs htdemucs (vocals/drums/bass/other)
-    3. Beat tracking     — madmom RNN+DBN on drums stem
-    4. Key detection     — Essentia HPCP on other stem
-    5. Chord detection   — CQT chroma + template matching on other+bass
-    6. Melody detection  — torchcrepe on vocals stem
-    7. Structure         — SSM + novelty on full mix
-    8. Smoothing         — median filter, chord merging, pitch smoothing
-    9. Theory correction — tempo trap fix, diatonic boosting
-   10. Confidence        — global confidence + warnings
+Pipeline stages (balanced / high_accuracy):
+    1.  Preprocess        — load, normalize, resample
+    2.  Stem separation   — Demucs htdemucs (vocals/drums/bass/other)
+    3.  Beat tracking     — madmom RNN+DBN on drums stem
+    4a. Key detection     — Essentia HPCP on other stem
+    4b. Key detection     — librosa K-S (second opinion for fusion)
+    5.  Chord detection   — CQT chroma + bass stem weighting + template matching
+    6.  Melody detection  — torchcrepe (pitch curve) + basic-pitch (note events)
+    7.  Structure         — SSM + novelty on full mix
+    8.  Smoothing         — median filter, chord merging, pitch smoothing
+    9.  Theory correction — tempo trap fix, diatonic boosting
+    10. FUSION ENGINE     — confidence-weighted fusion of all candidates
+    11. Theory Guard      — final harmonic validity check + scale snapping
+    12. Confidence        — global confidence annotation + warnings
 """
 
 from __future__ import annotations
@@ -196,83 +198,132 @@ def _run_fast(bundle: AudioBundle) -> AnalysisResult:
 
 
 def _run_full(bundle: AudioBundle, mode: str) -> AnalysisResult:
-    """Balanced / high_accuracy mode: full pipeline with stem separation."""
+    """
+    Balanced / high_accuracy mode: full multi-engine pipeline.
+
+    Stage sequence:
+      2.  Stem separation (Demucs)
+      3.  Beat tracking (madmom)
+      4a. Key detection (Essentia HPCP)
+      4b. Key detection (librosa K-S, second opinion)
+      5.  Chord detection (CQT + bass weighting)
+      6.  Melody (torchcrepe + basic-pitch)
+      7.  Structure (SSM)
+      8.  Smoothing
+      9.  Theory correction (pre-fusion)
+      10. FUSION ENGINE (confidence-weighted multi-source)
+      11. Theory Guard (final harmonic validation)
+    """
     from analysis.separation import separate_stems
     from analysis.beat_tracker import track_beats
-    from analysis.key_detector import detect_key
+    from analysis.key_detector import detect_key, _detect_key_librosa
     from analysis.chord_detector import detect_chords
     from analysis.melody_detector import detect_melody
     from analysis.structure_detector import detect_structure
-    from analysis.smoothing import smooth_bpm_curve, smooth_chords, smooth_pitch_curve, consolidate_key_segments
+    from analysis.smoothing import (
+        smooth_bpm_curve, smooth_chords, smooth_pitch_curve, consolidate_key_segments
+    )
     from analysis.theory_correction import apply_theory_corrections
-    from analysis.ensemble import ensemble_key
+    from analysis.fusion_engine import fuse as fusion_fuse
+    from analysis.theory_guard import apply_theory_guard
 
     t0 = time.time()
 
-    # Stage 2: Stem separation
+    # ── Stage 2: Stem separation ──────────────────────────────────────────────
     logger.info("[pipeline] Stage 2: Stem separation")
     stems = separate_stems(bundle)
     logger.info("[pipeline] Separation done in %.1fs", time.time() - t0)
 
-    # Stage 3: Beat tracking (uses drums stem)
+    # ── Stage 3: Beat tracking (madmom on drums stem) ─────────────────────────
     logger.info("[pipeline] Stage 3: Beat tracking")
     tempo = track_beats(bundle, stems=stems)
-    logger.info("[pipeline] Beats done in %.1fs — BPM=%.1f", time.time() - t0, tempo.bpm_global)
+    logger.info("[pipeline] Beats: BPM=%.1f conf=%.2f (%.1fs)", tempo.bpm_global, tempo.confidence, time.time() - t0)
 
-    # Stage 4: Key detection (uses other stem)
-    logger.info("[pipeline] Stage 4: Key detection")
-    key = detect_key(bundle, stems=stems)
+    # ── Stage 4a: Key detection — Essentia HPCP (primary) ─────────────────────
+    logger.info("[pipeline] Stage 4a: Key detection (Essentia)")
+    key_essentia = detect_key(bundle, stems=stems)
+    logger.info("[pipeline] Key (Essentia): %s %s conf=%.2f", key_essentia.global_key, key_essentia.global_mode, key_essentia.global_confidence)
 
-    if mode == "high_accuracy":
-        # Ensemble: run librosa K-S as second opinion and vote
-        from analysis.key_detector import _detect_key_librosa
-        _, _, _, _ = _detect_key_librosa(bundle.y_mono, bundle.sr)  # warm up
-        # The ensemble uses Essentia + librosa internally already
-        # We just pass through as-is (Essentia already falls back to librosa)
-        pass
+    # ── Stage 4b: Key detection — librosa K-S (second opinion) ───────────────
+    key_librosa = None
+    try:
+        logger.info("[pipeline] Stage 4b: Key detection (librosa K-S)")
+        ks_key, ks_mode, ks_conf, ks_alts = _detect_key_librosa(bundle.y_mono, bundle.sr)
+        from analysis.schemas import KeyResult
+        key_librosa = KeyResult(
+            global_key=ks_key,
+            global_mode=ks_mode,
+            global_confidence=round(float(ks_conf), 3),
+            alternatives=ks_alts,
+            source="librosa",
+        )
+        logger.info("[pipeline] Key (librosa): %s %s conf=%.2f", ks_key, ks_mode, ks_conf)
+    except Exception as e:
+        logger.warning("[pipeline] librosa key failed: %s", e)
 
-    logger.info("[pipeline] Key done in %.1fs — %s %s", time.time() - t0, key.global_key, key.global_mode)
+    # Collect key candidates for fusion
+    key_candidates = [key_essentia]
+    if key_librosa:
+        key_candidates.append(key_librosa)
 
-    # Stage 5: Chord detection (uses other+bass stems)
+    # ── Stage 5: Chord detection (CQT + bass weighting) ──────────────────────
     logger.info("[pipeline] Stage 5: Chord detection")
     chords = detect_chords(bundle, stems=stems, tempo=tempo)
-    logger.info("[pipeline] Chords done in %.1fs — %d events", time.time() - t0, len(chords.timeline))
+    logger.info("[pipeline] Chords: %d events (%.1fs)", len(chords.timeline), time.time() - t0)
 
-    # Stage 6: Melody detection (uses vocals stem)
+    # ── Stage 6: Melody (torchcrepe + basic-pitch) ────────────────────────────
     logger.info("[pipeline] Stage 6: Melody detection")
     melody = detect_melody(bundle, stems=stems)
-    logger.info("[pipeline] Melody done in %.1fs — %d notes", time.time() - t0, len(melody.notes))
+    logger.info("[pipeline] Melody: %d notes src=%s (%.1fs)", len(melody.notes), melody.source, time.time() - t0)
 
-    # Stage 7: Structure detection (full mix)
+    # ── Stage 7: Structure (SSM) ──────────────────────────────────────────────
     logger.info("[pipeline] Stage 7: Structure detection")
     structure = detect_structure(bundle)
-    logger.info("[pipeline] Structure done in %.1fs — %d sections", time.time() - t0, len(structure.sections))
+    logger.info("[pipeline] Structure: %d sections (%.1fs)", len(structure.sections), time.time() - t0)
 
-    # Stage 8: Smoothing
+    # ── Stage 8: Smoothing ────────────────────────────────────────────────────
     logger.info("[pipeline] Stage 8: Smoothing")
     smooth_window = 7 if mode == "high_accuracy" else 5
-    tempo = smooth_bpm_curve(tempo, window=smooth_window)
-    chords = smooth_chords(chords, min_duration=0.75)
-    melody = smooth_pitch_curve(melody)
-    key = consolidate_key_segments(key)
+    tempo   = smooth_bpm_curve(tempo, window=smooth_window)
+    chords  = smooth_chords(chords, min_duration=0.75)
+    melody  = smooth_pitch_curve(melody)
+    key_essentia = consolidate_key_segments(key_essentia)
+    if key_librosa:
+        key_librosa = consolidate_key_segments(key_librosa)
 
-    # Stage 9: Theory correction
+    # ── Stage 9: Theory correction (pre-fusion) ───────────────────────────────
     logger.info("[pipeline] Stage 9: Theory correction")
-    tempo, key, chords = apply_theory_corrections(tempo=tempo, key=key, chords=chords)
+    tempo, key_essentia, chords = apply_theory_corrections(
+        tempo=tempo, key=key_essentia, chords=chords
+    )
+    # Re-sync librosa key candidates after theory correction
+    key_candidates = [key_essentia]
+    if key_librosa:
+        key_candidates.append(key_librosa)
 
-    total = time.time() - t0
-    logger.info("[pipeline] Full pipeline complete in %.1fs", total)
-
-    return AnalysisResult(
+    # ── Stage 10: FUSION ENGINE ───────────────────────────────────────────────
+    logger.info("[pipeline] Stage 10: Fusion engine (viterbi=%s, beat_align=%s)", True, True)
+    result = fusion_fuse(
         audio_meta=bundle.meta,
         stems=stems,
-        tempo=tempo,
-        key=key,
-        chords=chords,
-        melody=melody,
+        tempo_candidates=[tempo],            # single madmom source (high trust)
+        key_candidates=key_candidates,       # Essentia + librosa voting
+        chords=chords,                       # Viterbi + beat-alignment applied inside
+        melody_candidates=[melody],          # merged crepe+bp
         structure=structure,
         mode=mode,
+        apply_viterbi=True,
+        apply_beat_alignment=(mode in ("balanced", "high_accuracy")),
     )
+    logger.info("[pipeline] Fusion done (%.1fs)", time.time() - t0)
+
+    # ── Stage 11: Theory Guard (final harmonic validation) ────────────────────
+    logger.info("[pipeline] Stage 11: Theory Guard")
+    result = apply_theory_guard(result)
+    logger.info("[pipeline] Theory Guard done — %d warnings total", len(result.warnings))
+
+    logger.info("[pipeline] Full pipeline DONE in %.1fs", time.time() - t0)
+    return result
 
 
 def analyze(

@@ -1,0 +1,248 @@
+🚀 PROJECT 1 — MUZIKAL (AI MUSIC ANALYSIS + ARRANGEMENT)
+🎯 OBJECTIVE
+
+Build a high-accuracy AI music analysis and orchestration system that:
+
+Extracts musical structure from audio with high precision
+Converts it into symbolic representation (MIDI + theory)
+Generates full arrangements based on style
+🧠 SYSTEM ARCHITECTURE (MANDATORY)
+
+Use a multi-engine fusion architecture.
+Do NOT rely on a single library or model.
+
+Pipeline:
+Audio Input
+→ Stem Separation
+→ Feature Extraction (multi-engine)
+→ Fusion Engine
+→ Theory Correction
+→ Symbolic Representation (MIDI + chords + structure)
+→ Arrangement Engine (Transformer)
+→ Export (MIDI / PDF / Audio)
+📦 REQUIRED LIBRARIES
+Core Audio / DSP
+librosa
+numpy
+scipy
+soundfile
+pydub
+ffmpeg-python
+Music Analysis
+essentia
+madmom
+torchcrepe
+basic-pitch
+demucs
+Symbolic / Music Theory
+pretty_midi
+music21
+mido
+Machine Learning
+torch
+torchaudio
+transformers
+pytorch-lightning
+Backend / Infra
+fastapi
+uvicorn
+pydantic
+celery
+redis
+sqlalchemy
+psycopg2-binary
+Testing
+pytest
+pytest-asyncio
+🤖 MODELS TO USE (STRICT)
+1. STEM SEPARATION
+
+Use:
+
+demucs → model: htdemucs
+
+Optional upgrade:
+
+Hybrid Demucs
+2. BEAT / TEMPO / DOWNBEAT
+
+Primary:
+
+madmom
+RNNBeatProcessor
+DBNBeatTrackingProcessor
+RNNDownBeatProcessor
+DBNDownBeatTrackingProcessor
+
+Fallback:
+
+librosa.beat.beat_track
+3. KEY DETECTION
+
+Use ensemble:
+
+essentia.standard.KeyExtractor
+Custom implementation using:
+librosa.feature.chroma
+Krumhansl-Schmuckler algorithm
+
+Final result must be:
+→ weighted voting across engines
+
+4. MELODY / PITCH DETECTION
+
+Primary:
+
+torchcrepe (frame-level F0)
+
+Secondary:
+
+basic-pitch (note events + MIDI candidates)
+
+Fallback:
+
+librosa.pyin
+REQUIRED LOGIC:
+Extract pitch curve (CREPE)
+Extract note events (BasicPitch)
+Merge + smooth
+Snap to scale/key
+Remove noise
+5. CHORD DETECTION (CUSTOM ENGINE — CRITICAL)
+Features:
+librosa.cqt
+librosa.feature.chroma_cqt
+librosa.feature.chroma_stft
+essentia HPCP
+Processing Pipeline:
+Beat segmentation
+Chroma pooling per beat/bar
+Template matching (major, minor, 7th, etc.)
+Bass note weighting
+HMM / Viterbi smoothing
+Key-aware correction
+Merge identical adjacent chords
+
+Optional upgrade:
+
+Integrate Chordino via Vamp plugin
+6. STRUCTURE DETECTION
+
+Use:
+
+librosa:
+recurrence matrix
+self-similarity matrix
+novelty detection
+
+Output:
+
+Sections: intro / verse / chorus / bridge
+🔥 CRITICAL MODULES TO BUILD
+1. fusion_engine.py (MOST IMPORTANT)
+Input:
+multiple tempo candidates
+multiple key candidates
+multiple chord predictions
+multiple pitch sources
+Output:
+unified musical interpretation
+Logic:
+confidence weighting
+temporal smoothing
+conflict resolution
+theory validation
+2. confidence_engine.py
+
+Return:
+
+tempo_confidence
+key_confidence
+chord_confidence
+melody_confidence
+overall_confidence
+3. theory_guard.py
+
+Purpose:
+Fix musically invalid outputs
+
+Examples:
+chords outside key → correct
+melody out of scale → snap
+harmonic inconsistencies → resolve
+🎼 ARRANGEMENT ENGINE (PHASE 2–3)
+Approach:
+
+DO NOT start with raw audio generation.
+
+Start with:
+→ Symbolic MIDI generation
+
+MODEL
+
+Use:
+
+Transformer (PyTorch)
+Input:
+key
+tempo
+time signature
+chord progression
+structure (sections)
+style profile
+Output:
+multi-track MIDI:
+drums
+bass
+piano
+strings
+brass
+DATASETS
+
+Use:
+
+Lakh MIDI Dataset
+MAESTRO
+GiantMIDI-Piano
+REPRESENTATION
+
+Event-based tokens:
+
+NOTE_ON
+NOTE_OFF
+TIME_SHIFT
+VELOCITY
+TRACK_ID
+CHORD_TOKEN
+STYLE_TOKEN
+SECTION_TOKEN
+🎨 STYLE SYSTEM (MANDATORY)
+
+DO NOT rely on prompts.
+
+Build structured profiles:
+
+Each style must include:
+tempo range
+rhythm density
+drum patterns
+harmonic complexity
+voicing rules
+instrumentation
+articulation
+fill frequency
+intro/ending behavior
+Format:
+
+JSON / YAML
+
+⚡ PRIORITY EXECUTION ORDER
+Fix detection accuracy:
+madmom
+essentia
+torchcrepe + basic-pitch
+Build fusion engine
+Build theory correction
+Improve chord detection
+Build MIDI export
+Only then → Transformer arranger

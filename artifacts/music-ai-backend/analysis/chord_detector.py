@@ -59,18 +59,33 @@ def _template_score(chroma_frame: np.ndarray, root_idx: int, quality: str) -> fl
     return float(np.dot(chroma_frame, template) / denom)
 
 
-def _match_chord(chroma_frame: np.ndarray, top_k: int = 3) -> Tuple[int, str, float, List[dict]]:
+def _match_chord(
+    chroma_frame: np.ndarray,
+    top_k: int = 3,
+    bass_chroma: Optional[np.ndarray] = None,
+    bass_weight: float = 0.25,
+) -> Tuple[int, str, float, List[dict]]:
     """
     Match a chroma frame against all chord templates.
+    Optionally weights bass stem chroma to improve root detection.
+
     Returns (root_idx, quality, confidence, alternatives).
     """
     # Silence check
     if np.max(chroma_frame) < 0.05:
         return -1, "N", 0.1, []
 
+    # Weighted chroma: blend mid/treble chroma with bass chroma for root
+    if bass_chroma is not None and np.max(bass_chroma) > 0.01:
+        bass_norm = bass_chroma / (np.linalg.norm(bass_chroma) + 1e-8)
+        mid_norm  = chroma_frame / (np.linalg.norm(chroma_frame) + 1e-8)
+        combined = (1.0 - bass_weight) * mid_norm + bass_weight * bass_norm
+    else:
+        combined = chroma_frame
+
     scores: List[Tuple[float, int, str]] = []
     for root, quality in _ALL_CHORDS:
-        score = _template_score(chroma_frame, root, quality)
+        score = _template_score(combined, root, quality)
         scores.append((score, root, quality))
 
     scores.sort(key=lambda x: -x[0])
@@ -90,6 +105,25 @@ def _match_chord(chroma_frame: np.ndarray, top_k: int = 3) -> Tuple[int, str, fl
     ]
 
     return best_root, best_quality, confidence, alternatives
+
+
+def _compute_bass_chroma(stems, bundle) -> Optional[np.ndarray]:
+    """
+    Compute low-pass chroma from bass stem (emphasises root note detection).
+    """
+    bass_path = getattr(getattr(stems, "bass", None), "path", None) if stems else None
+    if bass_path and __import__("os").path.exists(bass_path):
+        try:
+            y_bass, sr_bass = librosa.load(bass_path, sr=22050, mono=True)
+            # Low-pass CQT chroma — only up to ~500 Hz (octaves 0-2)
+            chroma = librosa.feature.chroma_cqt(
+                y=y_bass, sr=sr_bass, bins_per_octave=24, hop_length=2048,
+                fmin=librosa.note_to_hz("C1"), norm=2,
+            )
+            return chroma  # (12, n_frames)
+        except Exception as e:
+            logger.debug("Bass chroma failed: %s", e)
+    return None
 
 
 def _compute_chroma_essentia(stem_path: str) -> Optional[np.ndarray]:
@@ -190,7 +224,7 @@ def _median_filter_sequence(sequence: List[Tuple[int, str]], window: int = 3) ->
 def detect_chords(bundle, stems=None, tempo=None, force: bool = False) -> ChordsResult:
     """
     Main chord detection entry point.
-    Uses beat-synchronous chroma for stability.
+    Uses beat-synchronous chroma + bass stem weighting for stable chord detection.
     """
     file_hash = bundle.file_hash or "no_hash"
     stage = "chord_detector"
@@ -201,9 +235,14 @@ def detect_chords(bundle, stems=None, tempo=None, force: bool = False) -> Chords
             logger.info("Chords cache hit for %s", file_hash[:8])
             return ChordsResult.model_validate(cached)
 
-    # Get best chroma
+    # Get best mid/treble chroma (Essentia HPCP or librosa CQT)
     chroma, source = _chroma_with_stems(bundle, stems)
     logger.info("Chord chroma from: %s shape=%s", source, chroma.shape)
+
+    # Compute bass chroma for root-note weighting
+    bass_chroma_full = _compute_bass_chroma(stems, bundle)
+    if bass_chroma_full is not None:
+        logger.info("Bass chroma available (shape=%s) — enabling root weighting", bass_chroma_full.shape)
 
     # Beat-synchronize for stable chord windows
     beats = []
@@ -213,11 +252,24 @@ def detect_chords(bundle, stems=None, tempo=None, force: bool = False) -> Chords
     hop_length = 2048
     synced_chroma, beat_times = _beat_synchronize(chroma, beats, bundle.sr, hop_length)
 
+    # Synchronize bass chroma to same grid
+    synced_bass: Optional[np.ndarray] = None
+    if bass_chroma_full is not None:
+        n_beat_frames = synced_chroma.shape[1]
+        if beats and len(beats) >= 2:
+            beat_frames_bass = librosa.time_to_frames(beats, sr=22050, hop_length=2048)
+            beat_frames_bass = np.clip(beat_frames_bass, 0, bass_chroma_full.shape[1] - 1)
+            beat_frames_bass = np.unique(beat_frames_bass)
+            synced_bass = librosa.util.sync(bass_chroma_full, beat_frames_bass, aggregate=np.median)
+        else:
+            synced_bass = bass_chroma_full
+
     # Match each beat window to a chord
     raw_sequence: List[Tuple[int, str]] = []
     for i in range(synced_chroma.shape[1]):
         frame = synced_chroma[:, i]
-        root, quality, _, _ = _match_chord(frame)
+        bass_frame = synced_bass[:, min(i, synced_bass.shape[1] - 1)] if synced_bass is not None else None
+        root, quality, _, _ = _match_chord(frame, bass_chroma=bass_frame)
         raw_sequence.append((root, quality))
 
     # Smooth chord sequence
@@ -239,9 +291,16 @@ def detect_chords(bundle, stems=None, tempo=None, force: bool = False) -> Chords
             if j >= len(smoothed) and bundle.duration > end:
                 end = bundle.duration
 
-            # Re-score this merged segment
+            # Re-score this merged segment (with bass chroma)
             segment_chroma = synced_chroma[:, i:j].mean(axis=1)
-            best_root, best_quality, conf, alts = _match_chord(segment_chroma)
+            segment_bass = None
+            if synced_bass is not None:
+                end_idx = min(j, synced_bass.shape[1])
+                if i < end_idx:
+                    segment_bass = synced_bass[:, i:end_idx].mean(axis=1)
+            best_root, best_quality, conf, alts = _match_chord(
+                segment_chroma, bass_chroma=segment_bass
+            )
 
             if best_quality == "N":
                 i = j
@@ -261,14 +320,19 @@ def detect_chords(bundle, stems=None, tempo=None, force: bool = False) -> Chords
 
     unique_chords = list(dict.fromkeys(e.chord for e in timeline))
     global_conf = float(np.mean([e.confidence for e in timeline])) if timeline else 0.0
+    bass_tag = "_bass_weighted" if bass_chroma_full is not None else ""
 
     result = ChordsResult(
         timeline=timeline,
         global_confidence=round(global_conf, 3),
         unique_chords=unique_chords,
-        source=source,
+        source=source + bass_tag,
     )
 
     cache_set(file_hash, stage, result.model_dump())
-    logger.info("Chords: %d events, %d unique, conf=%.2f", len(timeline), len(unique_chords), global_conf)
+    logger.info(
+        "Chords: %d events, %d unique, conf=%.2f, bass=%s",
+        len(timeline), len(unique_chords), global_conf,
+        "yes" if bass_chroma_full is not None else "no"
+    )
     return result

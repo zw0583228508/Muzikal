@@ -111,6 +111,8 @@ artifacts/
       theory_correction.py   # Tempo trap fix, diatonic boosting
       confidence.py          # Global confidence + warnings
       ensemble.py            # Multi-source weighted voting
+      fusion_engine.py       # FUSION ENGINE — confidence-weighted multi-source fusion
+      theory_guard.py        # Final harmonic validation + scale snapping
       cache.py               # Disk-backed feature cache (7-day TTL)
     audio/                   # Legacy v1 pipeline (fallback)
       analyzer.py            # Full 9-step MIR pipeline (librosa only)

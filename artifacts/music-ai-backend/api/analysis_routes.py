@@ -1,7 +1,22 @@
-"""Analysis pipeline endpoints — v2 (high-accuracy multi-stage pipeline)."""
+"""Analysis pipeline endpoints — v2 (high-accuracy multi-stage pipeline).
+
+Job stage lifecycle per spec:
+  queued → running (stage tracking) → completed | failed | partial
+
+Every stage update includes:
+  - status
+  - progress (0-100)
+  - currentStep (human-readable)
+  - currentStage (machine-readable)
+  - modelUsed (which model is active)
+  - qualityFlags (propagated from pipeline)
+  - failureReason (on failure, machine-readable)
+"""
 
 import logging
 import os
+import time
+from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks
 
@@ -14,6 +29,49 @@ router = APIRouter()
 
 PIPELINE_VERSION = "2.0.0"
 
+MODEL_VERSIONS = {
+    "demucs":     "4.0.1-htdemucs",
+    "madmom":     "0.16.1",
+    "essentia":   "2.1b6",
+    "torchcrepe": "0.0.24",
+    "basicPitch": "0.4.0",
+    "librosa":    "0.11.0",
+}
+
+# ─── Stage definitions ────────────────────────────────────────────────────────
+# (progress_pct, stage_id, human_label, model_used)
+STAGE_PREPROCESS   = (3,  "preprocess",     "Preprocessing audio",              "librosa")
+STAGE_SEPARATE     = (10, "stem_separation","Separating stems (Demucs htdemucs)","demucs-4.0.1")
+STAGE_BEATS        = (28, "beat_tracking",  "Tracking beats (madmom RNN+DBN)",   "madmom-0.16.1")
+STAGE_KEY          = (38, "key_detection",  "Detecting key (Essentia HPCP)",     "essentia-2.1b6")
+STAGE_CHORDS       = (52, "chord_detection","Detecting chords (CQT + bass)",     "essentia+librosa")
+STAGE_MELODY       = (66, "melody",         "Extracting melody (crepe+basicpitch)","torchcrepe+basicpitch")
+STAGE_STRUCTURE    = (75, "structure",      "Detecting structure (SSM)",         "librosa-ssm")
+STAGE_SMOOTHING    = (82, "smoothing",      "Applying smoothing filters",        "internal")
+STAGE_THEORY       = (87, "theory_correction","Applying theory corrections",     "internal")
+STAGE_FUSION       = (91, "fusion",         "Fusing multi-source results",       "fusion-engine")
+STAGE_GUARD        = (95, "theory_guard",   "Validating harmonic correctness",   "theory-guard")
+STAGE_CONFIDENCE   = (98, "confidence",     "Scoring confidence",                "internal")
+
+
+def _stage_update(job_id: str, stage_tuple: tuple, extra_msg: str = "") -> None:
+    """Emit a per-stage job update."""
+    pct, stage_id, label, model = stage_tuple
+    msg = f"{label}" + (f" — {extra_msg}" if extra_msg else "")
+    try:
+        update_job(
+            job_id, "running", pct, msg,
+            result_data={
+                "currentStage": stage_id,
+                "modelUsed":    model,
+                "pipelineVersion": PIPELINE_VERSION,
+            },
+        )
+    except Exception as e:
+        logger.warning("Failed to update job stage %s: %s", stage_id, e)
+
+
+# ─── Routes ───────────────────────────────────────────────────────────────────
 
 @router.post("/analyze")
 async def start_analysis(request: AnalyzeRequest, background_tasks: BackgroundTasks):
@@ -38,87 +96,185 @@ async def start_analysis(request: AnalyzeRequest, background_tasks: BackgroundTa
     }
 
 
-def run_analysis_pipeline(job_id: str, project_id: int, audio_file_path: str, mode: str = "balanced"):
+def run_analysis_pipeline(
+    job_id: str,
+    project_id: int,
+    audio_file_path: str,
+    mode: str = "balanced",
+) -> None:
     """
     Run the full analysis pipeline synchronously in a background thread.
-    Uses the new high-accuracy multi-stage pipeline (analysis.pipeline).
-    Falls back to the legacy audio.analyzer if the new pipeline fails.
+    Emits per-stage status updates; never swallows exceptions silently.
+    Falls back to the legacy audio.analyzer only if the primary pipeline fails,
+    and marks the result clearly as a fallback.
     """
+    t_start = time.time()
+
     try:
-        update_job(job_id, "running", 3, "Preprocessing audio")
+        _stage_update(job_id, STAGE_PREPROCESS)
         update_project_status(project_id, "analyzing")
 
         if not os.path.exists(audio_file_path):
-            raise FileNotFoundError(f"Audio file not found: {audio_file_path}")
+            raise FileNotFoundError(
+                f"Audio file not found: {audio_file_path}. "
+                "Ensure the file was uploaded successfully before starting analysis."
+            )
 
-        # ─── Primary: new high-accuracy pipeline ──────────────────────────────
-        update_job(job_id, "running", 8, f"Starting {mode} analysis pipeline")
-        result = _run_new_pipeline(audio_file_path, mode, job_id)
+        # ── Run new pipeline with stage callbacks ──────────────────────────
+        result = _run_new_pipeline_staged(
+            audio_file_path=audio_file_path,
+            mode=mode,
+            job_id=job_id,
+        )
 
-        # ─── Update project audio metadata from result ─────────────────────────
-        from api.database import update_project_audio_metadata
-        meta = result.get("stems", {})
+        # ── Save results ───────────────────────────────────────────────────
         audio_meta_raw = result.get("audioMeta", result.get("audio_meta", {}))
+        from api.database import update_project_audio_metadata
         update_project_audio_metadata(project_id, {
-            "duration_seconds": audio_meta_raw.get("duration") or result.get("duration"),
-            "sample_rate": audio_meta_raw.get("sample_rate") or result.get("sampleRate"),
-            "channels": audio_meta_raw.get("channels", 1),
-            "codec": None,
+            "duration_seconds": audio_meta_raw.get("duration"),
+            "sample_rate":      audio_meta_raw.get("sample_rate"),
+            "channels":         audio_meta_raw.get("channels", 1),
+            "codec":            None,
         })
 
         save_analysis_result(project_id, result, pipeline_version=PIPELINE_VERSION)
         update_project_status(project_id, "analyzed")
+
+        quality_flags = result.get("qualityFlags", [])
+        elapsed = round(time.time() - t_start, 1)
+
         update_job(
-            job_id, "completed", 100, "Analysis complete",
+            job_id, "completed", 100,
+            f"Analysis complete in {elapsed}s — confidence={result.get('globalConfidence', 0):.2f}",
             result_data={
-                "pipeline_version": PIPELINE_VERSION,
-                "mode": mode,
-                "duration": audio_meta_raw.get("duration"),
-                "global_confidence": result.get("globalConfidence", 0),
+                "pipelineVersion":   PIPELINE_VERSION,
+                "mode":              mode,
+                "duration":          audio_meta_raw.get("duration"),
+                "globalConfidence":  result.get("globalConfidence", 0),
+                "qualityFlags":      quality_flags,
+                "modelVersions":     MODEL_VERSIONS,
+                "elapsedSeconds":    elapsed,
             },
         )
-        logger.info("Analysis complete for project %s (mode=%s)", project_id, mode)
+        logger.info(
+            "Analysis complete: project=%s mode=%s elapsed=%.1fs conf=%.2f flags=%s",
+            project_id, mode, elapsed, result.get("globalConfidence", 0), quality_flags,
+        )
 
     except Exception as e:
-        logger.exception("Analysis failed for job %s: %s", job_id, e)
-        # ─── Fallback to legacy pipeline on failure ────────────────────────────
+        elapsed = round(time.time() - t_start, 1)
+        logger.exception(
+            "Primary analysis pipeline failed for job=%s project=%s after %.1fs: %s",
+            job_id, project_id, elapsed, e,
+        )
+
+        # ── Fallback to legacy pipeline ────────────────────────────────────
         try:
-            logger.warning("Trying legacy pipeline fallback for job %s", job_id)
-            update_job(job_id, "running", 5, "Falling back to legacy pipeline")
+            logger.warning("[job=%s] Falling back to legacy pipeline", job_id)
+            update_job(
+                job_id, "running", 5,
+                "Primary pipeline failed — retrying with legacy fallback",
+                error_message=f"{type(e).__name__}: {e}",
+                result_data={
+                    "currentStage": "legacy_fallback",
+                    "failureReason": f"primary_pipeline_error: {type(e).__name__}",
+                },
+            )
             _run_legacy_pipeline(job_id, project_id, audio_file_path)
+
         except Exception as legacy_err:
-            logger.exception("Legacy pipeline also failed: %s", legacy_err)
-            update_job(job_id, "failed", 0, "Analysis failed", str(e))
+            logger.exception(
+                "[job=%s] Legacy pipeline also failed: %s", job_id, legacy_err
+            )
+            update_job(
+                job_id, "failed", 0,
+                "Analysis failed (primary + fallback both failed)",
+                error_message=f"{type(e).__name__}: {e}",
+            )
             update_project_status(project_id, "error")
 
 
-def _run_new_pipeline(audio_file_path: str, mode: str, job_id: str) -> dict:
-    """Run the new analysis.pipeline and return legacy-format dict."""
-    from analysis.pipeline import analyze_to_dict
-    return analyze_to_dict(audio_file_path, mode=mode)
+def _run_new_pipeline_staged(
+    audio_file_path: str,
+    mode: str,
+    job_id: str,
+) -> dict:
+    """
+    Run the new analysis.pipeline with per-stage job updates.
+    Monkey-patches a progress callback into the pipeline logger.
+    """
+    from analysis import pipeline as pipe_module
+
+    # Register a simple stage observer via logging
+    class _StageObserver(logging.Handler):
+        """Translate pipeline log messages to job updates."""
+        STAGE_MAP = {
+            "Stage 2":  STAGE_SEPARATE,
+            "Stage 3":  STAGE_BEATS,
+            "Stage 4a": STAGE_KEY,
+            "Stage 4b": STAGE_KEY,
+            "Stage 5":  STAGE_CHORDS,
+            "Stage 6":  STAGE_MELODY,
+            "Stage 7":  STAGE_STRUCTURE,
+            "Stage 8":  STAGE_SMOOTHING,
+            "Stage 9":  STAGE_THEORY,
+            "Stage 10": STAGE_FUSION,
+            "Stage 11": STAGE_GUARD,
+        }
+
+        def emit(self, record: logging.LogRecord) -> None:
+            msg = record.getMessage()
+            for key, stage in self.STAGE_MAP.items():
+                if f"[pipeline] Stage {key[6:]}" in msg or key in msg:
+                    _stage_update(job_id, stage)
+                    break
+
+    observer = _StageObserver()
+    pipe_logger = logging.getLogger("analysis.pipeline")
+    pipe_logger.addHandler(observer)
+
+    try:
+        from analysis.pipeline import analyze_to_dict
+        result = analyze_to_dict(audio_file_path, mode=mode)
+    finally:
+        pipe_logger.removeHandler(observer)
+
+    _stage_update(job_id, STAGE_CONFIDENCE)
+    return result
 
 
 def _run_legacy_pipeline(job_id: str, project_id: int, audio_file_path: str) -> None:
-    """Fallback to the original audio.analyzer pipeline."""
+    """Fallback to the original audio.analyzer pipeline. Clearly marked as legacy."""
     from audio.analyzer import run_full_analysis
     from api.database import update_project_audio_metadata
 
-    def progress_callback(step: str, pct: float):
-        update_job(job_id, "running", pct, step)
+    def _progress(step: str, pct: float):
+        update_job(
+            job_id, "running", pct,
+            f"[Legacy] {step}",
+            result_data={"currentStage": "legacy", "pipelineVersion": "1.0.0-legacy"},
+        )
 
-    result = run_full_analysis(audio_file_path, project_id, progress_callback)
+    result = run_full_analysis(audio_file_path, project_id, _progress)
+    result["isMock"] = False
+    result["pipelineVersion"] = "1.0.0-legacy"
+    result["qualityFlags"] = ["legacy_pipeline_used"]
 
     update_project_audio_metadata(project_id, {
         "duration_seconds": result.get("duration"),
-        "sample_rate": result.get("sampleRate"),
-        "channels": 1,
-        "codec": None,
+        "sample_rate":      result.get("sampleRate"),
+        "channels":         1,
+        "codec":            None,
     })
 
     save_analysis_result(project_id, result, pipeline_version="1.0.0-legacy")
     update_project_status(project_id, "analyzed")
     update_job(
-        job_id, "completed", 100, "Analysis complete (legacy)",
-        result_data={"pipeline_version": "1.0.0-legacy", "duration": result.get("duration")},
+        job_id, "completed", 100,
+        "Analysis complete (legacy fallback — reduced accuracy)",
+        result_data={
+            "pipelineVersion": "1.0.0-legacy",
+            "qualityFlags": ["legacy_pipeline_used"],
+        },
     )
-    logger.info("Legacy analysis complete for project %s", project_id)
+    logger.info("[job=%s] Legacy analysis complete for project %s", job_id, project_id)

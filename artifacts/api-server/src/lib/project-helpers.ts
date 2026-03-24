@@ -24,22 +24,27 @@ export const PYTHON_BACKEND = process.env.PYTHON_BACKEND_URL || "http://localhos
 
 /**
  * MOCK_MODE controls behaviour when the Python backend is unavailable.
- * When MOCK_MODE=true (default in dev), the Node layer runs a clearly-labelled
- * simulation so the UI remains exercisable without a working ML backend.
- * When MOCK_MODE=false, any Python backend failure marks the job as FAILED.
- * Set MOCK_MODE=false in production.
+ * MOCK_MODE=false (default) — any Python backend failure marks the job as FAILED.
+ * MOCK_MODE=true  — enables simulation mode for UI testing WITHOUT a working ML backend.
+ *                   Must be explicitly set in env; never enabled in production.
  */
-export const MOCK_MODE = (process.env.MOCK_MODE ?? "true").toLowerCase() === "true";
-export const PIPELINE_VERSION = "1.1.0";
+export const MOCK_MODE = (process.env.MOCK_MODE ?? "false").toLowerCase() === "true";
+if (MOCK_MODE) {
+  console.warn(
+    "[WARN] MOCK_MODE is ENABLED — analysis results are simulated. " +
+    "Set MOCK_MODE=false for real production analysis."
+  );
+}
+
+export const PIPELINE_VERSION = "2.0.0";
 
 export const MODEL_VERSIONS: Record<string, string> = {
-  madmom:       "0.16.1",
-  essentia:     "2.1b6",
-  "chord-cnn":  "0.4.0",
-  pyin:         "0.1.1",
-  msaf:         "0.5.0",
-  demucs:       "htdemucs-4.0",
-  crepe:        "0.0.13",
+  demucs:         "htdemucs-4.0.1",
+  madmom:         "0.16.1",
+  essentia:       "2.1b6",
+  torchcrepe:     "0.0.24",
+  "basic-pitch":  "0.4.0",
+  librosa:        "0.11.0",
 };
 
 export const MODEL_BY_TYPE: Record<string, string> = {

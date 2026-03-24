@@ -152,6 +152,10 @@ class AnalysisResult(BaseModel):
     mode: str = "balanced"
     pipeline_version: str = "2.0.0"
     warnings: List[AnalysisWarning] = Field(default_factory=list)
+    # Quality flags — machine-readable issues detected during analysis
+    quality_flags: List[str] = Field(default_factory=list)
+    # Which model versions were used for each stage
+    model_versions: Dict[str, str] = Field(default_factory=dict)
 
     def to_legacy_format(self) -> dict:
         """Convert to the legacy format expected by existing API routes."""
@@ -205,13 +209,15 @@ class AnalysisResult(BaseModel):
         result["globalConfidence"] = self.global_confidence
         result["pipelineVersion"] = self.pipeline_version
         result["warnings"] = [w.model_dump() for w in self.warnings]
+        result["qualityFlags"] = self.quality_flags
         result["isMock"] = False
-        result["modelVersions"] = {
-            "madmom": "0.16.1",
-            "essentia": "2.1b6",
+        result["modelVersions"] = self.model_versions or {
+            "demucs":     "4.0.1",
+            "madmom":     "0.16.1",
+            "essentia":   "2.1b6",
             "torchcrepe": "0.0.24",
-            "demucs": "4.0.1",
-            "librosa": "0.11.0",
+            "basicPitch": "0.4.0",
+            "librosa":    "0.11.0",
         }
 
         return result

@@ -1,0 +1,1012 @@
+MASTER IMPLEMENTATION INSTRUCTIONS — BUILD A REAL, HIGH-END AI MUSIC ANALYSIS AND ARRANGEMENT SYSTEM
+
+You are working on a production-grade AI music system.
+Your goal is not to build a demo, mock pipeline, or simplified prototype.
+Your goal is to build a real, high-accuracy, hybrid music intelligence and arrangement platform that can:
+
+ingest audio,
+separate stems,
+detect tempo / beats / downbeats / meter,
+infer key / mode / modulation,
+detect chords with high confidence,
+transcribe melody and note events,
+detect song structure,
+build symbolic musical representation,
+generate professional arrangement/orchestration,
+export MIDI / notation / stems / DAW-ready artifacts,
+and do all of this with deterministic, production-safe behavior.
+
+The system must prioritize accuracy, robustness, musical correctness, and controllability.
+
+GLOBAL RULES
+Rule 1 — No fake behavior
+
+Remove all fake success paths, simulation defaults, silent fallbacks that hide failure, and misleading “high-quality” naming when the implementation is not actually high quality.
+
+Mandatory:
+MOCK_MODE must be disabled by default in all production paths.
+No endpoint may pretend to complete analysis if the analysis actually failed.
+No rendering path may be called “high quality” unless it performs real high-quality processing.
+No analysis result should be returned if confidence is too low without clearly marking it.
+Rule 2 — Fail clearly, not silently
+
+Replace every dangerous pattern like:
+
+except Exception: pass
+broad exception swallowing
+silent null returns
+hidden fallback with no audit trail
+
+with:
+
+structured error handling,
+explicit failure reasons,
+job-stage failure tracking,
+detailed logs,
+confidence and quality flags.
+Rule 3 — Deterministic runtime
+
+The system must become reproducible and environment-safe.
+
+Required:
+Pin Python version.
+Pin Node version.
+Lock dependencies exactly.
+Ensure Docker-based reproducible environments.
+Validate runtime dependencies at startup.
+Validate model weights presence at startup.
+Validate ffmpeg, torch, DB, Redis, and all critical services before accepting jobs.
+Rule 4 — Accuracy over shortcuts
+
+Do not build a single-model toy pipeline.
+Build a hybrid best-of-breed analysis stack where each task is handled by the strongest suitable component, followed by fusion and theory-based correction.
+
+PHASE 1 — STABILIZE THE FOUNDATION FIRST
+
+Before improving intelligence, fix runtime reliability.
+
+1.1 Remove dangerous production weaknesses
+
+Do all of the following:
+
+Remove or disable all production mock defaults.
+Replace fragile DB access with safe dependency-injected access.
+Ensure endpoints never crash just because DB is unavailable.
+Ensure every job failure is recorded with a machine-readable reason.
+Ensure every stage writes status updates:
+queued
+running
+failed
+completed
+partial
+Ensure every analysis artifact has metadata:
+version
+model source
+confidence
+created_at
+warnings
+quality_flags
+1.2 Add startup validation
+
+Create one centralized startup validation module.
+
+At process start, validate:
+
+ffmpeg
+ffprobe
+Python dependencies
+torch
+CUDA availability if expected
+demucs
+essentia
+madmom
+torchcrepe
+mido
+psycopg2 or DB driver in use
+Redis / job queue
+database connection
+model files / checkpoints existence
+writable temp directories
+sample rate conversion tools
+
+If any required dependency is missing, fail startup clearly.
+
+1.3 Unify schema and naming
+
+Audit the entire system and standardize all shared fields.
+
+Examples:
+
+duration naming must be consistent everywhere
+project analysis fields must match DB, API, and frontend exactly
+confidence fields must be standardized
+chord labels must use one canonical format
+time positions must use one canonical unit and format
+note events must use one canonical representation
+
+Create shared typed schemas for:
+
+analysis results
+chord segments
+beat/downbeat grids
+key/mode sections
+melody note events
+arrangement plan
+render outputs
+
+Do not allow frontend-only or backend-only field drift.
+
+PHASE 2 — DEFINE THE OFFICIAL PRODUCTION ANALYSIS STACK
+
+Use a hybrid stack, not a single model.
+
+2.1 Stem separation
+
+Use:
+
+Primary: Demucs v4 Hybrid Transformer (htdemucs / htdemucs_ft)
+
+Responsibilities:
+
+separate vocals
+separate drums
+separate bass
+separate other / accompaniment
+
+Implementation requirements:
+
+support 44.1kHz and 48kHz workflows
+preserve original sample rate metadata
+keep alignment exact
+store stem confidence / quality notes
+support fallback only if explicitly logged
+2.2 Rhythm analysis
+
+Use:
+
+Primary: madmom
+Secondary support / verification: librosa + custom consistency checks
+
+Outputs required:
+
+beat times
+downbeat times
+bar boundaries
+tempo estimate
+tempo curve over time
+meter estimate
+half-time / double-time disambiguation confidence
+
+Important:
+
+analyze rhythm primarily from drum stem when available
+also compare against full mix
+perform agreement scoring between sources
+2.3 Tonal / spectral / music descriptor analysis
+
+Use:
+
+Primary: Essentia
+
+Extract:
+
+HPCP / chroma-related features
+tonal centroid features
+spectral descriptors
+onset-related descriptors
+dynamics profile
+section energy profile
+tonal confidence hints
+2.4 Vocal pitch / melody tracking
+
+Use:
+
+Primary monophonic vocal F0 model: torchcrepe
+
+Apply it mainly to:
+
+vocal stem
+dominant melodic stem when relevant
+
+Then perform post-processing:
+
+voicing decision smoothing
+pitch contour cleanup
+vibrato-aware stabilization
+note segmentation
+pitch drift correction
+ornament preservation where possible
+2.5 Polyphonic transcription
+
+Use:
+
+Primary high-end AMT: MT3
+Secondary fast verifier / fallback: Basic Pitch
+
+Responsibilities:
+
+derive polyphonic note events
+produce note candidates by time
+support multi-instrument note inference
+provide confidence per event / region if possible
+
+Important:
+
+treat AMT outputs as one signal, not the sole truth
+feed AMT into chord inference and arrangement planning
+align note events to beat/bar grid after transcription
+PHASE 3 — BUILD A REAL MULTI-STAGE ANALYSIS PIPELINE
+
+Do not keep analysis flat.
+Build a staged pipeline with explicit intermediate artifacts.
+
+3.1 Pass A — audio conditioning
+
+Before analysis:
+
+normalize safely without damaging dynamics
+remove DC offset
+trim obvious leading/trailing silence
+preserve original channels
+create analysis versions at needed sample rates
+log all transformations
+3.2 Pass B — stem-aware decomposition
+
+After separation, analyze stems individually.
+
+At minimum:
+
+drums stem drives beat/downbeat inference
+bass stem informs harmonic root detection
+vocal stem drives vocal melody tracking
+full mix remains as validation source
+other/accompaniment supports harmonic context
+3.3 Pass C — rhythm engine
+
+Create a rhythm engine module that:
+
+detects beat grid
+detects downbeats
+estimates meter
+tracks tempo curve
+resolves half-time / double-time ambiguity
+outputs confidence and alternative candidates
+3.4 Pass D — pitch / note event engine
+
+Create a pitch-note engine that combines:
+
+vocal F0 path
+polyphonic transcription path
+note onset clustering
+beat-synchronous note alignment
+section-aware smoothing
+3.5 Pass E — tonal engine
+
+Create a tonal engine that outputs:
+
+global key
+local key by section
+possible modes
+modulation boundaries
+confidence per section
+competing candidates where uncertainty exists
+3.6 Pass F — harmonic engine
+
+Create a dedicated harmonic engine.
+This must become one of the strongest components in the system.
+
+PHASE 4 — BUILD A REAL CHORD INFERENCE ENGINE
+
+The current simple template-matching approach is not sufficient.
+Build a multi-engine chord inference system.
+
+4.1 Required harmonic inputs
+
+Your chord engine must combine these signals:
+
+Signal A — HPCP / chroma harmonic evidence
+
+Use beat-synchronous and bar-aware chroma/HPCP features.
+
+Signal B — bass-informed root evidence
+
+Use bass stem analysis to estimate likely harmonic roots and inversion hints.
+
+Signal C — AMT-informed note reconstruction
+
+Use note candidates from MT3 / Basic Pitch to reconstruct likely simultaneous pitch-class sets.
+
+Signal D — melodic tension / lead-note influence
+
+Use melodic anchor notes to refine chord function ranking.
+
+Signal E — key / mode context
+
+Use local key and mode context to re-rank candidate chords.
+
+Signal F — temporal context
+
+Use previous and next harmonic states for smoothing and progression plausibility.
+
+4.2 Chord output format
+
+For each harmonic segment output:
+
+start_time
+end_time
+beat_start
+beat_end
+chord_label
+root
+quality
+inversion if known
+bass_note if known
+local_key
+confidence
+alternate_candidates
+no_chord_probability
+4.3 Harmonic capabilities required
+
+Support:
+
+triads
+sevenths
+suspended chords
+added-tone chords
+slash chords
+inversions
+borrowed chords
+secondary dominants
+modal interchange where detectable
+no-chord regions
+cadence-aware smoothing
+4.4 Build a learned chord classifier
+
+After improving the current rule-based approach, add a learned model.
+
+Recommended architecture:
+
+inputs:
+beat-synchronous chroma/HPCP
+bass chroma
+note-event projections
+onset density
+local key context
+previous/next beat context
+model options:
+Temporal CNN
+BiLSTM
+Transformer encoder
+outputs:
+chord class
+inversion
+no-chord probability
+confidence
+4.5 Add a music theory decoder
+
+Build a theory-aware correction layer that:
+
+penalizes unstable random chord flicker
+penalizes improbable jumps
+stabilizes inversions
+merges over-fragmented labels
+checks cadence logic
+respects section context
+prefers musically plausible progressions over raw local maxima
+
+This decoder is mandatory.
+
+PHASE 5 — BUILD A TRUE FUSION LAYER
+
+Fallback is not fusion.
+Build a dedicated fusion engine.
+
+5.1 Fusion responsibilities
+
+For every major output type:
+
+beats
+downbeats
+tempo
+meter
+key
+chords
+melody
+structure
+
+the fusion engine must combine multiple candidate sources and compute:
+
+source reliability
+confidence
+agreement score
+signal quality score
+context consistency score
+theory score
+final chosen result
+alternate candidates if close
+5.2 Fusion decision policy
+
+If two engines disagree:
+
+do not pick blindly
+re-rank based on musical context
+preserve alternates if uncertainty is high
+emit warnings when confidence is low
+5.3 Quality flags
+
+Add quality flags such as:
+
+weak_rhythm_signal
+uncertain_meter
+unstable_key
+ambiguous_chords
+noisy_melody
+poor_separation
+low_confidence_section_boundary
+
+These flags must propagate through the pipeline.
+
+PHASE 6 — BUILD A TRUE STRUCTURE ENGINE
+
+A real arrangement engine cannot work without real structure detection.
+
+6.1 Structure engine outputs
+
+Detect:
+
+intro
+verse
+chorus
+bridge
+solo
+transition
+outro
+repeated sections
+section similarity groups
+energy profile
+density profile
+cadence strength
+transition points
+6.2 Structure analysis signals
+
+Use:
+
+self-similarity matrices
+spectral repetition
+harmonic repetition
+rhythmic repetition
+energy changes
+lyric or vocal density when available
+instrumentation shifts after stem separation
+6.3 Structure output format
+
+For each section output:
+
+start_time
+end_time
+label
+confidence
+energy_level
+density_level
+repeat_group_id
+transition_strength
+cadence_strength
+local_key_summary
+harmonic_summary
+PHASE 7 — BUILD A PROFESSIONAL SYMBOLIC REPRESENTATION LAYER
+
+Before orchestration, the system must build a stable internal musical representation.
+
+7.1 Canonical symbolic representation
+
+Create a normalized internal format containing:
+
+beat grid
+bar grid
+tempo map
+meter map
+section map
+key map
+chord map
+melody notes
+note-event candidates
+bass movement summary
+rhythmic density map
+energy profile
+arrangement constraints
+7.2 This symbolic layer must be the basis for:
+MIDI export
+notation export
+orchestration planning
+phrase generation
+DAW export
+quality review tools
+PHASE 8 — BUILD A REAL ARRANGEMENT / ORCHESTRATION ENGINE
+
+Do not build a simple pattern injector.
+Build a layered orchestration system.
+
+8.1 Layer 1 — section planner
+
+For each section determine:
+
+target energy
+arrangement density
+groove type
+texture profile
+instrumentation emphasis
+transition style
+climax role
+tension / release behavior
+8.2 Layer 2 — harmonic planner
+
+For each section determine:
+
+whether reharmonization is allowed
+passing chord policy
+suspension policy
+pedal-tone policy
+dominant preparation policy
+cadence shaping policy
+voice-leading constraints
+8.3 Layer 3 — instrument role planner
+
+For each section and instrument family determine roles such as:
+
+lead
+harmonic pad
+rhythmic comping
+counter-line
+ostinato
+bass foundation
+accent / hits
+transitional fill
+doubling
+texture support
+8.4 Layer 4 — phrase generator
+
+Build a symbolic phrase generator conditioned on:
+
+section label
+chord progression
+key
+meter
+bpm
+target energy
+target density
+style profile
+instrument role
+phrase length
+
+Recommended direction:
+
+Transformer-based symbolic generator
+tokenization similar to structured MIDI / REMI-like events
+phrase-level conditioning
+role-aware generation, not generic note spam
+8.5 Layer 5 — rule-based validator
+
+Every generated phrase must be validated.
+
+Check:
+
+instrument range
+voice-leading quality
+register collisions
+orchestral spacing
+rhythmic clutter
+duplicate density conflicts
+bass instability
+impossible leaps where inappropriate
+non-idiomatic writing for instrument family
+overactive arrangement in low-energy sections
+8.6 Layer 6 — humanization engine
+
+Apply:
+
+velocity shaping
+timing micro-deviation
+articulation variation
+phrase contour shaping
+release timing logic
+accent realism
+repetition variation
+PHASE 9 — STYLE SYSTEM
+
+Build a clean style-profile system.
+
+9.1 Style profiles must not be vague prompts
+
+Each style profile must define:
+
+harmonic tendencies
+rhythmic tendencies
+instrumentation defaults
+density preferences
+phrase complexity
+articulation behavior
+bass behavior
+transition behavior
+intro/outro behavior
+climax strategy
+melodic support patterns
+9.2 Style profile architecture
+
+A style profile should be a structured data object, not just text.
+
+Include:
+
+name
+family
+bpm range preferences
+meter preferences
+chord vocabulary preferences
+orchestration defaults
+rhythm grammar
+phrase grammar
+dynamics grammar
+arrangement templates by section type
+allowed instrument pools
+constraint rules
+9.3 Keep generation controllable
+
+The style system must shape generation without breaking:
+
+key logic
+harmonic correctness
+structure coherence
+role clarity
+PHASE 10 — RENDERING ARCHITECTURE
+
+Do not confuse preview with final production rendering.
+
+10.1 Build two separate rendering paths
+A. Preview renderer
+
+Purpose:
+
+fast audition
+quick playback
+fast user iteration
+
+Characteristics:
+
+fast internal rendering
+lightweight synths
+low latency
+acceptable but not premium sound
+B. Production renderer
+
+Purpose:
+
+premium export
+stems
+DAW-ready output
+serious arrangement delivery
+
+Characteristics:
+
+MIDI export with articulations
+per-track rendering
+stem export
+routing metadata
+optional VST / sample-library rendering path
+loudness normalization
+proper peak handling
+professional export options
+10.2 Loudness and mastering
+
+Use real loudness measurement and gain staging.
+
+Recommended:
+
+pyloudnorm for true loudness measurement
+proper LUFS targets
+true peak safety
+optional mastering chain presets
+10.3 FX / plugin processing
+
+Use a real processing layer.
+
+Recommended:
+
+pedalboard for effect processing and plugin hosting support where applicable
+10.4 Export targets
+
+Support:
+
+MIDI
+MusicXML / notation-friendly representation
+stems
+full mix WAV
+MP3 preview
+DAW session metadata bundle
+analysis JSON
+arrangement JSON
+PHASE 11 — DATA, TRAINING, AND EVALUATION
+
+The system must be measured, not guessed.
+
+11.1 Build a gold evaluation set
+
+Create a curated benchmark dataset with:
+
+clean songs
+dense productions
+vocal-heavy mixes
+instrumentals
+simple harmony songs
+modulation-heavy songs
+rhythmically ambiguous songs
+different meters
+different genres
+
+For each benchmark track, maintain ground truth where possible:
+
+tempo
+beat grid
+downbeats
+meter
+key
+section labels
+chords
+melody
+note excerpts
+arrangement reference notes
+11.2 Build task-specific metrics
+
+Track at least:
+
+stem separation quality metrics where possible
+beat F-measure
+downbeat accuracy
+tempo accuracy
+key accuracy
+chord overlap score / weighted harmonic score
+melody note precision / recall / F1
+section boundary accuracy
+arrangement validation failure rate
+render artifact rate
+11.3 Build evaluation dashboards
+
+Create internal reports for:
+
+model version comparison
+regression detection
+per-task confidence drift
+style-profile output quality
+runtime cost
+GPU usage
+failure reasons by stage
+PHASE 12 — API AND JOB SYSTEM HARDENING
+12.1 Job lifecycle
+
+Every analysis / arrangement job must have:
+
+job id
+user id
+project id
+current stage
+stage progress
+created_at
+started_at
+ended_at
+status
+failure_reason
+warnings
+artifact references
+model versions used
+12.2 Cancellation behavior
+
+Cancellation must:
+
+stop safely
+mark the job correctly
+not crash if DB is temporarily unavailable
+clean temp files where appropriate
+preserve partial artifacts if configured
+12.3 Partial result support
+
+When possible, preserve partial outputs:
+
+separated stems
+beat grid
+provisional chords
+provisional melody
+logs
+warnings
+
+But clearly mark them as partial.
+
+PHASE 13 — FRONTEND / UX FOR A REAL MUSIC WORKFLOW
+
+The UI must reflect uncertainty and progress truthfully.
+
+13.1 Show analysis stages explicitly
+
+Show:
+
+separation
+rhythm analysis
+pitch analysis
+harmonic analysis
+structure analysis
+orchestration
+rendering
+export
+13.2 Show confidence and warnings
+
+Users must see:
+
+confidence level
+uncertain areas
+low-quality regions
+possible chord ambiguity
+possible tempo ambiguity
+13.3 Editable analysis results
+
+Allow expert editing for:
+
+tempo
+downbeats
+meter
+key
+chords
+section boundaries
+melody cleanup
+instrumentation choices
+arrangement density
+
+This is critical for serious users.
+
+PHASE 14 — CODE QUALITY RULES
+14.1 No broad anonymous utility chaos
+
+Refactor into clear modules:
+
+analysis/rhythm
+analysis/tonal
+analysis/harmony
+analysis/melody
+analysis/structure
+fusion
+orchestration/planning
+orchestration/generation
+orchestration/validation
+rendering/preview
+rendering/production
+export
+evaluation
+14.2 Strong typing everywhere
+
+Use:
+
+strict backend schemas
+shared contracts where possible
+no loosely shaped payloads
+no accidental optional fields in core artifacts
+14.3 Logging
+
+Every stage must emit structured logs with:
+
+track id / project id / job id
+stage name
+model used
+runtime duration
+warnings
+confidence summary
+failure reason if any
+PHASE 15 — WHAT TO BUILD FIRST, IN ORDER
+
+Implement in this exact order.
+
+Priority 1 — Foundation hardening
+remove mock defaults
+remove silent failure paths
+add startup validation
+unify schema
+harden job lifecycle
+fix DB dependency handling
+lock environment
+Priority 2 — Production analysis stack
+Demucs integration finalized
+madmom rhythm engine
+Essentia tonal feature engine
+torchcrepe melody/F0 path
+MT3 transcription path
+Basic Pitch fallback/verifier
+stem-aware intermediate artifacts
+Priority 3 — Harmonic intelligence
+new chord engine
+bass-informed harmonic inference
+AMT-informed harmonic reconstruction
+learned chord classifier
+theory decoder
+chord confidence system
+Priority 4 — Fusion engine
+candidate aggregation
+agreement scoring
+context re-ranking
+alternate candidates
+quality flags propagation
+Priority 5 — Structure engine
+repetition detection
+section boundary detection
+energy/density mapping
+section labeling
+structure confidence
+Priority 6 — Symbolic core representation
+canonical score-like representation
+exportable chord/key/melody/beat map
+arrangement-ready internal format
+Priority 7 — Arrangement engine
+section planner
+harmonic planner
+instrument role planner
+phrase generator
+validator
+humanization layer
+Priority 8 — Rendering system
+preview renderer
+production renderer
+loudness and mastering layer
+stem export
+DAW-ready export
+Priority 9 — Evaluation and benchmarking
+gold dataset
+metrics
+regression suite
+dashboards
+NON-NEGOTIABLE TECHNICAL STACK
+
+Use the following as the core recommended stack.
+
+Core analysis
+Python
+PyTorch
+NumPy
+SciPy
+librosa
+Essentia
+madmom
+Demucs
+torchcrepe
+MT3
+Basic Pitch
+mido
+Orchestration / symbolic generation
+PyTorch
+custom symbolic data pipeline
+Transformer-based phrase generation
+rule-based validator
+theory decoder
+Rendering / export
+ffmpeg
+pyloudnorm
+pedalboard
+MIDI export tools
+MusicXML / notation export layer
+Backend
+FastAPI
+PostgreSQL
+Redis
+proper job queue / workers
+Frontend
+strongly typed React frontend
+strict API contracts
+stage-based job UX
+editable musical analysis views
+FINAL TARGET DEFINITION
+
+The final system must be:
+
+A production-grade hybrid AI music intelligence and arrangement platform that performs stem-aware multi-stage audio analysis, theory-constrained harmonic inference, structure-aware symbolic music understanding, controllable orchestration generation, and professional export/render workflows with clear confidence and quality reporting.
+
+Do not optimize for “looks complete.”
+Optimize for:
+
+musical correctness,
+analysis accuracy,
+orchestration quality,
+runtime robustness,
+and real professional usefulness.

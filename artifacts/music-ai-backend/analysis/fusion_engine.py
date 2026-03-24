@@ -501,6 +501,43 @@ def fuse(
                 severity="warning",
             ))
 
+    # ── Quality flags ─────────────────────────────────────────────────────────
+    quality_flags: List[str] = []
+
+    if fused_tempo.confidence < 0.6:
+        quality_flags.append("weak_rhythm_signal")
+    if fused_tempo.bpm_global < 50 or fused_tempo.bpm_global > 220:
+        quality_flags.append("unusual_tempo")
+
+    if fused_key.global_confidence < 0.55:
+        quality_flags.append("unstable_key")
+        quality_flags.append("uncertain_meter")  # likely related meter issue
+
+    if fused_chords.global_confidence < 0.5:
+        quality_flags.append("ambiguous_chords")
+
+    if fused_melody.global_confidence < 0.4:
+        quality_flags.append("noisy_melody")
+    if fused_melody.voiced_fraction < 0.25:
+        quality_flags.append("sparse_melody")
+
+    if stems and not getattr(getattr(stems, "drums", None), "available", False):
+        quality_flags.append("poor_separation")
+
+    if any(w.severity == "warning" for w in warnings):
+        quality_flags.append("analysis_warnings_present")
+
+    # ── Model versions ────────────────────────────────────────────────────────
+    model_versions = {
+        "demucs":     "4.0.1-htdemucs",
+        "madmom":     "0.16.1",
+        "essentia":   "2.1b6",
+        "torchcrepe": "0.0.24",
+        "basicPitch": "0.4.0",
+        "librosa":    "0.11.0",
+        "fusionEngine": "2.0.0",
+    }
+
     # ── Assemble result ───────────────────────────────────────────────────────
     result = AnalysisResult(
         audio_meta=audio_meta,
@@ -513,6 +550,8 @@ def fuse(
         mode=mode,
         pipeline_version="2.0.0",
         warnings=warnings,
+        quality_flags=quality_flags,
+        model_versions=model_versions,
     )
 
     logger.info(

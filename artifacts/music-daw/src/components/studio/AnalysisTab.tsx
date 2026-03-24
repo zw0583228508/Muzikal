@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
 import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Activity, Zap, Upload, Lock, Unlock } from "lucide-react";
+import { Activity, Zap, Upload, Lock, Unlock, Edit3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { StructureTimeline } from "@/components/studio/StructureTimeline";
 
@@ -20,6 +20,7 @@ interface AnalysisTabProps {
   onToggleLock: (field: string) => void;
   onSetChordOverride: (idx: number, chord: string) => void;
   onSetEditingChordIdx: (idx: number | null) => void;
+  onShowCorrections?: () => void;
 }
 
 export function AnalysisTab({
@@ -38,7 +39,8 @@ export function AnalysisTab({
   onToggleLock,
   onSetChordOverride,
   onSetEditingChordIdx,
-}: AnalysisTabProps) {
+  onShowCorrections,
+}: AnalysisTabProps & { fileInputRef?: React.RefObject<HTMLInputElement> }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
@@ -214,9 +216,20 @@ export function AnalysisTab({
         )}
       </div>
 
-      <Button variant="outline" className="w-full" onClick={onAnalyze} disabled={!!activeJobId}>
-        <Zap className="w-4 h-4 mr-2" /> {t("Re-analyze")}
-      </Button>
+      <div className="flex gap-2">
+        <Button variant="outline" className="flex-1" onClick={onAnalyze} disabled={!!activeJobId}>
+          <Zap className="w-4 h-4 mr-2" /> {t("Re-analyze")}
+        </Button>
+        {onShowCorrections && (
+          <Button
+            variant="outline"
+            className="flex-1 border-accent/40 text-accent hover:bg-accent/10 hover:border-accent/70"
+            onClick={onShowCorrections}
+          >
+            <Edit3 className="w-4 h-4 mr-2" /> {t("Manual Corrections")}
+          </Button>
+        )}
+      </div>
 
       {Object.keys(modelVersions).length > 0 && (
         <div className="daw-panel p-3 space-y-1">

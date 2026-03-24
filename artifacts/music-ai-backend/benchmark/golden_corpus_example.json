@@ -1,0 +1,32 @@
+{
+  "name": "Muzikal Golden Test Corpus v1",
+  "version": "1.0",
+  "description": "Example annotated corpus for MIR benchmark evaluation. Replace audio_path with real file paths and add ground-truth annotations.",
+  "entries": [
+    {
+      "id": "example_pop_01",
+      "audio_path": "/data/corpus/example_pop_01.mp3",
+      "bpm": 120.0,
+      "time_signature": "4/4",
+      "key": "C",
+      "mode": "major",
+      "total_duration": 180.0,
+      "beats": [],
+      "downbeats": [],
+      "chords": [
+        {"start": 0.0,   "end": 4.0,  "chord": "Cmaj"},
+        {"start": 4.0,   "end": 8.0,  "chord": "Amin"},
+        {"start": 8.0,   "end": 12.0, "chord": "Fmaj"},
+        {"start": 12.0,  "end": 16.0, "chord": "Gmaj"}
+      ],
+      "structure": [
+        {"label": "intro",  "start": 0.0,  "end": 8.0},
+        {"label": "verse",  "start": 8.0,  "end": 32.0},
+        {"label": "chorus", "start": 32.0, "end": 56.0},
+        {"label": "outro",  "start": 56.0, "end": 180.0}
+      ],
+      "notes": "Clean studio pop, constant 120 BPM, simple I-vi-IV-V progression",
+      "tags": ["pop", "studio", "simple_harmony"]
+    }
+  ]
+}

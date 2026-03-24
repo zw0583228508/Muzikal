@@ -184,6 +184,7 @@ export default function ProjectStudio() {
                   onToggleLock={studio.toggleLock}
                   onSetChordOverride={studio.handleSetChordOverride}
                   onSetEditingChordIdx={studio.setEditingChordIdx}
+                  onShowCorrections={() => studio.setShowCorrections(true)}
                 />
               </TabsContent>
 

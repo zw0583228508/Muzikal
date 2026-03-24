@@ -147,6 +147,35 @@ async def get_canonical_score(project_id: int):
     }
 
 
+@router.get("/analysis/cache-status")
+async def get_analysis_cache_status(hash: str = ""):
+    """
+    GET /python-api/analysis/cache-status?hash=<sha256>
+
+    Check whether a given audio SHA-256 fingerprint already has a cached
+    analysis result in the database.
+
+    Returns:
+        { cached: bool, pipelineVersion?: str, analysedAt?: str }
+
+    Used by the frontend to avoid re-uploading and re-analysing an identical file.
+    """
+    from fastapi import HTTPException
+    if not hash or len(hash) != 64:
+        raise HTTPException(status_code=400, detail="hash must be a 64-char SHA-256 hex string")
+
+    hit = _check_analysis_cache(hash)
+    if hit:
+        meta = hit.get("meta", {})
+        return {
+            "cached": True,
+            "fingerprint": hash,
+            "pipelineVersion": hit.get("pipelineVersion"),
+            "analysedAt": meta.get("analyzedAt"),
+        }
+    return {"cached": False, "fingerprint": hash}
+
+
 @router.post("/analyze")
 async def start_analysis(request: AnalyzeRequest, background_tasks: BackgroundTasks):
     """Start audio analysis pipeline in background (Celery if available, else in-process).

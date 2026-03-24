@@ -636,15 +636,27 @@ def generate_arrangement_two_stage(
     style_id: str = "pop",
     override_instruments: Optional[Dict[str, List[str]]] = None,
     override_density: Optional[float] = None,
+    # Legacy / route-compat params — accepted but may be superseded by style_spec
+    instruments: Optional[List[str]] = None,
+    density: Optional[float] = None,
+    do_humanize: bool = True,
+    tempo_factor: float = 1.0,
+    persona_id: Optional[str] = None,
+    style_profile: Optional[Dict] = None,
+    humanize_seed: int = 42,
+    evaluate: bool = True,
 ) -> Dict[str, Any]:
     """
     Run the complete two-stage arrangement pipeline.
 
-    Stage 1: plan_arrangement → ArrangementBlueprint
-    Stage 2: render_blueprint → track data
+    Stage 1: plan_arrangement  → ArrangementBlueprint
+    Stage 2: render_blueprint  → track data
+    Stage 3: humanize_tracks   → musical feel (deterministic, seed-based)
+    Stage 4: evaluate          → arrangement quality report
 
     Returns:
-        Arrangement dict with tracks, metadata, planner blueprint summary
+        Arrangement dict with tracks, metadata, planner blueprint summary,
+        and evaluation report.
     """
     chord_data  = analysis.get("chords", {})
     rhythm_data = analysis.get("rhythm", {})
@@ -661,16 +673,37 @@ def generate_arrangement_two_stage(
         chord_timeline.append(nc)
 
     beat_grid = list(rhythm_data.get("beats", []))
+    bpm = float(rhythm_data.get("bpm", 120.0))
 
-    # Stage 1
+    # Merge density / instruments params
+    effective_density = override_density or density
+    effective_instruments = override_instruments
+
+    # ── Stage 1: Structural planner ──────────────────────────────────────────
+
+    # Enrich with formal style spec if available
+    try:
+        from orchestration.style_spec import get_planner_inputs
+        spec_inputs = get_planner_inputs(style_id)
+        # Override instruments from spec if not explicitly provided
+        if not instruments and not override_instruments:
+            spec_instrs = spec_inputs.get("instruments", [])
+            if spec_instrs:
+                effective_instruments = None  # let planner use spec defaults
+        # Override density from spec if not set
+        if effective_density is None:
+            pass  # planner derives from energy
+    except Exception as spec_err:
+        logger.debug("style_spec lookup skipped: %s", spec_err)
+
     blueprint = plan_arrangement(
         analysis=analysis,
         style_id=style_id,
-        override_instruments=override_instruments,
-        override_density=override_density,
+        override_instruments=effective_instruments,
+        override_density=effective_density,
     )
 
-    # Stage 2
+    # ── Stage 2: Symbolic generator ──────────────────────────────────────────
     result = render_blueprint(
         blueprint=blueprint,
         chord_timeline=chord_timeline,
@@ -678,13 +711,65 @@ def generate_arrangement_two_stage(
         analysis=analysis,
     )
 
+    tracks = result.get("tracks", [])
+
+    # ── Stage 3: Deterministic humanization ──────────────────────────────────
+    if do_humanize and tracks:
+        try:
+            from orchestration.humanizer import humanize_tracks, make_humanizer_config
+            h_config = make_humanizer_config(
+                seed=humanize_seed,
+                style=style_id,
+                bpm=bpm,
+                analysis=analysis,
+            )
+            tracks = humanize_tracks(tracks, h_config, analysis)
+            result["tracks"] = tracks
+            result["humanized"] = True
+            result["humanizerSeed"] = humanize_seed
+        except Exception as hz_err:
+            logger.warning("Humanizer failed (non-fatal): %s", hz_err)
+
+    # ── Stage 4: Arrangement quality evaluation ───────────────────────────────
+    eval_report_dict: Dict[str, Any] = {}
+    if evaluate and tracks:
+        try:
+            from orchestration.arrangement_evaluator import evaluate_arrangement
+            eval_report = evaluate_arrangement(tracks, analysis, {
+                "density": effective_density or blueprint.harmonic_density,
+            })
+            eval_report_dict = {
+                "overallScore": eval_report.overall_score,
+                "grade": eval_report.grade,
+                "metrics": [
+                    {"name": m.name, "score": m.score, "details": m.details}
+                    for m in eval_report.metrics
+                ],
+                "issueCount": len(eval_report.issues),
+                "warnings": eval_report.warnings,
+            }
+            logger.info(
+                "Arrangement evaluation: score=%.3f grade=%s",
+                eval_report.overall_score, eval_report.grade,
+            )
+        except Exception as ev_err:
+            logger.warning("Arrangement evaluator failed (non-fatal): %s", ev_err)
+
+    # ── Build final result ────────────────────────────────────────────────────
     result["blueprintSummary"] = {
-        "styleId":        blueprint.style_id,
-        "globalInstruments": blueprint.global_instruments,
-        "harmonicDensity": blueprint.harmonic_density,
-        "diatonicRatio":  blueprint.diatonic_ratio,
-        "sectionCount":   len(blueprint.section_plans),
-        "plannerVersion": "two_stage_v1",
+        "styleId":            blueprint.style_id,
+        "globalInstruments":  blueprint.global_instruments,
+        "harmonicDensity":    blueprint.harmonic_density,
+        "diatonicRatio":      blueprint.diatonic_ratio,
+        "sectionCount":       len(blueprint.section_plans),
+        "plannerVersion":     "two_stage_v2",
+        "humanized":          do_humanize,
+        "humanizerSeed":      humanize_seed if do_humanize else None,
+        "evaluationScore":    eval_report_dict.get("overallScore"),
+        "evaluationGrade":    eval_report_dict.get("grade"),
     }
+
+    if eval_report_dict:
+        result["evaluationReport"] = eval_report_dict
 
     return result

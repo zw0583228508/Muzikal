@@ -58,8 +58,24 @@ def render_to_wav(tracks: List[dict], total_duration: float,
     if progress_callback:
         progress_callback("Mastering", 85)
 
-    # Master bus processing
+    # Master bus processing (EQ, compression, limiting)
     master = apply_master_bus(mix, SR, target_lufs=-14.0)
+
+    # ITU-R BS.1770-4 compliant loudness normalization (streaming preset: −14 LUFS, −1 dBTP)
+    try:
+        from audio.loudness_normalizer import normalize_audio
+        master, norm_result = normalize_audio(
+            master, SR,
+            target_lufs=-14.0,
+            max_true_peak_dbtp=-1.0,
+            allow_boost=True,
+        )
+        logger.info(
+            "Loudness normalization: %.1f → %.1f LUFS (gain %.1f dB)",
+            norm_result.before.lufs, norm_result.after.lufs, norm_result.gain_applied_db,
+        )
+    except Exception as ln_exc:
+        logger.warning("Loudness normalizer failed (non-fatal): %s", ln_exc)
 
     if progress_callback:
         progress_callback("Writing audio file", 95)

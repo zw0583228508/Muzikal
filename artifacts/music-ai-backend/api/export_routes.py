@@ -120,11 +120,39 @@ def run_export_pipeline(
         from audio.export_engine import run_export
         results = run_export(project_id, analysis, arrangement, formats, output_dir)
 
+        # ── Validate exported artifacts ──────────────────────────────────────
+        update_job(job_id, "running", 90, "Validating exported files")
+        validation_summary: dict = {}
+        try:
+            from audio.export_validator import validate_export, compute_sha256
+            for fmt, fpath in results.items():
+                if not isinstance(fpath, str) or not fpath:
+                    continue
+                v = validate_export(fpath)
+                checksum = compute_sha256(fpath) if v.ok else None
+                validation_summary[fmt] = {
+                    "ok":       v.ok,
+                    "issues":   v.issues,
+                    "warnings": v.warnings,
+                    "sha256":   checksum,
+                    "metadata": v.metadata,
+                }
+                if not v.ok:
+                    logger.warning(
+                        "Export validation FAILED for %s (%s): %s",
+                        fmt, fpath, v.issues,
+                    )
+                else:
+                    logger.info("Export validation OK: %s — %s", fmt, v.metadata)
+        except Exception as val_err:
+            logger.warning("Export validation skipped (non-fatal): %s", val_err)
+
         _save_files_to_db(project_id, job_id, results)
 
         update_job(job_id, "completed", 100, "Export complete", result_data={
             "exportedFiles": results,
             "outputDir": output_dir,
+            "validation": validation_summary,
         })
         logger.info("Export complete for project %s: %s", project_id, list(results.keys()))
 

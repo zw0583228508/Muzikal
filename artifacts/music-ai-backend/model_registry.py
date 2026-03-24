@@ -374,6 +374,33 @@ def validate_registry() -> list[str]:
     return errors
 
 
+def get_model_versions_dict() -> dict[str, str]:
+    """Return {task: version} for all active models — used in pipeline provenance."""
+    return get_model_versions()
+
+
+def log_registry_summary() -> None:
+    """Log a concise registry summary at startup."""
+    import logging as _logging
+    _log = _logging.getLogger(__name__)
+    errs = validate_registry()
+    if errs:
+        for err in errs:
+            _log.error("MODEL REGISTRY ERROR: %s", err)
+    total = len(_REGISTRY)
+    by_status: dict[str, int] = {}
+    for e in _REGISTRY:
+        by_status[e.status] = by_status.get(e.status, 0) + 1
+    _log.info(
+        "Model Registry loaded: %d models — production=%d, experimental=%d, heuristic=%d%s",
+        total,
+        by_status.get("production", 0),
+        by_status.get("experimental", 0),
+        by_status.get("heuristic", 0),
+        " ⚠ REGISTRY ERRORS: " + str(len(errs)) if errs else " ✓",
+    )
+
+
 def _entry_to_dict(e: ModelEntry) -> dict:
     return {
         "id":              e.id,

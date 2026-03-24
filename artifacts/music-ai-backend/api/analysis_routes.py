@@ -13,6 +13,8 @@ Every stage update includes:
   - failureReason (on failure, machine-readable)
 """
 
+import hashlib
+import json
 import logging
 import os
 import time
@@ -188,6 +190,58 @@ async def start_analysis(request: AnalyzeRequest, background_tasks: BackgroundTa
     }
 
 
+def _compute_audio_fingerprint(audio_file_path: str) -> Optional[str]:
+    """Compute SHA-256 fingerprint of audio file for cache keying.
+
+    Returns hex string or None if file is unreadable.
+    """
+    try:
+        h = hashlib.sha256()
+        with open(audio_file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(65536), b""):
+                h.update(chunk)
+        return h.hexdigest()
+    except OSError as exc:
+        logger.warning("Could not compute audio fingerprint: %s", exc)
+        return None
+
+
+def _check_analysis_cache(fingerprint: str) -> Optional[dict]:
+    """Look up a prior analysis result by audio fingerprint.
+
+    Returns the processing_metadata dict if found (so we can extract result info),
+    or None if no cache hit.
+    """
+    try:
+        from api.database import get_db_connection
+        conn = get_db_connection()
+        try:
+            with conn.cursor() as cur:
+                cur.execute(
+                    """SELECT processing_metadata, pipeline_version
+                       FROM analysis_results
+                       WHERE processing_metadata->>'audioFingerprint' = %s
+                       ORDER BY updated_at DESC
+                       LIMIT 1""",
+                    (fingerprint,),
+                )
+                row = cur.fetchone()
+            if row is None:
+                return None
+            meta = row["processing_metadata"] or {}
+            return {
+                "found": True,
+                "fingerprint": fingerprint,
+                "pipelineVersion": row["pipeline_version"],
+                "meta": meta if isinstance(meta, dict) else json.loads(meta),
+            }
+        finally:
+            conn.close()
+    except Exception as exc:
+        logger.warning("Audio cache lookup failed (non-fatal): %s", exc)
+        return None
+
+
 def run_analysis_pipeline(
     job_id: str,
     project_id: int,
@@ -199,6 +253,9 @@ def run_analysis_pipeline(
     Emits per-stage status updates; never swallows exceptions silently.
     Falls back to the legacy audio.analyzer only if the primary pipeline fails,
     and marks the result clearly as a fallback.
+
+    Audio hash cache: if the same audio file was previously analyzed (matched by
+    SHA-256 fingerprint), re-uses the stored analysis and skips re-processing.
     """
     t_start = time.time()
 
@@ -211,6 +268,29 @@ def run_analysis_pipeline(
                 f"Audio file not found: {audio_file_path}. "
                 "Ensure the file was uploaded successfully before starting analysis."
             )
+
+        # ── Audio fingerprint + cache check ────────────────────────────────
+        fingerprint = _compute_audio_fingerprint(audio_file_path)
+        if fingerprint:
+            cache_hit = _check_analysis_cache(fingerprint)
+            if cache_hit:
+                elapsed = round(time.time() - t_start, 2)
+                logger.info(
+                    "[job=%s] Cache HIT — fingerprint=%s…%s — skipping re-analysis (%.1fs)",
+                    job_id, fingerprint[:8], fingerprint[-4:], elapsed,
+                )
+                update_job(
+                    job_id, "completed", 100,
+                    "Analysis served from cache (same audio file detected)",
+                    result_data={
+                        "pipelineVersion": cache_hit["pipelineVersion"],
+                        "fromCache": True,
+                        "audioFingerprint": fingerprint,
+                        "elapsedSeconds": elapsed,
+                    },
+                )
+                update_project_status(project_id, "analyzed")
+                return
 
         # ── Run new pipeline with stage callbacks ──────────────────────────
         result = _run_new_pipeline_staged(
@@ -228,6 +308,14 @@ def run_analysis_pipeline(
             "channels":         audio_meta_raw.get("channels", 1),
             "codec":            None,
         })
+
+        # Embed fingerprint in processingMetadata so cache lookup works next time
+        if fingerprint:
+            pm = result.setdefault("processingMetadata", {})
+            if isinstance(pm, dict):
+                pm["audioFingerprint"] = fingerprint
+            else:
+                result["processingMetadata"] = {"audioFingerprint": fingerprint}
 
         save_analysis_result(project_id, result, pipeline_version=PIPELINE_VERSION)
         update_project_status(project_id, "analyzed")

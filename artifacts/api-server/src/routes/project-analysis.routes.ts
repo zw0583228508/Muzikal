@@ -99,42 +99,123 @@ router.get("/:id/analysis", async (req, res) => {
 });
 
 // POST /api/projects/:id/corrections  — store user overrides for analysis data
+// Body: { bpm?, timeSignature?, globalKey?, mode?, sections?, chordOverrides? }
+//   sections:       Array<{ index: number; label?: string; start?: number; end?: number }>
+//   chordOverrides: Array<{ index: number; label: string }>  — override chord at position N
 router.post("/:id/corrections", async (req, res) => {
   const projectId = parseProjectId(req, res);
   if (projectId === null) return;
   const [project] = await db.select().from(projectsTable).where(eq(projectsTable.id, projectId));
   if (!project) { res.status(404).json({ error: "Project not found" }); return; }
 
-  const { bpm, timeSignature, globalKey, mode, chords } = req.body as Record<string, unknown>;
+  const {
+    bpm, timeSignature, globalKey, mode,
+    sections: sectionCorrections,
+    chordOverrides,
+  } = req.body as Record<string, unknown>;
+
+  // ── Build corrections payload ──────────────────────────────────────────────
   const corrections: Record<string, unknown> = {};
   if (bpm !== undefined) corrections.bpm = Number(bpm);
   if (timeSignature !== undefined) corrections.timeSignature = timeSignature;
   if (globalKey !== undefined) corrections.globalKey = String(globalKey);
   if (mode !== undefined) corrections.mode = String(mode);
-  if (chords !== undefined) corrections.chords = chords;
+  if (sectionCorrections !== undefined) corrections.sections = sectionCorrections;
+  if (chordOverrides !== undefined) corrections.chordOverrides = chordOverrides;
   corrections.correctedAt = new Date().toISOString();
 
+  // ── Dependency-aware stage list ────────────────────────────────────────────
+  // Which downstream stages must be re-run after this correction set?
+  const dependentStages: string[] = [];
+  if (bpm !== undefined || timeSignature !== undefined) dependentStages.push("arrangement");
+  if (globalKey !== undefined || mode !== undefined) dependentStages.push("arrangement");
+  if (sectionCorrections !== undefined) dependentStages.push("arrangement");
+  if (chordOverrides !== undefined) dependentStages.push("arrangement");
+  // Deduplication
+  const uniqueStages = [...new Set(dependentStages)];
+
+  // ── Apply to analysis_results ──────────────────────────────────────────────
   const [analysis] = await db
     .select()
     .from(analysisResultsTable)
     .where(eq(analysisResultsTable.projectId, projectId));
+
+  let appliedToAnalysis = false;
   if (analysis) {
     const updatedRhythm = { ...(analysis.rhythmData as Record<string, unknown> || {}) };
     const updatedKey = { ...(analysis.keyData as Record<string, unknown> || {}) };
-    if (corrections.bpm) updatedRhythm.bpm = corrections.bpm;
-    if (corrections.timeSignature) updatedRhythm.timeSignature = corrections.timeSignature;
-    if (corrections.globalKey) updatedKey.globalKey = corrections.globalKey;
-    if (corrections.mode) updatedKey.mode = corrections.mode;
+    let updatedChords = analysis.chordsData as Record<string, unknown> | null;
+    let updatedStructure = analysis.structureData as Record<string, unknown> | null;
+
+    // Global rhythm corrections
+    if (bpm !== undefined && corrections.bpm) updatedRhythm.bpm = corrections.bpm;
+    if (timeSignature !== undefined) updatedRhythm.timeSignature = corrections.timeSignature;
+
+    // Global key corrections
+    if (globalKey !== undefined) updatedKey.globalKey = corrections.globalKey;
+    if (mode !== undefined) updatedKey.mode = corrections.mode;
+
+    // Section label / boundary corrections
+    if (Array.isArray(sectionCorrections) && updatedStructure) {
+      const sections = [...((updatedStructure.sections as unknown[]) ?? [])] as Record<string, unknown>[];
+      for (const sc of sectionCorrections as Array<{ index: number; label?: string; start?: number; end?: number }>) {
+        if (sc.index >= 0 && sc.index < sections.length) {
+          if (sc.label !== undefined) sections[sc.index] = { ...sections[sc.index], label: sc.label };
+          if (sc.start !== undefined) sections[sc.index] = { ...sections[sc.index], start: sc.start, startTime: sc.start };
+          if (sc.end   !== undefined) sections[sc.index] = { ...sections[sc.index], end: sc.end,   endTime:   sc.end   };
+        }
+      }
+      updatedStructure = { ...updatedStructure, sections };
+    }
+
+    // Chord overrides
+    if (Array.isArray(chordOverrides) && updatedChords) {
+      const chordList = [...((updatedChords.chords as unknown[]) ?? [])] as Record<string, unknown>[];
+      for (const co of chordOverrides as Array<{ index: number; label: string }>) {
+        if (co.index >= 0 && co.index < chordList.length) {
+          chordList[co.index] = { ...chordList[co.index], label: co.label, overriddenByUser: true };
+        }
+      }
+      updatedChords = { ...updatedChords, chords: chordList };
+    }
+
     await db.update(analysisResultsTable)
-      .set({ rhythmData: updatedRhythm, keyData: updatedKey, updatedAt: new Date() })
+      .set({
+        rhythmData:    updatedRhythm,
+        keyData:       updatedKey,
+        chordsData:    updatedChords  ?? analysis.chordsData,
+        structureData: updatedStructure ?? analysis.structureData,
+        updatedAt:     new Date(),
+      })
       .where(eq(analysisResultsTable.projectId, projectId));
+    appliedToAnalysis = true;
   }
 
-  await db.execute(
-    `UPDATE projects SET updated_at = NOW() WHERE id = ${projectId}`
-  );
+  // ── Persist correction history to project.userCorrections ─────────────────
+  const currentCorrections = (project.userCorrections as Record<string, unknown>) ?? {};
+  const history = ((currentCorrections.history as unknown[]) ?? []) as Record<string, unknown>[];
+  history.push(corrections);
+  // Keep last 20 correction snapshots
+  const trimmedHistory = history.slice(-20);
 
-  res.json({ ok: true, corrections, appliedToAnalysis: !!analysis });
+  await db.update(projectsTable)
+    .set({
+      userCorrections: {
+        ...currentCorrections,
+        latest: corrections,
+        history: trimmedHistory,
+      },
+      updatedAt: new Date(),
+    })
+    .where(eq(projectsTable.id, projectId));
+
+  res.json({
+    ok: true,
+    corrections,
+    appliedToAnalysis,
+    dependentStages: uniqueStages,
+    correctionHistoryLength: trimmedHistory.length,
+  });
 });
 
 // ─── Lock System ─────────────────────────────────────────────────────────────

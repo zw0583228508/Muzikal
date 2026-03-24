@@ -92,7 +92,7 @@ export function useProjectStudio(projectId: number) {
   }, [invalidateAll]);
 
   // ─ WebSocket (primary real-time updates) ──────────────────────────────────
-  const { subscribeToJob } = useJobWebSocket({
+  const { subscribeToJob, connectionState: wsConnectionState } = useJobWebSocket({
     projectId,
     onJobUpdate: useCallback((update: JobUpdate) => {
       if (update.isMock) {
@@ -239,6 +239,7 @@ export function useProjectStudio(projectId: number) {
     // job state
     activeJobId, activeJobIsMock,
     activeJob, jobFailedMsg,
+    wsConnectionState,
     // UI state
     showMockBanner, setShowMockBanner,
     showCorrections, setShowCorrections,

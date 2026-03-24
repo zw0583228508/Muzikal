@@ -1,6 +1,6 @@
 import { Job } from "@workspace/api-client-react";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, AlertCircle, CheckCircle2, Clock, ChevronDown, ChevronUp, X } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, Clock, ChevronDown, ChevronUp, X, WifiOff } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
@@ -33,9 +33,10 @@ function inferStepStatus(stepName: string, currentStep: string, progress: number
 interface JobProgressProps {
   job: Job | null | undefined;
   activeJobId?: string | null;
+  wsState?: "connecting" | "open" | "reconnecting" | "failed" | "idle";
 }
 
-export function JobProgress({ job, activeJobId }: JobProgressProps) {
+export function JobProgress({ job, activeJobId, wsState }: JobProgressProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -62,8 +63,31 @@ export function JobProgress({ job, activeJobId }: JobProgressProps) {
     }
   }
 
+  const showReconnecting = wsState === "reconnecting" || wsState === "failed";
+
   return (
     <AnimatePresence>
+      {showReconnecting && (
+        <motion.div
+          key="ws-reconnecting"
+          initial={{ opacity: 0, y: -8 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -8 }}
+          className="fixed top-14 right-6 z-40 rtl:right-auto rtl:left-6"
+        >
+          <div className={cn(
+            "flex items-center gap-2 px-3 py-1.5 rounded-full text-xs border",
+            wsState === "failed"
+              ? "bg-destructive/10 border-destructive/30 text-destructive"
+              : "bg-amber-500/10 border-amber-500/30 text-amber-400"
+          )}>
+            {wsState === "failed"
+              ? <WifiOff className="w-3 h-3" />
+              : <Loader2 className="w-3 h-3 animate-spin" />}
+            {wsState === "failed" ? t("Live updates unavailable — polling active") : t("מתחבר מחדש...")}
+          </div>
+        </motion.div>
+      )}
       {(isRunning || isFailed || isComplete || isCancelled) && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}

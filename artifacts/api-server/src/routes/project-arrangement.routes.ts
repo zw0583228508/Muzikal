@@ -112,6 +112,31 @@ router.get("/:id/arrangement/history", async (req, res) => {
   })));
 });
 
+// POST /api/projects/:id/arrangement/restore/:versionId  — set a past version as current
+router.post("/:id/arrangement/restore/:versionId", async (req, res) => {
+  const projectId = parseProjectId(req, res);
+  if (projectId === null) return;
+  const versionId = parseInt(req.params.versionId, 10);
+  if (isNaN(versionId)) { res.status(400).json({ error: "Invalid versionId" }); return; }
+
+  // Check this version belongs to this project
+  const [target] = await db
+    .select()
+    .from(arrangementsTable)
+    .where(and(eq(arrangementsTable.id, versionId), eq(arrangementsTable.projectId, projectId)));
+  if (!target) { res.status(404).json({ error: "Version not found for this project" }); return; }
+
+  // Clear current flag on all versions, then set it on the target
+  await db.update(arrangementsTable)
+    .set({ isCurrent: false })
+    .where(eq(arrangementsTable.projectId, projectId));
+  await db.update(arrangementsTable)
+    .set({ isCurrent: true })
+    .where(eq(arrangementsTable.id, versionId));
+
+  res.json({ ok: true, restoredVersionNumber: target.versionNumber, styleId: target.styleId });
+});
+
 // POST /api/projects/:id/arrangement/section/:label/regenerate
 router.post("/:id/arrangement/section/:label/regenerate", async (req, res) => {
   const projectId = parseProjectId(req, res);

@@ -205,10 +205,27 @@ export default {
     "mastering": "מאסטרינג",
     "output": "פלט",
     "Regenerate this section": "ייצר מחדש סקציה זו",
-    "Drop Audio File to Analyze": "גרור קובץ אודיו לניתוח",
     "MIDI": "MIDI",
     "WAV": "WAV",
     "FLAC": "FLAC",
-    "MP3": "MP3"
+    "MP3": "MP3",
+
+    "Global": "כללי",
+    "Sections": "סקציות",
+    "Saving...": "שומר...",
+    "Corrections are applied immediately to the analysis. Regenerate your arrangement to hear the changes.": "התיקונים מוחלים מייד על הניתוח. ייצר מחדש את העיבוד לשמיעת השינויים.",
+    "No sections detected yet": "לא זוהו סקציות עדיין",
+    "No chords detected yet": "לא זוהו אקורדים עדיין",
+    "Click a chord label to edit. Changed chords are highlighted.": "לחץ על שם אקורד לעריכה. אקורדים שהשתנו מסומנים.",
+    "Section name": "שם סקציה",
+    "Start": "התחלה",
+    "End": "סיום",
+
+    "Arrangement History": "היסטוריית עיבודים",
+    "No previous arrangements": "אין עיבודים קודמים",
+    "Restore this version": "שחזר גרסה זו",
+
+    "מתחבר מחדש...": "מתחבר מחדש...",
+    "Live updates unavailable — polling active": "עדכונים חיים לא זמינים — מצב סריקה פעיל"
   }
 };

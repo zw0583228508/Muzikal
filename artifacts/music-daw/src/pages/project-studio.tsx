@@ -60,7 +60,7 @@ export default function ProjectStudio() {
         }}
       />
 
-      <JobProgress job={studio.activeJob} activeJobId={studio.activeJobId} />
+      <JobProgress job={studio.activeJob} activeJobId={studio.activeJobId} wsState={studio.wsConnectionState} />
 
       <div className="flex-1 flex overflow-hidden">
 
@@ -201,6 +201,7 @@ export default function ProjectStudio() {
                   selectedStyle={studio.selectedStyle}
                   selectedPersona={studio.selectedPersona}
                   activeJobId={studio.activeJobId}
+                  projectId={projectId}
                   onSelectStyle={studio.setSelectedStyle}
                   onSelectPersona={studio.setSelectedPersona}
                   onArrange={studio.handleArrange}
@@ -242,9 +243,13 @@ export default function ProjectStudio() {
           analysis={studio.analysis}
           projectId={projectId}
           onClose={() => studio.setShowCorrections(false)}
-          onSaved={() => {
+          onSaved={(dependentStages: string[]) => {
             studio.invalidateAll();
             studio.setShowCorrections(false);
+            // If arrangement needs regeneration, switch to arrange tab with a hint
+            if (dependentStages.includes("arrangement")) {
+              studio.setActiveTab("arrange");
+            }
           }}
         />
       )}

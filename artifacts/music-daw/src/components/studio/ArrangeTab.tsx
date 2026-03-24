@@ -1,9 +1,11 @@
+import { useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { MidiPlayer } from "@/components/midi-player";
-import { Music, CheckCircle2, Layers } from "lucide-react";
+import { Music, CheckCircle2, Layers, History, RotateCcw, ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 interface ArrangeTabProps {
   arrangement: any;
@@ -12,9 +14,17 @@ interface ArrangeTabProps {
   selectedStyle: string;
   selectedPersona: string | null;
   activeJobId: string | null;
+  projectId: number;
   onSelectStyle: (styleId: string) => void;
   onSelectPersona: (personaId: string | null) => void;
   onArrange: () => void;
+}
+
+function formatDuration(s?: number) {
+  if (!s) return "—";
+  const m = Math.floor(s / 60);
+  const sec = Math.round(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
 export function ArrangeTab({
@@ -24,11 +34,35 @@ export function ArrangeTab({
   selectedStyle,
   selectedPersona,
   activeJobId,
+  projectId,
   onSelectStyle,
   onSelectPersona,
   onArrange,
 }: ArrangeTabProps) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
+  const [showHistory, setShowHistory] = useState(false);
+  const [restoringId, setRestoringId] = useState<number | null>(null);
+
+  const { data: history = [] } = useQuery<any[]>({
+    queryKey: [`/api/projects/${projectId}/arrangement/history`],
+    queryFn: () =>
+      fetch(`/api/projects/${projectId}/arrangement/history`).then(r => r.json()),
+    enabled: showHistory,
+    staleTime: 30_000,
+  });
+
+  const handleRestore = async (versionId: number) => {
+    setRestoringId(versionId);
+    try {
+      await fetch(`/api/projects/${projectId}/arrangement/restore/${versionId}`, { method: "POST" });
+      queryClient.invalidateQueries({ queryKey: [`/api/projects/${projectId}/arrangement`] });
+    } catch (e) {
+      console.error("Restore failed:", e);
+    } finally {
+      setRestoringId(null);
+    }
+  };
 
   return (
     <>
@@ -196,6 +230,69 @@ export function ArrangeTab({
           </div>
         );
       })()}
+
+      {/* Arrangement History */}
+      <div className="daw-panel overflow-hidden">
+        <button
+          onClick={() => setShowHistory(h => !h)}
+          className="w-full flex items-center justify-between px-4 py-3 text-xs font-display font-bold text-muted-foreground uppercase tracking-widest hover:text-white transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <History className="w-3.5 h-3.5" />
+            {t("Arrangement History")}
+            {history.length > 0 && (
+              <span className="px-1.5 py-0.5 rounded-full bg-white/10 text-[9px] font-bold text-white/60">{history.length}</span>
+            )}
+          </span>
+          {showHistory ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+        </button>
+
+        {showHistory && (
+          <div className="border-t border-white/5 divide-y divide-white/5 max-h-48 overflow-y-auto custom-scrollbar">
+            {history.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-4">{t("No previous arrangements")}</p>
+            ) : (
+              history.map((v: any) => {
+                const styleName = styles?.find((s: any) => s.id === v.styleId)?.name ?? v.styleId;
+                const date = v.createdAt ? new Date(v.createdAt).toLocaleDateString("he-IL", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
+                const isCurrent = v.isCurrent;
+                return (
+                  <div key={v.id} className={cn(
+                    "flex items-center gap-2 px-4 py-2.5 text-xs",
+                    isCurrent ? "bg-primary/10" : "hover:bg-white/3"
+                  )}>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className={cn("font-bold truncate", isCurrent ? "text-primary" : "text-white/80")}>
+                          v{v.versionNumber} — {styleName}
+                        </span>
+                        {isCurrent && <CheckCircle2 className="w-3 h-3 text-primary shrink-0" />}
+                      </div>
+                      <div className="text-[10px] text-muted-foreground flex gap-2 mt-0.5" dir="ltr">
+                        <span>{date}</span>
+                        <span>·</span>
+                        <span>{formatDuration(v.totalDurationSeconds)}</span>
+                      </div>
+                    </div>
+                    {!isCurrent && (
+                      <button
+                        onClick={() => handleRestore(v.id)}
+                        disabled={restoringId === v.id}
+                        className="p-1.5 rounded border border-white/10 text-muted-foreground hover:text-white hover:border-white/30 transition-colors shrink-0"
+                        title={t("Restore this version")}
+                      >
+                        {restoringId === v.id
+                          ? <span className="w-3 h-3 block animate-spin rounded-full border border-white/30 border-t-white" />
+                          : <RotateCcw className="w-3 h-3" />}
+                      </button>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        )}
+      </div>
 
       {/* Pinned Generate button */}
       <div className="sticky bottom-0 pb-1 bg-card pt-3 border-t border-white/5 space-y-2">

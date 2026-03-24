@@ -66,6 +66,20 @@ def separate_stems(
     try:
         stems_data = _run_demucs(bundle.file_path, output_dir)
         logger.info("Demucs separation complete for %s", file_hash[:8])
+
+        # Upload stems to StorageProvider so they survive container restarts
+        try:
+            from storage.storage_provider import get_storage
+            storage = get_storage()
+            for stem_name, local_path in stems_data.items():
+                if local_path and os.path.exists(local_path):
+                    storage_key = f"stems/{file_hash[:2]}/{file_hash}/{stem_name}.wav"
+                    with open(local_path, "rb") as f:
+                        storage.save(storage_key, f.read())
+                    logger.debug("Uploaded stem %s → %s", stem_name, storage_key)
+        except Exception as upload_err:
+            logger.warning("Stem upload to storage failed (non-fatal): %s", upload_err)
+
     except Exception as e:
         logger.error("Demucs failed: %s — using degraded mode", e)
         return _degraded_stems_result()

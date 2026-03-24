@@ -1,26 +1,31 @@
 """Export pipeline endpoints."""
 
+import io
 import os
 import logging
+import tempfile
 from typing import Optional, List
 
 from fastapi import APIRouter, BackgroundTasks, HTTPException
 
 from api.database import update_job
 from api.schemas import ExportRequest
+from storage.storage_provider import get_storage
 
 logger = logging.getLogger(__name__)
 
-EXPORTS_BASE_DIR = os.environ.get("EXPORTS_DIR", "/tmp/musicai_exports")
+EXPORTS_BASE_DIR = os.environ.get("EXPORTS_DIR", "/tmp/musicai_exports")  # local temp only
 
 router = APIRouter()
 
 
 def _save_files_to_db(project_id: int, job_id: str, results: dict):
-    """Save generated file records to project_files table."""
+    """Upload generated files to StorageProvider, then record keys in DB."""
     from api.database import get_db_connection
     if not results:
         return
+
+    storage = get_storage()
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
@@ -30,16 +35,24 @@ def _save_files_to_db(project_id: int, job_id: str, results: dict):
                 file_name = os.path.basename(str(file_path))
                 ext = os.path.splitext(file_name)[1].lower().lstrip(".")
                 size = os.path.getsize(str(file_path))
+
+                # Upload to storage (S3 or local)
+                storage_key = f"exports/project_{project_id}/{job_id}/{file_name}"
+                with open(str(file_path), "rb") as f:
+                    storage.save(storage_key, f.read())
+                logger.debug("Uploaded %s → %s", file_name, storage_key)
+
                 cur.execute(
-                    """INSERT INTO project_files (project_id, job_id, file_name, file_path, file_type, file_size_bytes)
+                    """INSERT INTO project_files
+                       (project_id, job_id, file_name, file_path, file_type, file_size_bytes)
                        VALUES (%s, %s, %s, %s, %s, %s)
                        ON CONFLICT DO NOTHING""",
-                    (project_id, job_id, file_name, str(file_path), ext, size),
+                    (project_id, job_id, file_name, storage_key, ext, size),
                 )
         conn.commit()
-        logger.info("Saved %d file records for project %s", len(results), project_id)
+        logger.info("Uploaded and saved %d file records for project %s", len(results), project_id)
     except Exception as e:
-        logger.warning("Could not save file records: %s", e)
+        logger.warning("Could not upload/save file records: %s", e)
     finally:
         conn.close()
 
@@ -164,39 +177,48 @@ def run_export_pipeline(
 @router.post("/projects/{project_id}/export/bundle")
 async def export_bundle(project_id: int, formats: List[str] = None):
     """
-    Create a ZIP bundle with all requested export formats.
+    Create a ZIP bundle by streaming files from StorageProvider.
     Formats: midi | musicxml | wav | mp3 | flac | stems
     """
     import zipfile as _zipfile
-    import io
     from fastapi.responses import StreamingResponse
+    from api.database import get_db_connection
 
     if formats is None:
         formats = ["midi", "musicxml", "wav"]
 
-    output_dir = os.path.join(EXPORTS_BASE_DIR, f"project_{project_id}")
-    if not os.path.isdir(output_dir):
-        raise HTTPException(
-            status_code=404,
-            detail="No exports found for this project — export first",
-        )
+    storage = get_storage()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT file_name, file_path FROM project_files WHERE project_id=%s",
+                (project_id,),
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
 
-    found_files: list[tuple[str, str]] = []
-    for fmt in formats:
-        for fname in os.listdir(output_dir):
-            if fname.lower().endswith(f".{fmt}"):
-                found_files.append((fname, os.path.join(output_dir, fname)))
+    if not rows:
+        raise HTTPException(status_code=404, detail="No exports found for this project — export first")
+
+    found_files = [
+        (r["file_name"], r["file_path"])
+        for r in rows
+        if any(r["file_name"].lower().endswith(f".{fmt}") for fmt in formats)
+    ]
 
     if not found_files:
-        raise HTTPException(
-            status_code=404,
-            detail="No exported files found for the requested formats",
-        )
+        raise HTTPException(status_code=404, detail="No exported files found for the requested formats")
 
     buf = io.BytesIO()
     with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as zf:
-        for fname, fpath in found_files:
-            zf.write(fpath, arcname=f"project_{project_id}/{fname}")
+        for fname, storage_key in found_files:
+            try:
+                data = storage.load(storage_key)
+                zf.writestr(f"project_{project_id}/{fname}", data)
+            except Exception as e:
+                logger.warning("Could not load %s from storage: %s", storage_key, e)
     buf.seek(0)
 
     return StreamingResponse(

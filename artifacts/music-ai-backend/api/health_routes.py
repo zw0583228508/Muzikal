@@ -62,6 +62,23 @@ async def serve_storage_file(token: str = Query(...)):
     return FileResponse(path=str(file_path), filename=file_path.name)
 
 
+@router.get("/storage/presigned")
+async def get_presigned_url(key: str):
+    """
+    Return a short-lived download URL for any storage key (local or S3).
+
+    For LocalStorage: returns a signed JWT URL served by /storage/serve.
+    For S3Storage:    returns a boto3 presigned URL (expires=3600s by default).
+
+    Usage:
+        GET /python-api/storage/presigned?key=exports/project_1/job_abc/output.mid
+    """
+    from storage.storage_provider import get_storage
+    storage = get_storage()
+    url = storage.generate_presigned_url(key, expires=3600)
+    return {"url": url, "key": key, "expires": 3600}
+
+
 @router.get("/styles")
 async def get_styles_endpoint():
     """Return available musical styles from canonical YAML config."""

@@ -1,7 +1,9 @@
 """Audio render pipeline endpoints."""
 
+import io
 import os
 import logging
+import tempfile
 from typing import Optional, List
 
 from fastapi import APIRouter, BackgroundTasks
@@ -9,10 +11,11 @@ from fastapi import APIRouter, BackgroundTasks
 from api.database import update_job
 from api.schemas import RenderRequest
 from api.export_routes import _save_files_to_db
+from storage.storage_provider import get_storage
 
 logger = logging.getLogger(__name__)
 
-RENDERS_BASE_DIR = os.environ.get("RENDERS_DIR", "/tmp/musicai_renders")
+RENDERS_BASE_DIR = os.environ.get("RENDERS_DIR", "/tmp/musicai_renders")  # local temp only
 
 router = APIRouter()
 
@@ -50,7 +53,8 @@ def run_render_pipeline(
     try:
         update_job(job_id, "running", 5, "Loading arrangement data")
 
-        output_dir = custom_output_dir or os.path.join(RENDERS_BASE_DIR, f"project_{project_id}")
+        # Always write to a local temp dir first, then upload via StorageProvider
+        output_dir = custom_output_dir or tempfile.mkdtemp(prefix=f"render_{project_id}_")
         os.makedirs(output_dir, exist_ok=True)
 
         conn = get_db_connection()

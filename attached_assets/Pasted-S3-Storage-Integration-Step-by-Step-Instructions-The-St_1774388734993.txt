@@ -1,0 +1,292 @@
+S3 Storage Integration — Step-by-Step Instructions
+The StorageProvider abstraction already exists and works. The problem is that 4 files bypass it entirely and write directly to /tmp. Here is exactly what to change in each file.
+
+Step 1 — Add boto3 to requirements
+File: artifacts/music-ai-backend/requirements.txt
+Add this line at the end:
+boto3>=1.34.0
+
+Step 2 — Fix export_routes.py
+File: artifacts/music-ai-backend/api/export_routes.py
+Change 1 — top of file, replace the imports block
+Replace this:
+pythonimport os
+import logging
+from typing import Optional, List
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+
+from api.database import update_job
+from api.schemas import ExportRequest
+
+logger = logging.getLogger(__name__)
+
+EXPORTS_BASE_DIR = os.environ.get("EXPORTS_DIR", "/tmp/musicai_exports")
+With this:
+pythonimport io
+import os
+import logging
+import tempfile
+from typing import Optional, List
+
+from fastapi import APIRouter, BackgroundTasks, HTTPException
+
+from api.database import update_job
+from api.schemas import ExportRequest
+from storage.storage_provider import get_storage
+
+logger = logging.getLogger(__name__)
+
+EXPORTS_BASE_DIR = os.environ.get("EXPORTS_DIR", "/tmp/musicai_exports")  # local temp only
+Change 2 — replace the entire _save_files_to_db function
+Replace this entire function:
+pythondef _save_files_to_db(project_id: int, job_id: str, results: dict):
+    """Save generated file records to project_files table."""
+    from api.database import get_db_connection
+    if not results:
+        return
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            for fmt, file_path in results.items():
+                if not file_path or not os.path.exists(str(file_path)):
+                    continue
+                file_name = os.path.basename(str(file_path))
+                ext = os.path.splitext(file_name)[1].lower().lstrip(".")
+                size = os.path.getsize(str(file_path))
+                cur.execute(
+                    """INSERT INTO project_files (project_id, job_id, file_name, file_path, file_type, file_size_bytes)
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       ON CONFLICT DO NOTHING""",
+                    (project_id, job_id, file_name, str(file_path), ext, size),
+                )
+        conn.commit()
+        logger.info("Saved %d file records for project %s", len(results), project_id)
+    except Exception as e:
+        logger.warning("Could not save file records: %s", e)
+    finally:
+        conn.close()
+With this:
+pythondef _save_files_to_db(project_id: int, job_id: str, results: dict):
+    """Upload generated files to StorageProvider, then record keys in DB."""
+    from api.database import get_db_connection
+    if not results:
+        return
+
+    storage = get_storage()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            for fmt, file_path in results.items():
+                if not file_path or not os.path.exists(str(file_path)):
+                    continue
+                file_name = os.path.basename(str(file_path))
+                ext = os.path.splitext(file_name)[1].lower().lstrip(".")
+                size = os.path.getsize(str(file_path))
+
+                # Upload to storage (S3 or local)
+                storage_key = f"exports/project_{project_id}/{job_id}/{file_name}"
+                with open(str(file_path), "rb") as f:
+                    storage.save(storage_key, f.read())
+                logger.debug("Uploaded %s → %s", file_name, storage_key)
+
+                cur.execute(
+                    """INSERT INTO project_files
+                       (project_id, job_id, file_name, file_path, file_type, file_size_bytes)
+                       VALUES (%s, %s, %s, %s, %s, %s)
+                       ON CONFLICT DO NOTHING""",
+                    (project_id, job_id, file_name, storage_key, ext, size),
+                )
+        conn.commit()
+        logger.info("Uploaded and saved %d file records for project %s", len(results), project_id)
+    except Exception as e:
+        logger.warning("Could not upload/save file records: %s", e)
+    finally:
+        conn.close()
+Change 3 — replace the export_bundle endpoint
+Replace this block at the end of the file:
+python@router.post("/projects/{project_id}/export/bundle")
+async def export_bundle(project_id: int, formats: List[str] = None):
+    ...
+    output_dir = os.path.join(EXPORTS_BASE_DIR, f"project_{project_id}")
+    if not os.path.isdir(output_dir):
+        raise HTTPException(
+            status_code=404,
+            detail="No exports found for this project — export first",
+        )
+
+    found_files: list[tuple[str, str]] = []
+    for fmt in formats:
+        for fname in os.listdir(output_dir):
+            if fname.lower().endswith(f".{fmt}"):
+                found_files.append((fname, os.path.join(output_dir, fname)))
+
+    if not found_files:
+        raise HTTPException(
+            status_code=404,
+            detail="No exported files found for the requested formats",
+        )
+
+    buf = io.BytesIO()
+    with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as zf:
+        for fname, fpath in found_files:
+            zf.write(fpath, arcname=f"project_{project_id}/{fname}")
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=project_{project_id}_bundle.zip"},
+    )
+With this:
+python@router.post("/projects/{project_id}/export/bundle")
+async def export_bundle(project_id: int, formats: List[str] = None):
+    """
+    Create a ZIP bundle by streaming files from StorageProvider.
+    Formats: midi | musicxml | wav | mp3 | flac | stems
+    """
+    import zipfile as _zipfile
+    from fastapi.responses import StreamingResponse
+    from api.database import get_db_connection
+
+    if formats is None:
+        formats = ["midi", "musicxml", "wav"]
+
+    storage = get_storage()
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT file_name, file_path FROM project_files WHERE project_id=%s",
+                (project_id,),
+            )
+            rows = cur.fetchall()
+    finally:
+        conn.close()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail="No exports found for this project — export first")
+
+    found_files = [
+        (r["file_name"], r["file_path"])
+        for r in rows
+        if any(r["file_name"].lower().endswith(f".{fmt}") for fmt in formats)
+    ]
+
+    if not found_files:
+        raise HTTPException(status_code=404, detail="No exported files found for the requested formats")
+
+    buf = io.BytesIO()
+    with _zipfile.ZipFile(buf, "w", _zipfile.ZIP_DEFLATED) as zf:
+        for fname, storage_key in found_files:
+            try:
+                data = storage.load(storage_key)
+                zf.writestr(f"project_{project_id}/{fname}", data)
+            except Exception as e:
+                logger.warning("Could not load %s from storage: %s", storage_key, e)
+    buf.seek(0)
+
+    return StreamingResponse(
+        buf,
+        media_type="application/zip",
+        headers={"Content-Disposition": f"attachment; filename=project_{project_id}_bundle.zip"},
+    )
+
+Step 3 — Fix render_routes.py
+File: artifacts/music-ai-backend/api/render_routes.py
+Change 1 — top of file
+Replace:
+pythonimport os
+import logging
+from typing import Optional, List
+With:
+pythonimport io
+import os
+import logging
+import tempfile
+from typing import Optional, List
+Change 2 — remove the RENDERS_BASE_DIR constant and add storage import
+Replace:
+pythonfrom api.export_routes import _save_files_to_db
+
+logger = logging.getLogger(__name__)
+
+RENDERS_BASE_DIR = os.environ.get("RENDERS_DIR", "/tmp/musicai_renders")
+With:
+pythonfrom api.export_routes import _save_files_to_db
+from storage.storage_provider import get_storage
+
+logger = logging.getLogger(__name__)
+
+RENDERS_BASE_DIR = os.environ.get("RENDERS_DIR", "/tmp/musicai_renders")  # local temp only
+Change 3 — inside run_render_pipeline, replace the output_dir line
+Find this line:
+pythonoutput_dir = custom_output_dir or os.path.join(RENDERS_BASE_DIR, f"project_{project_id}")
+os.makedirs(output_dir, exist_ok=True)
+Replace with:
+python# Always write to a local temp dir first, then upload via StorageProvider
+output_dir = custom_output_dir or tempfile.mkdtemp(prefix=f"render_{project_id}_")
+os.makedirs(output_dir, exist_ok=True)
+
+Step 4 — Fix separation.py
+File: artifacts/music-ai-backend/analysis/separation.py
+The stems are large files written to disk by Demucs — they must stay local during processing (Demucs writes them itself). But after processing, they should be uploaded to storage so they survive a container restart.
+Change 1 — add import at the top
+After the existing imports, add:
+pythonfrom storage.storage_provider import get_storage
+Change 2 — after _run_demucs completes, upload stems
+Find this block (around line 60):
+python    try:
+        stems_data = _run_demucs(bundle.file_path, output_dir)
+        logger.info("Demucs separation complete for %s", file_hash[:8])
+    except Exception as e:
+        logger.error("Demucs failed: %s — using degraded mode", e)
+        return _degraded_stems_result()
+Replace with:
+python    try:
+        stems_data = _run_demucs(bundle.file_path, output_dir)
+        logger.info("Demucs separation complete for %s", file_hash[:8])
+
+        # Upload stems to StorageProvider so they survive container restarts
+        storage = get_storage()
+        for stem_name, local_path in stems_data.items():
+            if local_path and os.path.exists(local_path):
+                storage_key = f"stems/{file_hash[:2]}/{file_hash}/{stem_name}.wav"
+                with open(local_path, "rb") as f:
+                    storage.save(storage_key, f.read())
+                logger.debug("Uploaded stem %s → %s", stem_name, storage_key)
+
+    except Exception as e:
+        logger.error("Demucs failed: %s — using degraded mode", e)
+        return _degraded_stems_result()
+
+Step 5 — Set environment variables
+For local development (.env file in project root):
+bash# Leave S3_ENDPOINT unset → uses LocalStorage automatically
+LOCAL_STORAGE_PATH=/app/storage
+For production (add to docker-compose.yml under python-backend.environment):
+yamlS3_ENDPOINT: https://your-bucket.s3.amazonaws.com   # or MinIO URL
+S3_ACCESS_KEY: your-access-key
+S3_SECRET_KEY: your-secret-key
+S3_BUCKET: muzikal
+STORAGE_SECRET: a-long-random-string-for-jwt-signing
+For AWS S3 specifically, S3_ENDPOINT should be omitted (boto3 uses the default AWS endpoint). For MinIO or Cloudflare R2, set it to the full endpoint URL.
+Create the S3 bucket before deploying:
+bashaws s3 mb s3://muzikal
+aws s3api put-bucket-versioning --bucket muzikal --versioning-configuration Status=Enabled
+
+Step 6 — Verify the download endpoint still works
+File: artifacts/music-ai-backend/api/health_routes.py
+The /storage/serve endpoint already uses LOCAL_STORAGE_PATH to serve signed JWT-protected files. No changes needed here — it handles the local case. When using S3, downloads go through S3 presigned URLs directly, so this endpoint is bypassed.
+However, the Node.js API server generates download links. You need to make it return the correct URL type. In artifacts/api-server/src/routes/project-files.routes.ts, wherever you build a download URL, call the Python backend's GET /python-api/projects/{id}/files endpoint which already returns file_path (the storage key). Change client code to call GET /python-api/storage/presigned?key={storage_key} instead of constructing a /api/storage/serve URL manually.
+Add this endpoint to health_routes.py:
+python@router.get("/storage/presigned")
+async def get_presigned_url(key: str):
+    """Return a short-lived download URL for any storage key (local or S3)."""
+    storage = get_storage()
+    url = storage.generate_presigned_url(key, expires=3600)
+    return {"url": url, "expires": 3600}
+
+Summary of all changed files
+FileWhat changesrequirements.txtAdd boto3>=1.34.0api/export_routes.py_save_files_to_db uploads to storage; export_bundle loads from storageapi/render_routes.pyUse tempfile.mkdtemp instead of /tmp/musicai_rendersanalysis/separation.pyUpload stems to storage after Demucs runsapi/health_routes.pyAdd /storage/presigned endpointdocker-compose.ymlAdd S3 environment variables
+Nothing else needs changing. The StorageProvider factory (get_storage()) already handles the switch: if S3_ENDPOINT is set it returns S3Storage, otherwise LocalStorage. All the above changes just route file writes through that factory instead of bypassing it.

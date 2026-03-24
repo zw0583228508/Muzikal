@@ -1,3 +1,8 @@
+# ── ML Analysis Pipeline (v2) ──────────────────────────────────────────────────
+# madmom 0.16.1: pip install madmom --no-build-isolation (patched for Python 3.11 + NumPy 1.24+)
+# essentia:       pip install essentia
+# torchcrepe:     pip install torchcrepe
+resampy>=0.4.0
 fastapi>=0.115.0
 uvicorn[standard]>=0.32.0
 python-multipart>=0.0.12

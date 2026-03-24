@@ -8,6 +8,7 @@ class AnalyzeRequest(BaseModel):
     job_id: str
     project_id: int
     audio_file_path: str
+    mode: str = "balanced"  # fast | balanced | high_accuracy
 
 
 class ArrangeRequest(BaseModel):

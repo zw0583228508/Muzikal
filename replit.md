@@ -27,7 +27,7 @@ Browser → [Proxy :80]
 | State | TanStack Query + custom WebSocket hook |
 | i18n | react-i18next: English + Hebrew (RTL) |
 | API Server | Express 5 + Drizzle ORM + PostgreSQL |
-| Audio Backend | FastAPI + Uvicorn + librosa + mido + music21 |
+| Audio Backend | FastAPI + Uvicorn + librosa + demucs + madmom + Essentia + torchcrepe + mido + music21 |
 | Queue | Celery + Redis (optional), falls back to FastAPI BackgroundTasks |
 | Storage | LocalStorage (dev) / S3 (prod) via abstract `StorageProvider` |
 
@@ -97,8 +97,23 @@ artifacts/
       agent_routes.py        # AI agent session endpoints
       database.py            # DB helpers (psycopg2)
       schemas.py             # Pydantic request models
-    audio/
-      analyzer.py            # Full 9-step MIR pipeline
+    analysis/                  # ← NEW v2 high-accuracy pipeline (2.0.0)
+      pipeline.py            # Main entry: analyze(path, mode='balanced')
+      schemas.py             # Pydantic v2 output schemas (AnalysisResult)
+      preprocess.py          # Load + normalize + resample → AudioBundle
+      separation.py          # Demucs 4.0.1 stem separation (4-stem)
+      beat_tracker.py        # madmom RNN+DBN on drums stem
+      key_detector.py        # Essentia HPCP on other stem
+      chord_detector.py      # CQT chroma + template matching
+      melody_detector.py     # torchcrepe on vocals stem
+      structure_detector.py  # SSM + novelty curve
+      smoothing.py           # Median filter, chord merging, pitch smoothing
+      theory_correction.py   # Tempo trap fix, diatonic boosting
+      confidence.py          # Global confidence + warnings
+      ensemble.py            # Multi-source weighted voting
+      cache.py               # Disk-backed feature cache (7-day TTL)
+    audio/                   # Legacy v1 pipeline (fallback)
+      analyzer.py            # Full 9-step MIR pipeline (librosa only)
       rhythm.py              # BPM, beat grid, time sig
       key_mode.py            # Key, mode, modulations
       chords.py              # Chord detection

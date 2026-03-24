@@ -1,0 +1,771 @@
+SYSTEM DIRECTIVE — BUILD A HIGH-ACCURACY MUSIC ANALYSIS PIPELINE
+
+You are upgrading an existing music analysis system.
+Your goal is not to add superficial features.
+Your goal is to build a high-accuracy, production-grade audio intelligence pipeline for:
+
+source separation
+tempo / beat / downbeat / meter
+key / scale / modulation
+chord recognition
+melody / vocal pitch
+section structure
+confidence scoring
+post-processing with music-theory constraints
+exportable machine-readable results
+
+The current problem is that the analysis is not accurate enough.
+You must solve this by replacing the current “single-pass heuristic analyzer” approach with a multi-stage hybrid pipeline:
+
+Stem separation first
+Specialized analyzers per task
+Model ensembling where needed
+Post-processing with smoothing + music theory
+Confidence scoring on every result
+Structured outputs for downstream arranging/export
+
+Do not rely on one library only.
+Do not analyze the full mix directly for everything.
+Do not use naive DSP alone and expect professional accuracy.
+
+Demucs is a strong source-separation baseline and HT-Demucs separates drums, bass, vocals, and other stems. Essentia provides key/chord/rhythm algorithms, including KeyExtractor/TonalExtractor and chord estimation from HPCP features. madmom provides RNN/DBN beat and downbeat tracking. librosa remains useful for chroma, onset, segmentation, and feature engineering. torchcrepe provides a PyTorch implementation of CREPE for monophonic pitch tracking. Mido and pretty_midi are suitable building blocks for MIDI writing/manipulation. Omnizart supports transcription tasks including chords, beat, drums, and vocal melody, but its published package pins older dependencies such as TensorFlow 2.5, so do not make it the core production dependency; treat it as an optional benchmark/reference only.
+
+1) TARGET ARCHITECTURE
+
+Build the analysis engine as this exact pipeline:
+
+Input audio
+  -> audio normalization + resampling
+  -> stem separation
+  -> task-specific analyzers on selected stems
+  -> temporal smoothing / decoding
+  -> music-theory correction layer
+  -> confidence calibration
+  -> structured JSON result
+  -> optional MIDI / score export inputs
+
+Use these stem-task mappings:
+
+tempo / beat / downbeat / meter → primarily drums, fallback mix
+key / scale → primarily other, fallback other + bass
+chords → primarily other + bass, never drums-only
+melody / vocal pitch → primarily vocals
+bassline note hints → primarily bass
+structure / sections → full mix + harmonic/rhythmic summaries
+
+Do not run one analyzer on the full mix and reuse it for all tasks.
+
+2) INSTALL THE STACK
+
+Use Python 3.10 or 3.11.
+Do not use old TensorFlow-centered stacks as the main production path.
+
+Core install
+python -m venv .venv
+source .venv/bin/activate   # on Windows: .venv\Scripts\activate
+
+pip install --upgrade pip wheel setuptools
+
+pip install \
+  numpy scipy pandas scikit-learn numba \
+  librosa soundfile audioread resampy \
+  torch torchaudio \
+  demucs \
+  essentia \
+  madmom \
+  torchcrepe \
+  mido pretty_midi \
+  pydantic pyyaml \
+  matplotlib tqdm joblib
+Optional but recommended
+pip install \
+  pyloudnorm \
+  mir_eval \
+  praat-parselmouth \
+  onnxruntime
+System dependency
+
+Install ffmpeg and make sure it is available in PATH.
+
+Use the libraries like this:
+
+demucs → source separation
+essentia → key/chord/rhythm descriptors and HPCP-based tonal analysis
+madmom → beat/downbeat/meter tracking
+librosa → preprocessing, chroma/CQT, onset, segmentation, feature utilities
+torchcrepe → vocal/melody monophonic pitch tracking
+mido / pretty_midi → MIDI generation and manipulation
+
+Essentia exposes tonal and rhythm analysis tools; madmom exposes beat/downbeat processors; librosa’s 0.11 docs note changes in onset and beat defaults and improved chroma behavior, so pin and test your parameters rather than relying blindly on defaults.
+
+Versioning rule
+
+Create:
+
+requirements.txt
+requirements-dev.txt
+requirements-gpu.txt if needed
+
+Pin versions after the first known-good run.
+Do not leave floating dependencies in production.
+
+3) DO NOT BUILD A SINGLE “ANALYZER.PY” MONOLITH
+
+Create these modules exactly:
+
+analysis/
+  preprocess.py
+  separation.py
+  beat_tracker.py
+  downbeat_meter.py
+  key_detector.py
+  chord_detector.py
+  melody_detector.py
+  structure_detector.py
+  confidence.py
+  smoothing.py
+  theory_correction.py
+  ensemble.py
+  schemas.py
+  pipeline.py
+  cache.py
+  metrics.py
+
+And these model directories:
+
+models/
+  separation/
+  beat/
+  key/
+  chord/
+  melody/
+  calibration/
+
+And these config files:
+
+configs/
+  analysis.yaml
+  thresholds.yaml
+  genre_profiles.yaml
+  decoding.yaml
+4) PREPROCESSING STAGE
+
+Implement preprocess.py to do all of this before analysis:
+
+Load audio losslessly where possible.
+Convert to mono where required per task, but preserve stereo copy for structure analysis.
+Resample:
+44.1kHz for separation
+16kHz optional internal path for vocal pitch models if needed
+Loudness normalize to a consistent target.
+Trim leading/trailing silence conservatively.
+Cache waveform, sample rate, duration, RMS profile, onset envelope.
+
+Output a normalized artifact bundle, not a raw waveform only.
+
+5) STEM SEPARATION — MANDATORY FIRST STEP
+
+Implement separation.py.
+
+Required production baseline
+
+Use Demucs HT-Demucs first.
+
+Tasks:
+
+separate into:
+vocals
+drums
+bass
+other
+cache stems to disk and metadata to JSON
+expose confidence/quality metadata:
+stem energy ratio
+bleed estimate
+vocal dominance
+drum transient clarity
+
+Demucs v4/HT-Demucs is designed for music source separation and separates the four core stems above.
+
+Required behavior
+
+If separation fails:
+
+mark analysis mode as degraded
+fallback to mix-based analysis
+lower confidence globally
+
+Do not silently continue as if separation worked.
+
+6) TEMPO / BEAT / DOWNBEAT / METER
+
+Implement beat_tracker.py and downbeat_meter.py.
+
+Primary algorithm
+
+Use madmom for:
+
+beat activation
+downbeat tracking
+bar tracking
+Secondary algorithm
+
+Use librosa as fallback / sanity check:
+
+onset envelope
+beat tracking
+tempogram
+
+madmom includes RNN/DBN-style beat/downbeat tracking components and is a stronger choice than using a simple beat tracker alone.
+
+Exact strategy
+Analyze drums stem first.
+If drums confidence low, re-run on full mix.
+Produce:
+BPM estimate
+beat timestamps
+downbeat timestamps
+bar indices
+meter hypothesis scores (e.g. 4/4, 3/4, 6/8, 12/8)
+Decoding
+
+Use a temporal decoding layer:
+
+remove impossible jitter
+regularize beat spacing
+preserve gradual tempo drift if present
+avoid forcing strict constant tempo when song is expressive
+Output fields
+{
+  "tempo": {
+    "bpm_global": 123.8,
+    "bpm_curve": [...],
+    "beats": [...],
+    "downbeats": [...],
+    "meter": "4/4",
+    "confidence": 0.91
+  }
+}
+7) KEY / SCALE / MODULATION
+
+Implement key_detector.py.
+
+Primary algorithm
+
+Use Essentia tonal analysis:
+
+HPCP features
+KeyExtractor / TonalExtractor
+sliding-window key estimation
+
+Essentia provides key profiles such as Krumhansl and tonal extraction utilities.
+
+Input stem
+
+Use:
+
+other first
+other + bass second pass
+never use drums for key
+Required method
+
+Do not estimate one key for the entire track only.
+
+Implement:
+
+frame-wise or window-wise key estimates
+confidence per window
+smoothing over time
+modulation detection
+Output
+global key
+local key segments
+modulation markers
+mode
+confidence
+Rules
+if two adjacent windows disagree but confidence is weak, smooth them
+if repeated strong disagreement appears, mark modulation instead of forcing one key
+8) CHORD DETECTION — HYBRID, NOT NAIVE
+
+Implement chord_detector.py.
+
+Input
+
+Use:
+
+other + bass
+optional additional harmonic enhancement
+exclude drums
+Feature extraction
+
+Use:
+
+CQT chroma from librosa
+HPCP/chromagram from Essentia
+bass pitch hints
+downbeat/bar context
+
+Essentia’s chord estimation works from harmonic pitch class profiles, and librosa provides enhanced chroma variants useful for feature engineering.
+
+Required model design
+
+Build a hybrid chord recognizer:
+
+Layer A — heuristic proposal
+
+Generate top chord candidates per frame/bar from:
+
+chroma similarity
+bass note
+diatonic priors from detected key
+Layer B — sequence model
+
+Train a temporal model that selects the most probable chord sequence over time.
+
+Use one of these:
+
+BiLSTM + CRF
+Transformer encoder + linear head + Viterbi/CRF decode
+
+Recommended label set:
+
+major
+minor
+diminished
+augmented
+sus2
+sus4
+dominant7
+maj7
+min7
+half-diminished
+no-chord
+
+Start with bar-level labels, then optionally refine to half-bar.
+
+Decoding constraints
+
+Apply:
+
+persistence bias
+bar-boundary preference
+key-aware priors
+no impossible one-frame chord flips
+Important
+
+Do not output a different chord every tiny frame.
+A musically useful result is better than a noisy over-segmented result.
+
+9) MELODY / VOCAL PITCH
+
+Implement melody_detector.py.
+
+Primary model
+
+Use torchcrepe for monophonic pitch tracking on the vocals stem.
+
+torchcrepe is a PyTorch implementation of CREPE for pitch tracking.
+
+Required pipeline
+run pitch tracking on vocals stem
+compute voicing mask
+smooth octave jumps
+convert Hz to note events
+segment notes with onset/offset rules
+mark uncertain regions
+Output
+pitch curve
+note events
+vibrato stats
+confidence curve
+Important
+
+If vocals stem quality is weak:
+
+lower confidence
+do not hallucinate notes aggressively
+10) STRUCTURE / SECTION DETECTION
+
+Implement structure_detector.py.
+
+Goal
+
+Find:
+
+intro
+verse
+chorus
+bridge
+instrumental
+outro
+repeated section links
+Features
+
+Use:
+
+MFCC summaries
+chroma summaries
+rhythmic descriptors
+novelty curves
+self-similarity matrices
+Minimum viable method
+segment by novelty peaks
+cluster segments by similarity
+infer repeated sections
+
+Do not hardcode “verse/chorus” without evidence.
+
+11) ENSEMBLE LOGIC
+
+Implement ensemble.py.
+
+For critical tasks, combine more than one signal source:
+
+Tempo
+madmom result
+librosa backup
+drum-stem confidence
+Key
+Essentia on other
+Essentia on other + bass
+chord histogram consistency
+Chords
+chroma template score
+sequence model probability
+bass agreement
+key consistency
+Melody
+torchcrepe confidence
+voicing mask
+stem quality score
+
+Use weighted voting, not naive averaging.
+
+12) SMOOTHING + MUSIC THEORY CORRECTION
+
+Implement smoothing.py and theory_correction.py.
+
+This stage is mandatory.
+
+For chords
+
+Suppress improbable micro-changes like:
+
+C → C → F#dim → C over a tiny window without support
+For key
+
+Prefer stable regions unless modulation evidence is strong.
+
+For melody
+
+Remove impossible octave jumps and note flicker.
+
+Music theory constraints
+
+Apply soft priors, not hard prison rules:
+
+prefer diatonic chords when confidence is ambiguous
+allow borrowed chords
+allow modulation
+allow secondary dominants
+allow chromatic passing tones
+
+The correction layer should improve weak predictions, not erase musically real surprises.
+
+13) CONFIDENCE SYSTEM
+
+Implement confidence.py.
+
+Every output must carry confidence.
+
+Compute confidence from:
+model posterior
+stem quality
+agreement between analyzers
+temporal stability
+theory consistency
+Required behavior
+
+If confidence is low:
+
+mark result low-confidence
+expose alternatives
+avoid pretending certainty
+
+Example:
+
+{
+  "key": {
+    "global": "A minor",
+    "alternatives": [
+      {"label": "C major", "score": 0.31}
+    ],
+    "confidence": 0.62
+  }
+}
+14) WHAT MODELS TO BUILD
+
+Build these exact learnable models:
+
+Model 1 — chord sequence model
+
+Input:
+
+bar/half-bar chroma
+bass note class
+beat/downbeat position
+local key probabilities
+
+Architecture:
+
+baseline: BiLSTM + CRF
+upgrade: Transformer encoder + CRF / Viterbi decode
+
+Output:
+
+chord label per step
+Model 2 — key calibration model
+
+Input:
+
+Essentia key scores
+chord histogram
+tonal centroid / tonnetz-like features
+bass-note distribution
+
+Architecture:
+
+Gradient Boosted Trees or small MLP
+
+Output:
+
+calibrated global/local key probabilities
+Model 3 — melody note segmentation model
+
+Input:
+
+torchcrepe pitch/confidence
+energy
+voicing
+onset features
+
+Architecture:
+
+small BiLSTM / temporal CNN
+
+Output:
+
+note boundary decisions
+pitch stabilization
+Model 4 — structure boundary model
+
+Input:
+
+novelty features
+rhythm change
+harmonic change
+timbre change
+
+Architecture:
+
+temporal classifier or boundary regressor
+
+Output:
+
+section boundaries
+Model 5 — confidence calibration model
+
+Input:
+
+raw model outputs
+agreement metrics
+stem quality
+smoothing corrections applied
+
+Architecture:
+
+logistic regression / XGBoost / light MLP
+
+Output:
+
+calibrated confidence
+15) WHAT TRAINING DATA TO PREPARE
+
+Build a dataset pipeline.
+Do not train on random loose files only.
+
+Create datasets with aligned ground truth for:
+
+beat/downbeat/meter
+key
+chord progression
+melody notes
+structure labels
+
+Split:
+
+train
+validation
+test
+genre holdout
+Training rule
+
+Evaluate separately on:
+
+clean studio mixes
+live recordings
+vocal-heavy songs
+rhythm-heavy songs
+songs with modulation
+songs with tempo drift
+
+Do not report one single global metric only.
+
+16) METRICS — MANDATORY
+
+Implement metrics.py and evaluate properly.
+
+Tempo / beat
+beat F-measure
+downbeat F-measure
+meter accuracy
+BPM absolute error
+Key
+exact key accuracy
+mode accuracy
+weighted key distance metric
+Chords
+frame accuracy
+weighted chord symbol recall
+bar-level accuracy
+Melody
+raw pitch accuracy
+raw chroma accuracy
+note onset F1
+note offset F1
+Structure
+boundary F1
+segment purity / normalized mutual information if clustering used
+
+Do not claim “more accurate” without these metrics.
+
+17) BUILD MODES: FAST / BALANCED / HIGH_ACCURACY
+
+Add three runtime profiles:
+
+FAST
+no ensemble
+minimal smoothing
+single-pass stem reuse
+BALANCED
+recommended default
+Demucs + madmom + Essentia + torchcrepe
+light post-processing
+HIGH_ACCURACY
+full ensemble
+re-analysis on fallback stems
+stronger smoothing/calibration
+slower but best quality
+18) OUTPUT SCHEMA
+
+Return one structured JSON object like this:
+
+{
+  "audio_meta": {...},
+  "stems": {...},
+  "tempo": {...},
+  "meter": {...},
+  "key": {
+    "global": "...",
+    "segments": [...]
+  },
+  "chords": {
+    "timeline": [...],
+    "confidence": ...
+  },
+  "melody": {
+    "pitch_curve": [...],
+    "notes": [...],
+    "confidence": ...
+  },
+  "structure": {
+    "sections": [...]
+  },
+  "global_confidence": ...,
+  "warnings": [...]
+}
+
+No loose untyped dictionaries.
+
+19) IMPLEMENTATION ORDER — DO THIS EXACTLY
+Phase 1
+preprocessing
+Demucs separation
+caching
+structured schemas
+Phase 2
+madmom beat/downbeat
+Essentia key
+torchcrepe melody
+Phase 3
+hybrid chord detector baseline
+smoothing
+theory correction
+Phase 4
+confidence system
+structure detector
+calibration models
+Phase 5
+training pipeline
+metrics dashboard
+benchmark suite
+regression tests
+
+Do not start with UI.
+Do not start with export.
+Accuracy pipeline first.
+
+20) WHAT NOT TO DO
+
+Do not:
+
+analyze full mix only
+trust one library for everything
+trust raw frame-wise predictions without smoothing
+force one key for every song
+output impossible chord flicker
+use Omnizart as your production foundation
+add more UI before fixing analysis quality
+
+Omnizart documents broad transcription support, but its published setup pins older packages including TensorFlow 2.5 and older dependency ranges, which makes it better suited as a benchmark/reference than as the core production stack for a modern pipeline.
+
+21) IMMEDIATE QUICK WIN VERSION
+
+Before building all trainable models, implement this first upgrade now:
+
+run Demucs on every song
+beat tracking on drums with madmom
+key on other with Essentia
+melody on vocals with torchcrepe
+chords on other + bass using chroma + template matching
+add smoothing
+add confidence
+expose alternatives when uncertain
+
+This will already improve accuracy significantly compared with a single full-mix analyzer, because Demucs isolates core stems, madmom adds dedicated beat/downbeat tracking, Essentia contributes tonal analysis, and torchcrepe is specialized for monophonic pitch tracking.
+
+22) FINAL REQUIRED DELIVERABLES
+
+When you finish, provide:
+
+list of installed dependencies
+folder/file structure created
+exact models implemented
+which analyzers use which stems
+training pipeline summary
+metrics before vs after
+one demo JSON output
+exact commands to run analysis
+exact commands to run evaluation
+known limitations honestly

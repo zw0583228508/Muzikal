@@ -201,6 +201,69 @@ def save_analysis_result(project_id: int, result: dict, pipeline_version: str = 
         conn.close()
 
 
+def get_active_job_for_project(project_id: int, job_type: str) -> Optional[dict]:
+    """Return an active (queued/running) job for this project+type, or None.
+
+    Used for idempotency: if a job is already in flight, return it instead
+    of creating a duplicate.
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """SELECT job_id, status, progress, current_step
+                   FROM jobs
+                   WHERE project_id = %s
+                     AND type = %s
+                     AND status IN ('queued', 'running')
+                   ORDER BY created_at DESC
+                   LIMIT 1""",
+                (project_id, job_type),
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+        return {
+            "jobId":       row["job_id"],
+            "status":      row["status"],
+            "progress":    row["progress"],
+            "currentStep": row["current_step"],
+        }
+    finally:
+        conn.close()
+
+
+def increment_job_retry(job_id: str) -> int:
+    """Atomically increment retry_count inside processing_metadata JSONB; returns new count."""
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            # Read current metadata
+            cur.execute(
+                "SELECT processing_metadata FROM jobs WHERE job_id = %s",
+                (job_id,),
+            )
+            row = cur.fetchone()
+            current_meta = {}
+            if row and row["processing_metadata"]:
+                current_meta = row["processing_metadata"] if isinstance(row["processing_metadata"], dict) else json.loads(row["processing_metadata"])
+            retry_count = current_meta.get("retryCount", 0) + 1
+            current_meta["retryCount"] = retry_count
+
+            cur.execute(
+                "UPDATE jobs SET processing_metadata = %s::jsonb, updated_at = NOW() WHERE job_id = %s",
+                (json.dumps(current_meta), job_id),
+            )
+        conn.commit()
+        return retry_count
+    except Exception as e:
+        logger.warning("increment_job_retry failed for %s: %s", job_id, e)
+        conn.rollback()
+        return 1
+    finally:
+        conn.close()
+
+
 def get_analysis_result(project_id: int) -> Optional[dict]:
     """Retrieve the latest analysis result for a project.
 

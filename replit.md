@@ -4,7 +4,15 @@
 
 Production-grade AI-powered music intelligence and generation web app (cloud-based DAW).
 Full-stack: React frontend + Node.js Express API + Python FastAPI audio backend.
-Hebrew-first, RTL, 50+ musical styles, 847+ Python tests passing.
+Hebrew-first, RTL, 50+ musical styles, 61+ Python tests passing.
+
+## Phase 7 Hardening Status (current)
+- Stage timing logging per pipeline stage — COMPLETE
+- Job cancel endpoint — COMPLETE
+- **Job idempotency (prevent duplicate jobs)** — COMPLETE: `get_active_job_for_project()` in database.py
+- **Retry count tracking** — COMPLETE: `increment_job_retry()` stored in processing_metadata JSONB
+- WebSocket reconnect resilience — PENDING
+- Artifact lifecycle management — PENDING
 
 ## Architecture
 

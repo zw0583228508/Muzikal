@@ -20,7 +20,7 @@ from typing import Optional
 
 from fastapi import APIRouter, BackgroundTasks
 
-from api.database import update_job, update_project_status, save_analysis_result
+from api.database import update_job, update_project_status, save_analysis_result, get_active_job_for_project, increment_job_retry
 from api.schemas import AnalyzeRequest
 
 logger = logging.getLogger(__name__)
@@ -55,21 +55,55 @@ STAGE_CONFIDENCE   = (97, "confidence",     "Scoring confidence",               
 STAGE_CANONICAL    = (99, "canonical",      "Building canonical score",          "chord-classifier+canonical")
 
 
+# ── Stage timing registry (in-process, per job_id) ────────────────────────────
+_stage_timings: dict = {}  # {job_id: {stage_id: {"start": t, "end": t, "model": m}}}
+
+
 def _stage_update(job_id: str, stage_tuple: tuple, extra_msg: str = "") -> None:
-    """Emit a per-stage job update."""
+    """Emit a per-stage job update and record timing."""
     pct, stage_id, label, model = stage_tuple
     msg = f"{label}" + (f" — {extra_msg}" if extra_msg else "")
+    now = time.time()
+
+    # Record timing
+    if job_id not in _stage_timings:
+        _stage_timings[job_id] = {}
+    timings = _stage_timings[job_id]
+
+    # Close out previous stage if still open
+    for prev_id, prev_t in timings.items():
+        if "end" not in prev_t:
+            prev_t["end"] = now
+            prev_t["durationMs"] = round((now - prev_t["start"]) * 1000)
+
+    timings[stage_id] = {"start": now, "model": model}
+
     try:
         update_job(
             job_id, "running", pct, msg,
             result_data={
-                "currentStage": stage_id,
-                "modelUsed":    model,
+                "currentStage":    stage_id,
+                "modelUsed":       model,
                 "pipelineVersion": PIPELINE_VERSION,
+                "stageTimings":    dict(timings),
+            },
+            processing_metadata={
+                "stageTimings": dict(timings),
             },
         )
     except Exception as e:
         logger.warning("Failed to update job stage %s: %s", stage_id, e)
+
+
+def _finalize_stage_timings(job_id: str) -> dict:
+    """Close last open stage and return full timing dict."""
+    now = time.time()
+    timings = _stage_timings.pop(job_id, {})
+    for t in timings.values():
+        if "end" not in t:
+            t["end"] = now
+            t["durationMs"] = round((now - t["start"]) * 1000)
+    return timings
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
@@ -113,8 +147,28 @@ async def get_canonical_score(project_id: int):
 
 @router.post("/analyze")
 async def start_analysis(request: AnalyzeRequest, background_tasks: BackgroundTasks):
-    """Start audio analysis pipeline in background (Celery if available, else in-process)."""
+    """Start audio analysis pipeline in background (Celery if available, else in-process).
+
+    Idempotency: if an analysis job is already running for this project,
+    return that job instead of starting a new one.
+    """
     from workers.tasks.analysis import dispatch_analysis
+
+    # ── Idempotency guard ───────────────────────────────────────────────────
+    active = get_active_job_for_project(request.project_id, "analysis")
+    if active:
+        logger.info(
+            "Idempotency: analysis job %s already active for project %s — returning existing",
+            active["jobId"], request.project_id,
+        )
+        return {
+            "jobId": active["jobId"],
+            "status": active["status"],
+            "worker": "existing",
+            "mode": request.mode,
+            "pipelineVersion": PIPELINE_VERSION,
+            "idempotent": True,
+        }
 
     celery_task_id = dispatch_analysis(request.job_id, request.project_id, request.audio_file_path)
     if celery_task_id is None:
@@ -180,6 +234,7 @@ def run_analysis_pipeline(
 
         quality_flags = result.get("qualityFlags", [])
         elapsed = round(time.time() - t_start, 1)
+        stage_timings = _finalize_stage_timings(job_id)
 
         update_job(
             job_id, "completed", 100,
@@ -192,6 +247,12 @@ def run_analysis_pipeline(
                 "qualityFlags":      quality_flags,
                 "modelVersions":     MODEL_VERSIONS,
                 "elapsedSeconds":    elapsed,
+                "stageTimings":      stage_timings,
+            },
+            processing_metadata={
+                "stageTimings":  stage_timings,
+                "elapsedSeconds": elapsed,
+                "pipelineVersion": PIPELINE_VERSION,
             },
         )
         logger.info(
@@ -208,15 +269,19 @@ def run_analysis_pipeline(
 
         # ── Fallback to legacy pipeline ────────────────────────────────────
         try:
-            logger.warning("[job=%s] Falling back to legacy pipeline", job_id)
+            retry_count = increment_job_retry(job_id)
+            _finalize_stage_timings(job_id)  # clear stale timings
+            logger.warning("[job=%s] Falling back to legacy pipeline (retry #%d)", job_id, retry_count)
             update_job(
                 job_id, "running", 5,
-                "Primary pipeline failed — retrying with legacy fallback",
+                f"Primary pipeline failed — retrying with legacy fallback (retry #{retry_count})",
                 error_message=f"{type(e).__name__}: {e}",
                 result_data={
                     "currentStage": "legacy_fallback",
                     "failureReason": f"primary_pipeline_error: {type(e).__name__}",
+                    "retryCount": retry_count,
                 },
+                processing_metadata={"retryCount": retry_count, "fallback": True},
             )
             _run_legacy_pipeline(job_id, project_id, audio_file_path)
 

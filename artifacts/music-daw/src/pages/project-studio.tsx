@@ -17,6 +17,7 @@ import { TrackLane } from "@/components/studio/TrackLane";
 import { CorrectionsDrawer } from "@/components/studio/CorrectionsDrawer";
 import { AnalysisTab } from "@/components/studio/AnalysisTab";
 import { ArrangeTab } from "@/components/studio/ArrangeTab";
+import { GuidedFlowBar } from "@/components/studio/GuidedFlowBar";
 
 export default function ProjectStudio() {
   const { t } = useTranslation();
@@ -44,9 +45,22 @@ export default function ProjectStudio() {
       {studio.showMockBanner && <MockBanner onDismiss={() => studio.setShowMockBanner(false)} />}
       {studio.jobFailedMsg && <FailedBanner message={studio.jobFailedMsg} />}
 
-      <JobProgress job={studio.activeJob} />
-
       <TransportBar project={studio.project} analysis={studio.analysis} />
+
+      <GuidedFlowBar
+        hasAudio={!!studio.project?.audioFileName}
+        hasAnalysis={!!studio.analysis}
+        hasArrangement={!!studio.arrangement}
+        activeJobId={studio.activeJobId}
+        currentTab={studio.activeTab}
+        onStepClick={(step) => {
+          if (step === "upload") { fileInputRef.current?.click(); return; }
+          const tabMap: Record<string, string> = { analyze: "analysis", arrange: "arrange", export: "export" };
+          studio.setActiveTab(tabMap[step] || step);
+        }}
+      />
+
+      <JobProgress job={studio.activeJob} activeJobId={studio.activeJobId} />
 
       <div className="flex-1 flex overflow-hidden">
 
@@ -55,26 +69,33 @@ export default function ProjectStudio() {
 
           {/* Timeline: chord + section labels */}
           <div className="h-20 bg-card border-b border-white/5 flex flex-col justify-end px-4 relative overflow-hidden" dir="ltr">
-            {studio.analysis?.structure?.sections?.map((sec: any, i: number) => (
-              <div
-                key={i}
-                className="absolute top-0 h-6 border-l border-white/20 px-2 text-[10px] font-bold tracking-widest text-white/50 uppercase"
-                style={{ left: `${sec.startTime * 20}px`, width: `${(sec.endTime - sec.startTime) * 20}px` }}
-              >
-                <div className="absolute inset-0 bg-accent/10 opacity-50" />
-                {t(sec.label)}
-              </div>
-            ))}
-            <div className="flex h-8 items-end gap-1 relative z-10 bottom-2">
-              {studio.analysis?.chords?.chords?.slice(0, 30).map((chord: any, i: number) => (
+            {studio.analysis?.structure?.sections?.map((sec: any, i: number) => {
+              const sStart = sec.start ?? sec.startTime ?? 0;
+              const sEnd = sec.end ?? sec.endTime ?? (sStart + (sec.duration ?? 0));
+              return (
                 <div
                   key={i}
-                  className="bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded text-xs font-medium shadow-[0_0_10px_rgba(0,240,255,0.1)] whitespace-nowrap"
-                  style={{ position: "absolute", left: `${chord.startTime * 20}px` }}
+                  className="absolute top-0 h-6 border-l border-white/20 px-2 text-[10px] font-bold tracking-widest text-white/50 uppercase"
+                  style={{ left: `${sStart * 20}px`, width: `${(sEnd - sStart) * 20}px` }}
                 >
-                  {chord.chord}
+                  <div className="absolute inset-0 bg-accent/10 opacity-50" />
+                  {t(sec.label)}
                 </div>
-              ))}
+              );
+            })}
+            <div className="flex h-8 items-end gap-1 relative z-10 bottom-2">
+              {studio.analysis?.chords?.chords?.slice(0, 30).map((chord: any, i: number) => {
+                const cStart = chord.start ?? chord.startTime ?? 0;
+                return (
+                  <div
+                    key={i}
+                    className="bg-primary/20 text-primary border border-primary/30 px-2 py-0.5 rounded text-xs font-medium shadow-[0_0_10px_rgba(0,240,255,0.1)] whitespace-nowrap"
+                    style={{ position: "absolute", left: `${cStart * 20}px` }}
+                  >
+                    {chord.chord}
+                  </div>
+                );
+              })}
             </div>
           </div>
 

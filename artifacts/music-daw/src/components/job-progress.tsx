@@ -1,6 +1,6 @@
 import { Job } from "@workspace/api-client-react";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, AlertCircle, CheckCircle2, Clock, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, AlertCircle, CheckCircle2, Clock, ChevronDown, ChevronUp, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "react-i18next";
 import { useState } from "react";
@@ -30,21 +30,41 @@ function inferStepStatus(stepName: string, currentStep: string, progress: number
   return "pending";
 }
 
-export function JobProgress({ job }: { job: Job | null | undefined }) {
+interface JobProgressProps {
+  job: Job | null | undefined;
+  activeJobId?: string | null;
+}
+
+export function JobProgress({ job, activeJobId }: JobProgressProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
   if (!job) return null;
 
   const isRunning = job.status === "queued" || job.status === "running";
   const isFailed = job.status === "failed";
   const isComplete = job.status === "completed";
+  const isCancelled = job.status === "cancelled";
 
   const steps = STEP_ORDER[job.type] ?? [];
   const isMockJob = !!(job as any).isMock;
 
+  async function handleCancel() {
+    if (!activeJobId || cancelling) return;
+    setCancelling(true);
+    try {
+      await fetch(`/python-api/jobs/${activeJobId}/cancel`, { method: "POST" });
+    } catch (e) {
+      console.warn("Cancel failed:", e);
+    } finally {
+      setCancelling(false);
+    }
+  }
+
   return (
     <AnimatePresence>
-      {(isRunning || isFailed || isComplete) && (
+      {(isRunning || isFailed || isComplete || isCancelled) && (
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -52,9 +72,10 @@ export function JobProgress({ job }: { job: Job | null | undefined }) {
           className="fixed top-20 right-6 z-50 w-80 glass-panel p-4 rounded-xl rtl:right-auto rtl:left-6"
         >
           <div className="flex items-center gap-3 mb-3">
-            {isRunning && <Loader2 className="w-5 h-5 text-primary animate-spin" />}
-            {isFailed && <AlertCircle className="w-5 h-5 text-destructive" />}
-            {isComplete && <CheckCircle2 className="w-5 h-5 text-green-400 text-glow" />}
+            {isRunning && <Loader2 className="w-5 h-5 text-primary animate-spin flex-shrink-0" />}
+            {isFailed && <AlertCircle className="w-5 h-5 text-destructive flex-shrink-0" />}
+            {isComplete && <CheckCircle2 className="w-5 h-5 text-green-400 flex-shrink-0" />}
+            {isCancelled && <X className="w-5 h-5 text-muted-foreground flex-shrink-0" />}
 
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2">
@@ -71,6 +92,7 @@ export function JobProgress({ job }: { job: Job | null | undefined }) {
                 {t(job.currentStep || job.status)}
               </p>
             </div>
+
             <div className="flex items-center gap-1">
               <span className="text-xs font-mono font-bold text-primary" dir="ltr">
                 {Math.round(job.progress)}%
@@ -78,10 +100,22 @@ export function JobProgress({ job }: { job: Job | null | undefined }) {
               {steps.length > 0 && (
                 <button
                   onClick={() => setExpanded(e => !e)}
-                  className="text-muted-foreground hover:text-white transition-colors ml-1"
+                  className="text-muted-foreground hover:text-white transition-colors"
                   title={expanded ? t("Hide steps") : t("Show steps")}
                 >
                   {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+              )}
+              {isRunning && activeJobId && (
+                <button
+                  onClick={handleCancel}
+                  disabled={cancelling}
+                  className="w-6 h-6 rounded flex items-center justify-center text-white/40 hover:text-red-400 hover:bg-red-400/10 transition-colors border border-white/10 hover:border-red-400/30"
+                  title={t("ביטול משימה")}
+                >
+                  {cancelling
+                    ? <Loader2 className="w-3 h-3 animate-spin" />
+                    : <X className="w-3 h-3" />}
                 </button>
               )}
             </div>
@@ -89,7 +123,7 @@ export function JobProgress({ job }: { job: Job | null | undefined }) {
 
           <Progress
             value={job.progress}
-            indicatorColor={isFailed ? "bg-destructive" : isComplete ? "bg-green-400" : "bg-primary"}
+            indicatorColor={isFailed ? "bg-destructive" : isComplete ? "bg-green-400" : isCancelled ? "bg-white/20" : "bg-primary"}
             className="ltr:origin-left rtl:origin-right"
           />
 
@@ -130,6 +164,11 @@ export function JobProgress({ job }: { job: Job | null | undefined }) {
           {isFailed && (
             <p className="text-xs text-destructive mt-2 bg-destructive/10 p-2 rounded border border-destructive/20">
               {t(job.errorMessage || "An unknown error occurred")}
+            </p>
+          )}
+          {isCancelled && (
+            <p className="text-xs text-muted-foreground mt-2 bg-white/5 p-2 rounded border border-white/10">
+              {t("המשימה בוטלה")}
             </p>
           )}
         </motion.div>

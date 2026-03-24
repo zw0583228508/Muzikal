@@ -266,10 +266,27 @@ def _run_full(bundle: AudioBundle, mode: str) -> AnalysisResult:
     if key_librosa:
         key_candidates.append(key_librosa)
 
-    # ── Stage 5: Chord detection (CQT + bass weighting) ──────────────────────
-    logger.info("[pipeline] Stage 5: Chord detection")
-    chords = detect_chords(bundle, stems=stems, tempo=tempo)
-    logger.info("[pipeline] Chords: %d events (%.1fs)", len(chords.timeline), time.time() - t0)
+    # ── Stage 5: Chord detection — HSMM primary, template fallback ──────────
+    logger.info("[pipeline] Stage 5: Chord detection (HSMM Viterbi)")
+    try:
+        from analysis.chord_hsmm import detect_chords_hsmm
+        # Run HSMM with key conditioning (key detected in Stage 4a)
+        chords = detect_chords_hsmm(
+            bundle, stems=stems, tempo=tempo, key=key_essentia, force=False
+        )
+        if not chords.timeline:
+            raise ValueError("HSMM returned empty timeline")
+        logger.info(
+            "[pipeline] HSMM chords: %d events, src=%s (%.1fs)",
+            len(chords.timeline), chords.source, time.time() - t0
+        )
+    except Exception as hsmm_err:
+        logger.warning("[pipeline] HSMM failed (%s) — falling back to template", hsmm_err)
+        chords = detect_chords(bundle, stems=stems, tempo=tempo)
+        logger.info(
+            "[pipeline] Template chords (fallback): %d events (%.1fs)",
+            len(chords.timeline), time.time() - t0
+        )
 
     # ── Stage 6: Melody (torchcrepe + basic-pitch) ────────────────────────────
     logger.info("[pipeline] Stage 6: Melody detection")

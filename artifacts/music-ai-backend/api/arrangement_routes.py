@@ -7,7 +7,7 @@ from fastapi import APIRouter, BackgroundTasks
 
 from api.database import update_job, update_project_status, save_arrangement
 from api.schemas import ArrangeRequest
-from orchestration.arranger import generate_arrangement
+from orchestration.arrangement_planner import generate_arrangement_two_stage
 
 logger = logging.getLogger(__name__)
 
@@ -110,16 +110,19 @@ def run_arrangement_pipeline(
             except Exception as adapter_err:
                 logger.warning("StyleProfile adapter error in pipeline: %s", adapter_err)
 
-        arrangement = generate_arrangement(
-            analysis, style_id, instruments, density, do_humanize, tempo_factor,
-            persona_id=persona_id, style_profile=style_profile,
+        arrangement = generate_arrangement_two_stage(
+            analysis, style_id=style_id, density=density,
+            instruments=instruments or [], do_humanize=do_humanize,
+            tempo_factor=tempo_factor, persona_id=persona_id,
+            style_profile=style_profile,
         )
 
         update_job(job_id, "running", 80, "Saving arrangement")
         arrangement_plan = {
             "harmonicPlan": arrangement.get("harmonicPlan"),
             "sections": arrangement.get("sections"),
-            "profileUsed": arrangement.get("profileUsed"),
+            "blueprintSummary": arrangement.get("blueprintSummary"),
+            "source": arrangement.get("source"),
         }
         generation_metadata = {
             "bpm": arrangement.get("bpm"),
@@ -127,6 +130,7 @@ def run_arrangement_pipeline(
             "density": density,
             "humanize": do_humanize,
             "tempoFactor": tempo_factor,
+            "plannerVersion": "two_stage_v1",
         }
         save_arrangement(
             project_id,

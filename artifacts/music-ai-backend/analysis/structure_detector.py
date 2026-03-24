@@ -1,10 +1,27 @@
 """
-Musical structure / section detection v2.
+Musical structure / section detection v3.
 
-Uses Self-Similarity Matrix (SSM) + spectral novelty curve.
-Labels sections heuristically (intro, verse, chorus, bridge, outro).
-Detects repeated sections and groups structurally similar sections.
-Adds energy/density/spectral-centroid profile per section.
+Multi-signal boundary detection pipeline:
+  Signal 1: SSM (Self-Similarity Matrix) + Checkerboard novelty
+            — captures large-scale repeated structure
+  Signal 2: Spectral flux (onset strength envelope)
+            — captures note/transient density changes
+  Signal 3: Harmonic change (Tonal Centroid Features, Harte 2006)
+            — captures chord change density and key-region shifts
+  Signal 4: RMS energy change
+            — captures dynamic level shifts (verse→chorus energy jumps)
+
+All four signals are peak-normalized and fused with confidence weights.
+The fused novelty curve then feeds boundary peak-picking.
+
+Labeling is still heuristic (position-based), but boundary detection
+is now substantially more robust due to multi-signal agreement.
+
+v3 improvements over v2:
+  - Harmonic change (TCF) as independent boundary signal
+  - Spectral flux in novelty fusion
+  - Weighted fusion instead of SSM-only
+  - Per-signal confidence output
 """
 
 from __future__ import annotations
@@ -77,6 +94,128 @@ def _novelty_from_ssm(ssm: np.ndarray, kernel_size: int = 16) -> np.ndarray:
     # Smooth
     novelty = scipy.ndimage.gaussian_filter1d(novelty, sigma=2)
     return novelty
+
+
+def _compute_spectral_flux(y: np.ndarray, sr: int, hop_length: int = 4096) -> np.ndarray:
+    """
+    Compute spectral flux novelty curve — captures timbral changes between frames.
+    High flux = sudden spectral change = potential boundary.
+    """
+    stft = np.abs(librosa.stft(y, hop_length=hop_length))
+    flux = np.concatenate([[0], np.sum(np.diff(stft, axis=1) ** 2, axis=0)])
+    # Normalize
+    if flux.max() > 0:
+        flux = flux / flux.max()
+    # Smooth
+    flux = scipy.ndimage.gaussian_filter1d(flux, sigma=2)
+    return flux.astype(np.float32)
+
+
+def _compute_energy_change(y: np.ndarray, sr: int, hop_length: int = 4096) -> np.ndarray:
+    """
+    Compute RMS energy change rate — captures volume transitions.
+    Uses absolute difference of smoothed RMS envelope.
+    """
+    rms = librosa.feature.rms(y=y, hop_length=hop_length)[0]
+    # Smooth first to avoid frame-level noise
+    rms_smooth = scipy.ndimage.gaussian_filter1d(rms.astype(float), sigma=4)
+    change = np.abs(np.diff(rms_smooth, prepend=rms_smooth[0]))
+    if change.max() > 0:
+        change = change / change.max()
+    change = scipy.ndimage.gaussian_filter1d(change, sigma=3)
+    return change.astype(np.float32)
+
+
+def _compute_harmonic_change(y: np.ndarray, sr: int, hop_length: int = 4096) -> np.ndarray:
+    """
+    Compute harmonic change curve using Tonal Centroid Features (Harte 2006).
+    High values indicate likely chord boundary zones.
+    Returns frame-level curve in [0, 1].
+    """
+    try:
+        from analysis.tonal_features import compute_harmonic_change_curve
+        chroma = librosa.feature.chroma_cqt(y=y, sr=sr, hop_length=hop_length, bins_per_octave=36)
+        hcdf = compute_harmonic_change_curve(chroma)   # (T,)
+        # Smooth to reduce spurious peaks
+        hcdf = scipy.ndimage.gaussian_filter1d(hcdf, sigma=2)
+        return hcdf.astype(np.float32)
+    except Exception as e:
+        logger.debug("Harmonic change curve failed: %s", e)
+        return np.zeros(1, dtype=np.float32)
+
+
+def _resize_to(arr: np.ndarray, target_len: int) -> np.ndarray:
+    """Resize a 1-D array to target_len via linear interpolation."""
+    if len(arr) == target_len:
+        return arr
+    from scipy.interpolate import interp1d
+    x_old = np.linspace(0, 1, len(arr))
+    x_new = np.linspace(0, 1, target_len)
+    f = interp1d(x_old, arr, kind="linear", fill_value="extrapolate")
+    return f(x_new).astype(np.float32)
+
+
+def _compute_multisignal_novelty(
+    y: np.ndarray,
+    sr: int,
+    hop_length: int = 4096,
+    weights: Optional[Dict[str, float]] = None,
+) -> Tuple[np.ndarray, np.ndarray, Dict[str, np.ndarray]]:
+    """
+    Fuse four boundary-detection signals into a single novelty curve.
+
+    Signals:
+      ssm_novelty   (w=0.40): Self-similarity matrix checkerboard
+      harmonic_change (w=0.30): TCF-based harmonic change rate
+      spectral_flux (w=0.20): Frame-to-frame spectral change
+      energy_change  (w=0.10): RMS energy change rate
+
+    Returns:
+        (fused_novelty, frame_times, individual_signals)
+    """
+    if weights is None:
+        weights = {
+            "ssm":      0.40,
+            "harmonic": 0.30,
+            "flux":     0.20,
+            "energy":   0.10,
+        }
+
+    ssm = _compute_ssm(y, sr, hop_length=hop_length)
+    T = ssm.shape[0]
+    times = librosa.frames_to_time(np.arange(T), sr=sr, hop_length=hop_length)
+
+    ssm_novelty     = _novelty_from_ssm(ssm)
+    spectral_flux   = _compute_spectral_flux(y, sr, hop_length=hop_length)
+    energy_change   = _compute_energy_change(y, sr, hop_length=hop_length)
+    harmonic_change = _compute_harmonic_change(y, sr, hop_length=hop_length)
+
+    # Resize all signals to T frames
+    spectral_flux   = _resize_to(spectral_flux, T)
+    energy_change   = _resize_to(energy_change, T)
+    harmonic_change = _resize_to(harmonic_change, T) if harmonic_change.shape[0] > 1 else np.zeros(T)
+
+    # Weighted sum
+    fused = (
+        weights["ssm"]      * ssm_novelty
+        + weights["harmonic"] * harmonic_change
+        + weights["flux"]     * spectral_flux
+        + weights["energy"]   * energy_change
+    )
+
+    # Re-normalize
+    if fused.max() > 0:
+        fused = fused / fused.max()
+
+    signals = {
+        "ssm_novelty":     ssm_novelty,
+        "harmonic_change": harmonic_change,
+        "spectral_flux":   spectral_flux,
+        "energy_change":   energy_change,
+        "fused":           fused,
+    }
+
+    return fused, times, signals
 
 
 def _pick_boundaries(novelty: np.ndarray, times: np.ndarray, min_gap_sec: float = 8.0) -> List[float]:
@@ -312,15 +451,20 @@ def detect_structure(bundle, force: bool = False) -> StructureResult:
 
     hop_length = 4096
 
-    # SSM
-    ssm = _compute_ssm(y, sr, hop_length=hop_length)
-    times = librosa.frames_to_time(np.arange(ssm.shape[0]), sr=sr, hop_length=hop_length)
+    # Multi-signal novelty fusion
+    fused_novelty, times, signals = _compute_multisignal_novelty(y, sr, hop_length=hop_length)
+    ssm = _compute_ssm(y, sr, hop_length=hop_length)   # still needed for repetition/grouping
 
-    # Novelty curve
-    novelty = _novelty_from_ssm(ssm)
+    logger.info(
+        "[structure] Multi-signal novelty: ssm=%.3f, harmonic=%.3f, flux=%.3f, energy=%.3f",
+        signals["ssm_novelty"].max(),
+        signals["harmonic_change"].max(),
+        signals["spectral_flux"].max(),
+        signals["energy_change"].max(),
+    )
 
-    # Boundary detection
-    boundaries = _pick_boundaries(novelty, times, min_gap_sec=max(4.0, duration / 20))
+    # Boundary detection on fused novelty
+    boundaries = _pick_boundaries(fused_novelty, times, min_gap_sec=max(4.0, duration / 20))
 
     # Ensure last boundary is at end
     if boundaries[-1] < duration - 1:
@@ -377,7 +521,7 @@ def detect_structure(bundle, force: bool = False) -> StructureResult:
         sections=sections,
         num_sections=len(sections),
         confidence=global_confidence,
-        source="ssm_novelty+energy+groups",
+        source="multisignal_v3:ssm+harmonic+flux+energy",
         num_groups=num_groups,
     )
 

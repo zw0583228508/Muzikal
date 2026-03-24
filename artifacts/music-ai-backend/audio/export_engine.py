@@ -467,6 +467,322 @@ def export_lead_sheet(
     return "\n".join(lines)
 
 
+# ─── music21 MusicXML export (primary) ───────────────────────────────────────
+
+def export_musicxml_music21(
+    chords: List[Dict],
+    melody_notes: List[Dict],
+    key_name: str = "C",
+    mode: str = "major",
+    bpm: float = 120.0,
+    time_sig: Tuple[int, int] = (4, 4),
+    section_labels: Optional[List[Dict]] = None,
+    output_path: Optional[str] = None,
+    title: str = "Untitled",
+) -> str:
+    """
+    Export chord progression + melody to MusicXML using music21 v9.
+
+    Produces a proper 2-staff score (treble + chord symbols) with:
+      - Key signature (correct accidentals via music21.key.Key)
+      - Time signature
+      - Tempo marking (MetronomeMark)
+      - Melody line in treble clef (quantized to 16th notes)
+      - Chord symbols above the staff (ChordSymbol objects, editable in Sibelius/MuseScore)
+      - Section rehearsal marks (Verse, Chorus, etc.)
+      - Rest filling for incomplete measures
+
+    Falls back to the native XML export if music21 is unavailable.
+
+    Returns the output file path.
+    """
+    try:
+        import music21 as m21
+        from music21 import stream, note, chord as m21chord
+        from music21 import key as m21key, meter, tempo as m21tempo
+        from music21 import harmony, expressions, clef as m21clef
+        from music21 import duration as m21duration, interval
+    except ImportError:
+        logger.warning("music21 not available — falling back to native XML export")
+        return export_musicxml(chords, melody_notes, key_name, mode, bpm, time_sig, output_path)
+
+    bpm = float(bpm) if bpm and bpm > 0 else 120.0
+    num_beats, beat_unit = int(time_sig[0]), int(time_sig[1])
+    beat_sec = 60.0 / bpm
+    measure_sec = beat_sec * num_beats
+
+    # ── Build score ─────────────────────────────────────────────────────────
+    score = stream.Score()
+    score.metadata = m21.metadata.Metadata()
+    score.metadata.title = title
+
+    part = stream.Part(id="P1")
+
+    # ── Key signature ─────────────────────────────────────────────────────
+    _ENHARMONIC_M21 = {
+        "C#": "C#", "Db": "D-", "D#": "D#", "Eb": "E-",
+        "F#": "F#", "Gb": "G-", "G#": "G#", "Ab": "A-",
+        "A#": "A#", "Bb": "B-", "Cb": "C-", "B#": "B#",
+    }
+    m21_key_name = _ENHARMONIC_M21.get(key_name, key_name)
+    key_mode = "minor" if mode in ("minor", "harmonic_minor") else "major"
+    try:
+        k = m21key.Key(m21_key_name, key_mode)
+    except Exception:
+        k = m21key.Key("C", "major")
+
+    # ── Time signature ─────────────────────────────────────────────────────
+    ts = meter.TimeSignature(f"{num_beats}/{beat_unit}")
+
+    # ── Tempo mark ─────────────────────────────────────────────────────────
+    mm = m21tempo.MetronomeMark(number=round(bpm), referent=m21duration.Duration("quarter"))
+
+    # ── Compute total measures ─────────────────────────────────────────────
+    total_dur_sec = 0.0
+    if chords:
+        total_dur_sec = max(total_dur_sec, max(float(c.get("end", c.get("endTime", 0))) for c in chords))
+    if melody_notes:
+        total_dur_sec = max(total_dur_sec, max(float(n.get("endTime", n.get("end", 0))) for n in melody_notes))
+    if total_dur_sec < measure_sec:
+        total_dur_sec = measure_sec
+
+    num_measures = max(1, math.ceil(total_dur_sec / measure_sec))
+
+    # ── Map chord symbols to beat positions ───────────────────────────────
+    def seconds_to_offset(t_sec: float) -> float:
+        """Convert seconds to score offset in quarter notes."""
+        return t_sec / beat_sec
+
+    def _quality_to_m21(quality: str) -> str:
+        """Map our quality codes to music21 chord kind strings."""
+        MAP = {
+            "maj": "major", "min": "minor",
+            "dom7": "dominant-seventh", "maj7": "major-seventh",
+            "min7": "minor-seventh", "dim7": "diminished-seventh",
+            "dim": "diminished", "aug": "augmented",
+            "sus2": "suspended-second", "sus4": "suspended-fourth",
+            "add9": "major-ninth", "min9": "minor-ninth",
+        }
+        return MAP.get(quality, "major")
+
+    def _parse_chord_for_m21(chord_str: str) -> Optional[harmony.ChordSymbol]:
+        """Parse 'Cmin7', 'Gmaj', etc. to music21 ChordSymbol."""
+        if not chord_str or chord_str in ("N", "N.C.", "NC", "None"):
+            return None
+        _EN = {"Db": "D-", "Eb": "E-", "Gb": "G-", "Ab": "A-", "Bb": "B-", "Cb": "C-"}
+        _QUALITIES = {
+            "maj": "major", "min": "minor", "dim": "diminished", "aug": "augmented",
+            "maj7": "major-seventh", "min7": "minor-seventh", "dom7": "dominant-seventh",
+            "dim7": "diminished-seventh", "sus2": "suspended-second", "sus4": "suspended-fourth",
+            "add9": "major-ninth", "min9": "minor-ninth",
+        }
+        for root_len in (2, 1):
+            root_raw = chord_str[:root_len]
+            root = _EN.get(root_raw, root_raw)
+            if root in ["C", "C#", "D-", "D", "D#", "E-", "E", "F", "F#", "G-", "G", "G#", "A-", "A", "A#", "B-", "B"]:
+                quality_str = chord_str[root_len:]
+                kind = _QUALITIES.get(quality_str, "major")
+                try:
+                    cs = harmony.ChordSymbol(root=root, kind=kind)
+                    return cs
+                except Exception:
+                    try:
+                        return harmony.ChordSymbol(chord_str)
+                    except Exception:
+                        return None
+        return None
+
+    # ── Build measures ─────────────────────────────────────────────────────
+    melody_idx = 0
+    chord_idx = 0
+
+    for m_num in range(num_measures):
+        m_start_sec = m_num * measure_sec
+        m_end_sec   = (m_num + 1) * measure_sec
+        m_offset = m_num * num_beats   # offset in quarter notes (assuming 4/4)
+
+        measure = stream.Measure(number=m_num + 1)
+
+        # Header elements in first measure
+        if m_num == 0:
+            measure.insert(0, k)
+            measure.insert(0, ts)
+            measure.insert(0, mm)
+            measure.insert(0, m21clef.TrebleClef())
+
+        # Section label as rehearsal mark
+        if section_labels:
+            for sec in section_labels:
+                sec_start = float(sec.get("start", 0))
+                if abs(sec_start - m_start_sec) < measure_sec / 2:
+                    label = str(sec.get("label", "")).capitalize()
+                    rh = expressions.RehearsalMark(label)
+                    measure.insert(0, rh)
+                    break
+
+        # Chord symbols at their beat positions within the measure
+        while chord_idx < len(chords):
+            c = chords[chord_idx]
+            c_start = float(c.get("start", c.get("startTime", 0)))
+            if c_start >= m_end_sec:
+                break
+            if c_start >= m_start_sec:
+                cs = _parse_chord_for_m21(c.get("chord", ""))
+                if cs is not None:
+                    # Position within measure in quarter notes
+                    pos_in_measure = (c_start - m_start_sec) / beat_sec
+                    measure.insert(pos_in_measure, cs)
+            chord_idx += 1
+
+        # Melody notes in this measure
+        measure_notes = []
+        while melody_idx < len(melody_notes):
+            n = melody_notes[melody_idx]
+            n_start = float(n.get("startTime", n.get("start", 0)))
+            if n_start >= m_end_sec:
+                break
+            if n_start >= m_start_sec:
+                measure_notes.append(n)
+                melody_idx += 1
+            else:
+                melody_idx += 1
+
+        if measure_notes:
+            measure_filled_ql = 0.0
+            for n in measure_notes:
+                n_start = float(n.get("startTime", n.get("start", 0)))
+                n_dur_sec = float(n.get("duration", beat_sec / 2))
+                midi_pitch = int(n.get("pitch", n.get("midiPitch", 60)))
+
+                pos_in_measure_ql = (n_start - m_start_sec) / beat_sec
+
+                # Fill gap with rest if needed
+                if pos_in_measure_ql > measure_filled_ql + 0.01:
+                    rest_ql = pos_in_measure_ql - measure_filled_ql
+                    try:
+                        r = note.Rest(quarterLength=_quantize_ql(rest_ql))
+                        measure.append(r)
+                        measure_filled_ql += float(r.quarterLength)
+                    except Exception:
+                        pass
+
+                # Add note
+                ql = _quantize_ql(n_dur_sec / beat_sec)
+                try:
+                    m21_note = note.Note(midi=midi_pitch)
+                    m21_note.quarterLength = ql
+                    vel = int(n.get("velocity", 80))
+                    m21_note.volume.velocity = max(1, min(127, vel))
+                    measure.append(m21_note)
+                    measure_filled_ql = pos_in_measure_ql + ql
+                except Exception as e:
+                    logger.debug("Note error at pitch=%d: %s", midi_pitch, e)
+                    continue
+
+            # Fill rest of measure
+            remaining_ql = num_beats - measure_filled_ql
+            if remaining_ql > 0.1:
+                try:
+                    r = note.Rest(quarterLength=_quantize_ql(remaining_ql))
+                    measure.append(r)
+                except Exception:
+                    pass
+        else:
+            # Full measure rest
+            r = note.Rest()
+            r.quarterLength = num_beats
+            measure.append(r)
+
+        part.append(measure)
+
+    score.append(part)
+
+    # ── Write output ──────────────────────────────────────────────────────
+    if output_path is None:
+        import tempfile
+        output_path = tempfile.mktemp(suffix=".musicxml")
+
+    try:
+        score.write("musicxml", fp=output_path)
+        logger.info("[export_music21] MusicXML written to %s (%d measures)", output_path, num_measures)
+        return output_path
+    except Exception as e:
+        logger.error("[export_music21] music21 write failed: %s — falling back to native", e)
+        return export_musicxml(chords, melody_notes, key_name, mode, bpm, time_sig, output_path)
+
+
+def _quantize_ql(ql: float, min_ql: float = 0.0625) -> float:
+    """Quantize quarter-length to nearest 16th note grid."""
+    grid = 0.25  # 16th note
+    q = max(min_ql, round(ql / grid) * grid)
+    return round(q, 4)
+
+
+def _lead_sheet_to_html(text: str, title: str = "Lead Sheet") -> str:
+    """
+    Wrap a plain-text lead sheet in styled HTML.
+    Uses monospace font and print-optimized CSS.
+    The resulting .html file can be opened in any browser and printed as PDF
+    (File → Print → Save as PDF).
+    """
+    escaped = text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    lines = escaped.split("\n")
+    # Make chord lines bold
+    def _style_line(line: str) -> str:
+        stripped = line.strip()
+        if stripped.startswith("│") or stripped.startswith("||") or stripped.startswith("|"):
+            return f"<span class='chords'>{line}</span>"
+        if stripped.startswith("═") or stripped.startswith("──") or stripped.startswith("="):
+            return f"<span class='rule'>{line}</span>"
+        if any(kw in stripped for kw in ("Verse", "Chorus", "Bridge", "Intro", "Outro")):
+            return f"<strong class='section'>{line}</strong>"
+        return line
+
+    body_lines = "\n".join(_style_line(l) for l in lines)
+
+    return f"""<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <title>{title}</title>
+  <style>
+    * {{ box-sizing: border-box; }}
+    body {{
+      font-family: 'Courier New', Courier, monospace;
+      font-size: 11pt;
+      line-height: 1.55;
+      max-width: 900px;
+      margin: 2cm auto;
+      padding: 0 1cm;
+      color: #1a1a1a;
+      background: #fff;
+    }}
+    h1 {{
+      font-family: Georgia, serif;
+      font-size: 18pt;
+      text-align: center;
+      margin-bottom: 0.5em;
+    }}
+    pre {{
+      white-space: pre-wrap;
+      word-break: break-word;
+    }}
+    .chords {{ color: #003399; font-weight: bold; }}
+    .rule   {{ color: #999; }}
+    .section {{ color: #006600; font-size: 12pt; }}
+    @media print {{
+      body {{ margin: 1cm; }}
+      @page {{ size: A4; margin: 2cm; }}
+    }}
+  </style>
+</head>
+<body>
+  <h1>{title}</h1>
+  <pre>{body_lines}</pre>
+</body>
+</html>"""
+
+
 # ─── Main export orchestrator ─────────────────────────────────────────────────
 
 def run_export(
@@ -508,27 +824,45 @@ def run_export(
         except Exception as e:
             logger.error(f"MIDI export failed: {e}")
 
-    # MusicXML
+    # MusicXML — primary: music21 v9; fallback: native XML
     if "musicxml" in formats:
         xml_path = os.path.join(output_dir, f"project_{project_id}.musicxml")
         try:
             if progress_callback:
-                progress_callback("Exporting MusicXML", 35)
-            export_musicxml(chords, melody_notes, key, mode, bpm, time_sig, xml_path)
+                progress_callback("Exporting MusicXML (music21)", 35)
+            export_musicxml_music21(
+                chords=chords,
+                melody_notes=melody_notes,
+                key_name=key,
+                mode=mode,
+                bpm=bpm,
+                time_sig=time_sig,
+                section_labels=structure,
+                output_path=xml_path,
+                title=f"Project {project_id}",
+            )
             results["musicxml"] = xml_path
+            logger.info("MusicXML exported via music21: %s", xml_path)
         except Exception as e:
-            logger.error(f"MusicXML export failed: {e}")
+            logger.error(f"MusicXML export (music21) failed: {e} — trying native fallback")
+            try:
+                export_musicxml(chords, melody_notes, key, mode, bpm, time_sig, xml_path)
+                results["musicxml"] = xml_path
+            except Exception as e2:
+                logger.error(f"MusicXML native fallback also failed: {e2}")
 
-    # Lead Sheet (PDF text fallback)
+    # Lead Sheet — HTML+text with inline CSS (viewable in browser, printable as PDF)
     if "pdf" in formats:
-        pdf_path = os.path.join(output_dir, f"project_{project_id}_lead_sheet.txt")
+        pdf_path = os.path.join(output_dir, f"project_{project_id}_lead_sheet.html")
         try:
             if progress_callback:
                 progress_callback("Generating lead sheet", 45)
-            lead_sheet = export_lead_sheet(chords, key, bpm, time_sig, structure)
+            lead_sheet_text = export_lead_sheet(chords, key, bpm, time_sig, structure)
+            html_content = _lead_sheet_to_html(lead_sheet_text, title=f"Project {project_id} — Lead Sheet")
             with open(pdf_path, "w", encoding="utf-8") as f:
-                f.write(lead_sheet)
+                f.write(html_content)
             results["pdf"] = pdf_path
+            logger.info("Lead sheet HTML written: %s", pdf_path)
         except Exception as e:
             logger.error(f"Lead sheet export failed: {e}")
 

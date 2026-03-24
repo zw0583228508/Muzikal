@@ -1,0 +1,1132 @@
+Here is a paste-ready instruction document in English for your AI/dev system.
+
+MASTER INSTRUCTION — BUILD THIS INTO A TOP-TIER, MAXIMUM-QUALITY AI MUSIC ANALYSIS AND ARRANGEMENT PLATFORM
+
+You are not allowed to do partial-quality work, placeholder-quality work, demo-quality work, or “good enough” work.
+
+Your goal is to turn the current project into a top-tier, production-grade AI music analysis and arrangement platform with the highest possible quality in:
+
+audio understanding
+harmony understanding
+structure understanding
+symbolic music generation
+orchestration
+rendering pipeline
+backend reliability
+frontend UX
+evaluation
+reproducibility
+export quality
+
+The current system already has useful architecture, but it is still too dependent on DSP heuristics, template matching, rule-based correction, and scaffold-level components. That is not enough.
+
+The target system must be rebuilt and upgraded so that the core musical intelligence is model-driven, not mainly heuristic-driven.
+
+Do not optimize for speed of coding.
+Optimize for maximum correctness, musical quality, stability, and extensibility.
+
+1. CORE PRODUCT TARGET
+
+Build a system that can take an input audio file and produce a deeply analyzed, musically coherent, high-quality output pipeline:
+
+Audio Input → Source Separation → Beat/Tempo/Meter → Key/Scale/Modality → Chords/Harmony → Melody/Lead Extraction → Song Structure → Section Function Understanding → Canonical Analysis Graph → Symbolic Arrangement Generation → Orchestration → Humanization → High-Quality Rendering → Export
+
+The system must support:
+
+WAV / MP3 / FLAC / M4A input
+optional stems input
+noisy recordings
+vocal-only recordings
+piano + vocal recordings
+full mixed songs
+old or low-quality recordings
+MIDI export
+MusicXML export
+PDF score export
+stems export
+project state persistence
+deterministic re-runs
+progress reporting
+correction workflows
+style-conditioned arrangement generation
+2. NON-NEGOTIABLE ENGINEERING PRINCIPLES
+
+Implement all work according to these rules:
+
+Model-driven first, heuristics second
+heuristics may only be used as fallback, post-processing, or confidence-aware smoothing
+heuristics must not be the main intelligence layer
+Every stage must output confidence
+beat confidence
+meter confidence
+key confidence
+chord confidence
+melody confidence
+structure confidence
+arrangement confidence
+Every stage must be reproducible
+version every model
+version every pipeline config
+save seeds
+save environment info
+save artifact hashes
+Every stage must be independently testable
+unit tests
+regression tests
+golden files
+metrics-based evaluation
+All analysis must be canonicalized
+do not let downstream stages consume raw inconsistent outputs from earlier stages
+introduce a canonical music analysis schema
+No fake “high quality” modules
+if something is scaffold/TODO/placeholder, replace it with a real implementation
+do not keep misleading names like “high_quality” for incomplete code
+Fail fast in production
+if critical dependencies/models are missing, startup must fail
+no soft warnings for core unavailable functionality in production mode
+3. ARCHITECTURE TO IMPLEMENT
+
+Refactor the system into these clear subsystems.
+
+A. Ingestion Layer
+
+Responsible for:
+
+file validation
+format normalization
+loudness normalization for analysis only
+sample rate normalization
+mono/stereo policy
+metadata extraction
+waveform caching
+
+Use:
+
+ffmpeg
+soxr or high-quality resampling
+soundfile
+pydub only where truly necessary
+numpy
+scipy
+
+Deliverables:
+
+robust input loader
+waveform manifest
+audio fingerprint
+cache keys
+B. Separation Layer
+
+Replace weak or inconsistent stem extraction with a strong separation pipeline.
+
+Primary model choices:
+
+Demucs v4 / HTDemucs as baseline production separation
+optional alternative experiments with MDX-based models
+support ensemble strategy only if objective metrics justify it
+
+Requirements:
+
+vocals / drums / bass / other stems at minimum
+optional piano and accompaniment refinement if feasible
+chunked inference for long files
+deterministic cache by model version + input hash
+separation quality metrics logging
+
+Do:
+
+create a formal separation service
+expose model config, segment size, overlap, device selection
+return stem confidence and artifacts
+
+Do not:
+
+hide separation inside loose helper functions
+rerun separation if matching cache exists
+C. Rhythm Analysis Layer
+
+Current beat/meter logic is not enough. Replace it with a stronger hybrid stack.
+
+Use:
+
+madmom for strong beat/downbeat baselines
+librosa for fallback utilities only
+consider a learned beat/downbeat model where appropriate
+build a consensus rhythm engine
+
+Tasks:
+
+beat tracking
+tempo curve estimation, not just one BPM value
+downbeat detection
+meter estimation
+bar segmentation
+rubato detection
+pickup/anacrusis estimation
+
+Output:
+
+beat timeline
+bar timeline
+tempo map
+meter segments
+confidence map
+
+Important:
+
+meter may change across song sections
+do not assume constant 4/4
+D. Pitch / Melody / Note Tracking Layer
+
+Current melody extraction must be upgraded to top-tier accuracy.
+
+Use:
+
+CREPE or stronger pitch-tracking alternatives for frame-level F0
+Basic Pitch for note/event extraction experiments
+pYIN only as fallback
+note segmentation with voiced/unvoiced confidence
+vibrato-aware smoothing
+octave error correction with confidence gating
+
+Build:
+
+vocal melody extractor
+monophonic lead extractor
+optional polyphonic transcription experimental path
+
+Output:
+
+frame-level F0
+note event list
+phrase boundaries
+ornament confidence
+pitch drift statistics
+E. Harmony and Chord Recognition Layer
+
+This is one of the most important upgrades. The current template/chroma/rules approach is not enough.
+
+You must replace chord detection with a learned chord recognition stack.
+
+Target approach:
+
+compute strong harmonic features
+run a learned sequence model
+apply temporal decoding
+apply music-theory-aware correction only as post-processing
+preserve uncertainty instead of forcing bad labels
+
+Recommended model families:
+
+CNN + BiLSTM + CRF
+Transformer-based chord recognition
+sequence labeling over frame windows or beat-synchronous features
+
+Feature candidates:
+
+CQT
+harmonic CQT
+chroma variants
+bass chroma
+tonal centroid features
+beat-synchronous harmonic features
+
+Train/evaluate chord vocabularies progressively:
+
+triads
+sevenths
+slash chords
+suspended chords
+added tone chords where feasible
+
+Requirements:
+
+beat-synchronous decoding
+no blind median smoothing as the main logic
+bass-note inference separated from root inference
+support modal ambiguity
+support borrowed chords
+support non-diatonic harmony
+
+Output:
+
+chord events with start/end
+root
+bass
+quality
+inversion
+confidence
+harmonic function estimate
+local key relation
+
+Post-processing rules are allowed only if:
+
+they improve objective metrics
+they are confidence-aware
+they do not erase valid unusual harmony
+F. Key / Scale / Mode Detection Layer
+
+Current key logic must be upgraded from static heuristic estimation to contextual tonal analysis.
+
+Build:
+
+global key estimation
+local key estimation by section
+mode detection
+tonic confidence
+modulation detection
+parallel/relative ambiguity handling
+
+Use:
+
+learned classifier over harmonic + melodic features
+section-aware smoothing
+chord-informed and melody-informed consensus
+tonal profile baselines only as comparison
+
+Support:
+
+major / minor
+church modes when evidence is strong
+tonicizations vs full modulation
+ambiguous tonal centers
+
+Output:
+
+global key
+section keys
+modulations
+confidence
+competing hypotheses
+G. Structure Analysis Layer
+
+Current self-similarity + novelty + heuristic labeling is not enough for maximum-quality behavior.
+
+Rebuild structure analysis as a multi-signal model.
+
+Use inputs from:
+
+timbre embeddings
+harmonic embeddings
+rhythmic embeddings
+lyric/transcription cues if available
+energy profile
+repetition map
+segment boundary models
+
+Use:
+
+MSAF only as a baseline reference, not as the main final solution
+learned segmentation/classification over section candidates
+boundary confidence scoring
+repetition cluster assignment
+
+Target outputs:
+
+intro
+verse
+pre-chorus
+chorus
+bridge
+instrumental
+breakdown
+outro
+pickup
+transition
+
+Important:
+
+do not assign semantic section labels by brittle heuristics only
+first detect segments well
+then classify section roles using repetition position, energy, harmonic density, lyrical recurrence, and arrangement change
+
+Output:
+
+hierarchical segmentation
+repeated section grouping
+section labels
+boundary confidence
+section embeddings
+4. CREATE A CANONICAL MUSIC ANALYSIS GRAPH
+
+Implement a central canonical data structure that all downstream stages use.
+
+Create a typed schema such as:
+
+ProjectAnalysis
+AudioManifest
+StemManifest
+BeatGrid
+TempoMap
+MeterMap
+KeyMap
+HarmonyMap
+MelodyMap
+StructureMap
+CanonicalSections
+ConfidenceBundle
+ProvenanceBundle
+
+Every analysis stage must write into this graph.
+
+The graph must:
+
+be serializable to JSON
+be versioned
+include model versions
+include timestamps
+include confidence
+include source dependencies
+include manual overrides
+include correction history
+
+Do not let arrangement or export modules read directly from raw detector outputs.
+
+Everything must go through the canonical analysis graph.
+
+5. ARRANGEMENT GENERATION — REPLACE RULE-HEAVY LOGIC WITH A REAL GENERATIVE SYSTEM
+
+This is the second most important upgrade after harmony.
+
+The current arrangement engine appears too rule-driven. Replace it with a hybrid generation architecture:
+
+Required design
+
+Use a two-stage arrangement engine:
+
+Stage 1 — Structural Arrangement Planning
+
+Generate a high-level arrangement plan:
+
+density per section
+instrumentation per section
+dynamics curve
+voicing complexity
+rhythmic activity
+bass behavior
+drum intensity
+countermelody presence
+string layer presence
+brass layer presence
+transitions/fills
+climax placement
+Stage 2 — Symbolic Music Generation
+
+Generate actual note events for each instrument group:
+
+drums
+bass
+piano
+guitars
+pads
+strings
+brass
+woodwinds if used
+lead doubles
+fills / ornaments / transitions
+Model direction
+
+Use symbolic sequence models, not just pattern templates.
+
+Recommended directions:
+
+Transformer-based symbolic generation
+REMI / MIDI-like event tokenization
+Music Transformer style architectures
+track-conditioned generation
+section-conditioned generation
+chord-conditioned generation
+style-conditioned generation
+
+Inputs to generation:
+
+canonical chord map
+bar grid
+section labels
+energy curve
+target style
+target arranger profile
+instrumentation plan
+optional melody constraints
+
+Generation rules:
+
+preserve harmonic correctness
+obey meter and bar structure
+obey section function
+increase complexity progressively
+generate variation across repeated sections
+create musically meaningful transitions
+
+Do not:
+
+generate the same loop for every repeated section
+use only fixed MIDI templates
+fake arrangement intelligence with random note placement
+6. STYLE SYSTEM — MAKE IT REAL, CONTROLLABLE, AND SAFE
+
+Implement a formal style conditioning layer.
+
+A style profile must include:
+
+groove characteristics
+harmonic density preferences
+voicing preferences
+instrumentation palette
+rhythm complexity
+ornament density
+register behavior
+transition style
+climax behavior
+mix density targets
+
+Separate:
+
+genre profile
+arranger-inspired profile
+production profile
+
+Example:
+
+Genre profile: Hasidic / cinematic / pop / orchestral / worship / ballad
+Arranger-inspired profile: only as high-level musical traits, not imitation of copyrighted specific works
+Production profile: warm / wide / punchy / intimate / live / polished
+
+Implementation:
+
+define a StyleConditioningSpec
+map it into arrangement planner inputs
+map it into track generator constraints
+map it into rendering defaults
+7. ORCHESTRATION ENGINE
+
+Build orchestration as a serious subsystem, not just instrument assignment.
+
+Implement:
+
+register-aware writing
+articulation-aware writing
+playable range constraints
+voice leading constraints
+anti-collision logic
+density balancing
+phrase-level orchestration changes
+counterline generation
+doubling policy
+tension/release orchestration patterns
+
+For each instrument family create:
+
+range limits
+preferred registers
+articulation options
+rhythmic role options
+doubling rules
+transition behavior
+intensity scaling behavior
+
+Must support:
+
+piano
+bass
+drums/percussion
+strings ensemble
+brass ensemble
+woodwinds if selected
+guitars
+pads/synth layers
+solo instruments
+vocal doubles/counterlines where relevant
+
+Important:
+
+repeated choruses must evolve
+intros and outros must be intentional
+bridges must contrast
+endings must be musically designed, not abruptly stopped
+8. HUMANIZATION AND MUSICAL FEEL
+
+Humanization must be controlled and musically aware.
+
+Implement:
+
+timing deviation profiles by instrument type
+velocity shaping by phrase role
+articulation variation
+swing/shuffle handling
+grace-note and pickup handling where appropriate
+fill generation near transitions
+section-aware groove variation
+
+Humanization must not:
+
+break bar alignment
+distort harmony
+introduce random ugliness
+apply the same randomization to all instruments
+
+Make humanization deterministic from seed.
+
+9. RENDERING PIPELINE — REPLACE SCAFFOLD WITH A REAL MIX/RENDER ENGINE
+
+Any scaffold render module must be replaced with a real implementation.
+
+Build a rendering pipeline with:
+
+Instrument playback
+high-quality sample library integration or plugin routing abstraction
+track-level sample/render engine
+articulation switching support where feasible
+Mix stage
+gain staging
+pan law
+bus routing
+EQ slots
+compression slots
+reverb/send architecture
+delay/send architecture
+stereo width policy
+transient handling where appropriate
+Master stage
+loudness normalization with real LUFS targeting
+peak limiting
+true peak protection
+mono compatibility checks
+export preset system
+
+Use:
+
+ffmpeg for final encoding
+proper loudness measurement libraries / tooling
+offline render abstraction
+stems render path
+full mix render path
+
+Exports:
+
+WAV 24-bit
+MP3 high bitrate
+stems
+MIDI
+MusicXML
+PDF score
+analysis JSON
+project bundle ZIP
+
+Do not claim “high quality render” until LUFS, peak, stem, and full export paths are actually implemented and tested.
+
+10. SCORE / MIDI / MUSICXML / PDF EXPORT
+
+Build a formal notation/export subsystem.
+
+Requirements:
+
+clean quantization policy with configurable strictness
+phrase-aware beaming
+chord symbols
+tempo marks
+meter marks
+rehearsal marks by section
+instrument names and transpositions
+velocity/articulation preservation when possible
+readable piano reduction when requested
+
+Implement:
+
+MIDI export from symbolic arrangement
+MusicXML export
+PDF score generation through a proper notation pipeline
+separate conductor score and part extraction where feasible later
+
+Important:
+
+export must reflect canonical arrangement, not ad hoc regenerated notes
+export must preserve section structure and metadata
+11. FRONTEND UX — MAKE IT FEEL EFFORTLESS AND PREMIUM
+
+The current UX must be simplified and made more fluid.
+
+Primary UX principle:
+The user should feel guided, not burdened.
+
+Build a flow like this:
+
+Upload audio
+Choose goal
+analyze only
+generate arrangement
+export score
+create backing/orchestration
+Choose style
+Watch rich progress
+Review analysis
+Correct if needed
+Generate arrangement
+Preview
+Export
+UX improvements required
+eliminate weak prompt-based project creation patterns
+replace raw dialogs with a polished guided flow
+show progress by stage with confidence and status
+show analysis results visually:
+tempo graph
+chord timeline
+structure timeline
+key map
+stems status
+allow easy corrections:
+chord correction
+section rename
+key override
+tempo override
+support regeneration from a chosen stage
+hide advanced controls by default
+keep expert options accessible but secondary
+
+The product must feel:
+
+clear
+modern
+smooth
+reliable
+musically intelligent
+
+Not:
+
+cluttered
+technical
+fragile
+overloaded
+12. BACKEND RELIABILITY AND JOB SYSTEM
+
+The current worker/job system must be hardened.
+
+Implement a real production job pipeline with:
+
+Celery or an equivalent reliable distributed worker system
+Redis or proper queue backend
+job status persistence
+cancellation support
+retry policy
+idempotency keys
+artifact persistence
+per-stage logs
+failure classification
+timeout policy
+
+Production rules:
+
+no fake fallback to in-process mode in production
+local/dev fallback may exist only behind explicit development mode
+every job stage must emit structured progress events
+websocket progress must be resilient to reconnects
+
+Store:
+
+job metadata
+stage timings
+model versions
+output artifact paths
+error traces
+retry count
+13. CONFIG, MODEL REGISTRY, AND REPRODUCIBILITY
+
+Implement a real model registry and config discipline.
+
+Every model must have:
+
+model name
+semantic version
+checkpoint hash
+feature config version
+training dataset version
+evaluation summary
+intended usage
+hardware expectations
+
+Every pipeline run must save:
+
+app version
+analysis pipeline version
+arrangement pipeline version
+model versions used
+runtime config
+hardware backend
+seed
+timestamp
+input hash
+
+Fix all model bookkeeping inconsistencies immediately.
+
+If code references model versions not defined in the registry, that is a hard error.
+
+14. DATASETS, TRAINING, AND EVALUATION
+
+Build a real evaluation framework. No guessing.
+
+For beat/downbeat/meter
+
+Track metrics such as:
+
+beat F-measure
+downbeat F-measure
+tempo accuracy
+meter accuracy
+For key detection
+
+Track:
+
+exact match
+fifth error
+relative error
+parallel error
+weighted score
+For chord recognition
+
+Track:
+
+chord root accuracy
+maj/min accuracy
+triad accuracy
+seventh accuracy
+weighted chord symbol recall
+segment overlap metrics
+For melody/note extraction
+
+Track:
+
+raw pitch accuracy
+raw chroma accuracy
+overall accuracy
+note onset F1
+note offset F1
+For structure
+
+Track:
+
+boundary precision/recall/F1
+section label accuracy
+repeated section grouping quality
+For arrangement generation
+
+Track:
+
+harmonic consistency
+rhythmic alignment
+range violations
+note density distribution
+repetition variance
+transition quality heuristics
+human review metrics
+
+Implement:
+
+evaluation scripts
+benchmark reports
+regression dashboard
+golden test songs
+before/after comparison reports
+
+No stage may be “improved” unless metrics or controlled listening tests show real improvement.
+
+15. CORRECTION WORKFLOW AND HUMAN-IN-THE-LOOP DESIGN
+
+Build a proper correction layer.
+
+User must be able to:
+
+correct chord labels
+correct section boundaries
+rename sections
+override key
+override tempo/meter
+lock melody phrases
+lock harmony
+lock instrumentation decisions
+
+When a correction is made:
+
+save it as structured override data
+re-run only dependent downstream stages
+never destroy manual corrections
+show which artifacts were regenerated
+
+Implement dependency-aware regeneration:
+
+chord fix should not force separation rerun
+section fix should re-trigger arrangement planning, not full ingestion
+tempo fix should re-trigger timing-sensitive downstream modules only
+16. TESTING STRATEGY
+
+Build serious test coverage.
+
+Required test layers
+unit tests
+integration tests
+pipeline regression tests
+golden artifact tests
+frontend interaction tests
+API contract tests
+performance smoke tests
+
+Create test sets for:
+
+clean pop song
+piano + vocal recording
+noisy live recording
+old mono recording
+rhythmically complex piece
+modulation-heavy piece
+sparse vocal lead
+dense full mix
+
+Test all exports.
+
+Any module named complete, final, high_quality, production, clean, or master must be validated by tests and not merely named optimistically.
+
+17. CODE QUALITY RULES
+
+Apply these refactoring rules throughout the codebase:
+
+remove misleading filenames and class names
+remove dead code
+remove duplicate logic
+isolate heuristics into clearly named modules
+strongly type all pipeline artifacts
+define interface contracts between services
+standardize logging
+standardize error classes
+add docstrings to all core modules
+separate experimentation code from production code
+separate pure analysis from side effects
+no silent exception swallowing
+no hidden global state
+no magic constants without config ownership
+
+Use:
+
+Python typing
+Pydantic models for schemas
+strict linting
+formatting
+import order
+coverage thresholds
+18. API DESIGN
+
+The API must expose clean endpoints for:
+
+upload project input
+start analysis job
+get analysis status
+fetch canonical analysis graph
+apply corrections
+regenerate arrangement from selected stage
+preview output
+export artifacts
+list project versions
+compare project runs
+
+Rules:
+
+stable response contracts
+structured errors
+pagination where needed
+versioned endpoints if necessary
+authentication-ready design
+no leaking internal raw structures unless explicitly intended
+19. PERFORMANCE STRATEGY
+
+Optimize only after correctness is established.
+
+Then add:
+
+waveform cache
+stem cache
+feature cache
+analysis graph cache
+model warm loading
+chunked inference
+GPU/CPU routing
+batched offline jobs where possible
+
+Do not optimize by reducing quality first.
+
+Correctness and musical quality come before speed.
+
+20. WHAT TO REPLACE IMMEDIATELY
+
+These are the highest-priority immediate upgrades.
+
+Immediate Priority 1
+
+Replace the current chord engine with a learned chord recognition system.
+
+Immediate Priority 2
+
+Rebuild structure analysis into a multi-signal, confidence-aware segmentation/classification system.
+
+Immediate Priority 3
+
+Create the canonical analysis graph and force all downstream consumers to use it.
+
+Immediate Priority 4
+
+Replace rule-heavy arrangement generation with a two-stage planner + symbolic generator.
+
+Immediate Priority 5
+
+Replace scaffold render/export modules with real implementations.
+
+Immediate Priority 6
+
+Harden worker/job execution and remove production soft-fallback behavior.
+
+Immediate Priority 7
+
+Fix model registry/versioning inconsistencies and make them strict.
+
+Immediate Priority 8
+
+Redesign frontend flow into a guided premium experience.
+
+21. IMPLEMENTATION ORDER — DO EXACTLY IN THIS ORDER
+
+Follow this order strictly.
+
+Phase 1 — Foundations
+audit and remove fake/scaffold/placeholder modules
+define canonical analysis graph schema
+define model registry schema
+define pipeline config schema
+enforce fail-fast production startup
+clean logging and error handling
+Phase 2 — Analysis Core Upgrade
+rebuild separation service
+rebuild rhythm engine
+rebuild melody engine
+replace chord engine with learned model
+rebuild key/mode engine
+rebuild structure engine
+emit confidence everywhere
+write all outputs into canonical analysis graph
+Phase 3 — Evaluation Infrastructure
+add datasets and benchmark runners
+build golden test suite
+add regression metrics reports
+establish baseline metrics for every stage
+Phase 4 — Arrangement Intelligence
+build structural arrangement planner
+build symbolic track generators
+build style conditioning system
+build orchestration engine
+build humanization engine
+add arrangement evaluation rules and listening-test workflow
+Phase 5 — Rendering and Export
+replace scaffold rendering
+implement stems/full mix export
+implement MIDI/MusicXML/PDF export properly
+validate loudness and artifact integrity
+Phase 6 — UX and Productization
+redesign upload-to-result flow
+add correction UI
+add timeline visualizations
+add regeneration controls
+polish progress UX
+add project history/version compare
+Phase 7 — Production Hardening
+hardened workers
+cache system
+performance optimization
+artifact lifecycle management
+retry/cancel/resume
+observability and monitoring
+22. LIBRARIES / TOOLS TO USE
+
+Use these where appropriate.
+
+Core Python / audio
+numpy
+scipy
+soundfile
+ffmpeg
+soxr
+librosa for utilities, not as the brain
+madmom
+music21 for theory and symbolic analysis
+pretty_midi
+mido
+ML / deep learning
+PyTorch
+torchaudio
+transformers where useful
+pytorch-lightning or a clean trainer abstraction if justified
+Separation
+demucs
+Pitch / note
+crepe
+basic-pitch
+pyin fallback path if required
+Symbolic / notation
+music21
+MusicXML tooling
+proper PDF score rendering pipeline
+Backend
+FastAPI
+Pydantic
+Celery
+Redis
+SQLAlchemy or equivalent if persistent DB is needed
+structured logging stack
+Frontend
+React
+TypeScript
+timeline/chart libraries for musical visualization
+websocket-safe progress layer
+state machine / robust async state handling where necessary
+23. WHAT NOT TO DO
+
+Do not do any of the following:
+
+do not keep weak heuristic engines as the main core
+do not smooth bad predictions into “fake confidence”
+do not label sections semantically using brittle shortcuts alone
+do not rely on fixed MIDI templates as the main arrangement engine
+do not leave scaffolds under premium names
+do not hide missing dependencies behind warnings in production
+do not allow inconsistent model registry references
+do not build cluttered UI with too many exposed controls at once
+do not mix experimental code with production code
+do not claim quality improvements without metrics or controlled listening evidence
+24. DEFINITION OF DONE
+
+This upgrade is complete only when all of the following are true:
+
+analysis core is primarily model-driven
+chord accuracy is measurably improved on benchmark sets
+structure detection is measurably improved on benchmark sets
+arrangement generation produces musically coherent, style-conditioned, section-aware output
+repeated sections evolve meaningfully
+rendering/export is fully real, not scaffolded
+frontend flow feels smooth and premium
+corrections are dependency-aware and safe
+job system is production-ready
+model registry and pipeline provenance are strict and reliable
+all core stages are tested and benchmarked
+the product behaves like a serious music intelligence platform, not a DSP demo with extra layers
+25. FINAL EXECUTION DIRECTIVE
+
+Start by performing a full codebase audit and produce these outputs before modifying major logic:
+
+list of all heuristic-heavy modules
+list of all scaffold/placeholder/fake-complete modules
+list of all model/version/config inconsistencies
+canonical analysis graph schema proposal
+upgrade plan per module with dependencies
+benchmark plan for each analysis/generation stage
+
+Then execute the rebuild in the exact implementation order defined above.
+
+Do not return shallow fixes.
+Do not return cosmetic improvements only.
+Do not stop at “cleaner code.”
+Rebuild the system so the core intelligence, musical quality, and production reliability reach the maximum possible level.

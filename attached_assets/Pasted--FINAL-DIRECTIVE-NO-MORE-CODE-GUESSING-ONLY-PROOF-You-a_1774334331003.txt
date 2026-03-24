@@ -1,0 +1,193 @@
+🔴 FINAL DIRECTIVE — NO MORE CODE GUESSING, ONLY PROOF
+
+You are no longer allowed to respond with “the code looks correct”.
+
+At this stage, code inspection is not enough.
+
+Your task now is not to improve architecture, not to refactor, and not to add features.
+
+Your task is to prove the system actually works end-to-end.
+
+If something does not work in a real runtime path, then it is not done.
+
+OBJECTIVE
+
+You must provide runtime proof, not assumptions.
+
+You must prove these two things:
+
+The public Node API actually works at runtime
+The MIDI export pipeline actually works at runtime
+
+No more theoretical correctness.
+No more “should work”.
+Only verified behavior.
+
+PART 1 — PROVE THE NODE PUBLIC API REALLY WORKS
+Required architecture
+Node server = public API
+public endpoints must be under /api/*
+Python backend = internal only
+REQUIRED ACTIONS
+1. Start the real Node server locally
+
+Use the actual runtime entrypoint for the API server.
+
+Do not use mocked route inspection only.
+Do not rely on static code analysis.
+Actually run the server.
+
+2. Show runtime proof for these endpoints
+
+You must make real HTTP requests and confirm the actual response status and payload shape for:
+
+GET /api/styles
+GET /api/styles/personas
+GET /api/projects
+GET /api/projects/mock-mode
+
+If any of these returns 404, then the system is NOT closed.
+
+3. If an endpoint depends on DB or setup
+
+Then prove one of the following:
+
+it returns a valid success response
+or it returns a deliberate controlled error response
+
+But it must NOT return 404 due to broken mount wiring.
+
+4. Verify the actual Express mount tree
+
+Do not assume route files are mounted.
+Prove they are mounted in the running server.
+
+Check:
+
+app bootstrap
+router registration
+/api prefix mounting
+environment variables used in startup
+5. Fix runtime wiring only if necessary
+
+If the routes exist but are not reachable in the running app:
+
+fix the actual app wiring
+not just the tests
+Required proof output
+
+You must return:
+
+exact command used to start Node API
+exact command used to query endpoints
+actual HTTP status for each endpoint
+short response summary for each endpoint
+PART 2 — PROVE MIDI EXPORT REALLY WORKS
+Current issue
+
+Declaring mido in dependency files is not enough.
+
+You must prove that the actual environment used by tests/runtime can execute MIDI export without raw import failure.
+
+REQUIRED ACTIONS
+1. Verify mido in the real environment
+
+Actually confirm the environment can import it.
+
+For example, prove:
+
+import mido
+print(mido.__version__)
+
+Do not stop at reading pyproject.toml.
+
+2. Run the actual MIDI export path
+
+Use the real export codepath used by the project.
+
+Do not use a fake stub unless that is the official intended behavior.
+
+You must prove that:
+
+MIDI export completes successfully
+OR it fails with a controlled application-level error
+
+Raw ModuleNotFoundError is unacceptable.
+
+3. If dependency install was the real issue
+
+Then fix the actual test/runtime environment so MIDI export works there too.
+
+Not just “on your machine in theory” — in the project’s real test flow.
+
+4. Re-run the relevant export tests
+
+Specifically re-run all tests that were failing because of MIDI export / mido.
+
+Required proof output
+
+You must return:
+
+exact command used to verify mido
+exact command used to run MIDI export
+actual result
+exact tests re-run
+before vs after result
+RULES
+
+You must NOT:
+
+give theoretical explanations without runtime evidence
+say “it should work now”
+stop after editing files without proving behavior
+weaken tests to fake success
+return partial progress without proof
+DEFINITION OF DONE
+
+You may only declare success if all of the following are true:
+
+Public API proof
+Node server actually runs
+/api/styles is reachable
+/api/styles/personas is reachable
+/api/projects is reachable
+/api/projects/mock-mode is reachable
+no 404 caused by broken mount wiring
+MIDI proof
+mido imports in the real environment
+MIDI export path runs without raw ModuleNotFoundError
+relevant export tests pass honestly
+REQUIRED FINAL RESPONSE FORMAT
+
+When you finish, return exactly this structure:
+
+1. Node API runtime proof
+startup command
+endpoint test commands
+status/result for each endpoint
+2. MIDI runtime proof
+dependency verification command
+MIDI export command
+result
+3. Tests re-run
+exact tests executed
+before vs after
+4. Files changed
+exact list
+5. Remaining issues
+if anything still fails, say so clearly
+FINAL INSTRUCTION
+
+Do not come back with:
+
+“I updated the routes”
+“I adjusted dependencies”
+“the code is now aligned”
+
+Come back only with:
+
+proof that the server answers
+proof that MIDI export runs
+proof from test execution
+
+If you cannot prove it, then it is not done.

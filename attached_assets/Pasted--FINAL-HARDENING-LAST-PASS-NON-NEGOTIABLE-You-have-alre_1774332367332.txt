@@ -1,0 +1,211 @@
+🔴 FINAL HARDENING — LAST PASS (NON-NEGOTIABLE)
+
+You have already performed major refactors.
+Now you must finish the system completely.
+
+There are ONLY FOUR remaining problem areas.
+You are NOT allowed to touch anything else unless required to fix these.
+
+Your goal:
+👉 0 runtime errors
+👉 0 contract mismatches
+👉 100% tests passing (honestly)
+👉 fully consistent system behavior
+
+❗ PROBLEM 1 — update_job(..., extra=...) MUST BE ELIMINATED
+Current issue
+update_job() does NOT support extra
+workers STILL call it with extra=...
+this is a real runtime bug
+REQUIRED ACTIONS
+1. Search entire repo
+
+Find ALL occurrences of:
+
+update_job(..., extra=
+2. REMOVE extra everywhere
+3. Map data properly into existing fields:
+
+Use ONLY:
+
+result_data
+processing_metadata
+warnings
+error_message
+status
+4. If needed:
+
+Refactor payload structure so ALL job results fit into:
+
+result_data (final outputs)
+processing_metadata (timing, steps, internal info)
+warnings (non-fatal issues)
+
+🚫 DO NOT:
+
+reintroduce extra
+add hidden/untyped fields
+Definition of Done
+ZERO usage of extra= anywhere in repo
+all workers update DB with valid schema only
+no silent data loss
+❗ PROBLEM 2 — PYTHON STARTUP MUST NOT CRASH (DB IMPORT FIX)
+Current issue
+psycopg2 is imported at module level
+app crashes on import if dependency missing
+tests fail before execution
+REQUIRED ACTIONS
+1. Remove hard import at module top level
+
+Instead of:
+
+import psycopg2
+
+Do ONE of the following:
+
+Option A (Preferred)
+
+Lazy import inside DB functions:
+
+def get_connection():
+    import psycopg2
+    ...
+Option B
+
+Wrap import:
+
+try:
+    import psycopg2
+except ImportError:
+    psycopg2 = None
+
+And handle gracefully.
+
+2. Ensure app can start WITHOUT DB
+health endpoint should return:
+DB unavailable → degraded mode
+app MUST NOT crash on import
+3. Separate:
+app import
+DB availability
+runtime readiness
+Definition of Done
+import app never crashes
+tests can run without DB
+missing DB does NOT break module import
+❗ PROBLEM 3 — CONFIG PATH MUST BE UNIFIED
+Current issue
+configs exist in:
+artifacts/music-ai-backend/configs/...
+BUT tests expect:
+configs/... (root)
+
+This is a contract mismatch.
+
+REQUIRED ACTION — CHOOSE ONE STRATEGY
+OPTION A (RECOMMENDED — CLEAN)
+
+Define canonical path:
+
+artifacts/music-ai-backend/configs
+
+Then:
+
+update ALL loaders to use this path
+update ALL tests to use this path
+OPTION B (COMPATIBILITY LAYER)
+
+Keep backend path BUT add fallback:
+
+if not found:
+    try root-level configs/
+REQUIRED ALSO
+centralize config path in ONE place:
+e.g. config_loader.py
+NEVER hardcode paths in multiple files
+Definition of Done
+no FileNotFoundError anywhere
+configs load consistently
+tests and runtime use same logic
+❗ PROBLEM 4 — END-TO-END API FLOW MUST WORK (NO 404)
+Current issue
+mismatch between:
+/api/... (Node)
+/python-api/... (Python)
+tests hitting wrong layer
+endpoints return 404
+REQUIRED ARCHITECTURE (MANDATORY)
+Node = PUBLIC API
+Python = INTERNAL SERVICE
+REQUIRED ACTIONS
+1. Frontend and tests must hit ONLY:
+/api/*
+2. Node must:
+handle routes
+forward requests to Python where needed
+3. Python must:
+expose ONLY internal endpoints
+NOT be treated as public API
+4. Fix all failing endpoints
+
+Specifically ensure these work:
+
+/api/projects
+/api/projects/:id
+/api/projects/:id/analysis
+/api/projects/:id/arrangement
+/api/projects/:id/export
+/api/styles/personas
+/api/projects/mock-mode
+5. Fix test expectations
+if tests hit Python directly → fix them
+they should target Node unless explicitly backend tests
+Definition of Done
+NO 404 in integration tests
+all endpoints reachable through correct layer
+consistent routing logic
+🚫 ABSOLUTE RULES
+
+You MUST NOT:
+
+introduce new features
+change architecture direction
+weaken tests
+ignore failing tests
+leave partial fixes
+add hacks just to pass tests
+✅ FINAL VALIDATION CHECKLIST
+
+Before you declare completion, you MUST verify:
+
+✔ No extra= usage anywhere
+✔ App imports without crashing
+✔ Configs load from ONE consistent path
+✔ Node ↔ Python flow is correct
+✔ No 404 in API tests
+✔ Tests pass honestly (not bypassed)
+
+📦 FINAL OUTPUT REQUIRED
+
+When done, you MUST return:
+
+1. Exact list of files modified
+2. All locations where extra= was removed
+3. How DB import was fixed
+4. How config path was unified
+5. Which endpoints were fixed
+6. Test results (before vs after)
+7. Exact command to run system locally
+🧠 FINAL INSTRUCTION
+
+This is the last pass.
+
+You are not building anymore.
+You are closing the system.
+
+Act like a senior engineer finishing a production system:
+
+eliminate inconsistencies
+remove ambiguity
+enforce one truth
+leave ZERO loose ends

@@ -9,15 +9,11 @@ import logging
 from functools import lru_cache
 from typing import Any, Dict, List, Optional
 
+from config_paths import PERSONAS_YAML
+
 logger = logging.getLogger(__name__)
 
-_WORKSPACE_ROOT = os.environ.get(
-    "WORKSPACE_ROOT",
-    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")),
-)
-_PERSONAS_YAML = os.path.join(
-    os.path.dirname(__file__), "arranger_personas.yaml"
-)
+_PERSONAS_YAML = PERSONAS_YAML
 
 
 @lru_cache(maxsize=1)

@@ -18,17 +18,13 @@ from orchestration.harmonic_engine import (
 
 logger = logging.getLogger(__name__)
 
-# ─── Locate workspace root ────────────────────────────────────────────────────
-_HERE = os.path.dirname(os.path.abspath(__file__))
-WORKSPACE_ROOT = os.environ.get(
-    "WORKSPACE_ROOT",
-    os.path.normpath(os.path.join(_HERE, "..")),  # = artifacts/music-ai-backend/
-)
+# ─── Locate config files via canonical path module ────────────────────────────
+from config_paths import ARRANGER_PROFILES_YAML
 
 
 def _load_arranger_profiles() -> Dict[str, Any]:
     """Load arranger_profiles.yaml. Falls back to empty dict on failure."""
-    profiles_path = os.path.join(WORKSPACE_ROOT, "configs", "styles", "arranger_profiles.yaml")
+    profiles_path = ARRANGER_PROFILES_YAML
     try:
         import yaml  # type: ignore
         with open(profiles_path, "r", encoding="utf-8") as f:

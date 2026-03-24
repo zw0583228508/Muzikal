@@ -7,18 +7,36 @@ import os
 import json
 import logging
 from typing import Optional, Any
-import psycopg2
-from psycopg2.extras import RealDictCursor
 
 logger = logging.getLogger(__name__)
 
+# psycopg2 is lazily imported inside functions so that the module can be
+# imported safely in environments where psycopg2 is not installed (e.g.
+# unit-test runners that use SQLite or a DB-free mode).
+try:
+    import psycopg2 as _psycopg2
+    from psycopg2.extras import RealDictCursor as _RealDictCursor
+    _PSYCOPG2_AVAILABLE = True
+except ImportError:
+    _psycopg2 = None  # type: ignore[assignment]
+    _RealDictCursor = None  # type: ignore[assignment,misc]
+    _PSYCOPG2_AVAILABLE = False
+
 
 def get_db_connection():
-    """Get a database connection (caller must close it)."""
+    """Get a database connection (caller must close it).
+
+    Raises RuntimeError if DATABASE_URL is not set or psycopg2 is unavailable.
+    """
+    if not _PSYCOPG2_AVAILABLE:
+        raise RuntimeError(
+            "psycopg2 is not installed — cannot connect to PostgreSQL. "
+            "Install it with: pip install psycopg2-binary"
+        )
     database_url = os.environ.get("DATABASE_URL")
     if not database_url:
         raise RuntimeError("DATABASE_URL not set")
-    return psycopg2.connect(database_url, cursor_factory=RealDictCursor)
+    return _psycopg2.connect(database_url, cursor_factory=_RealDictCursor)
 
 
 async def init_db():

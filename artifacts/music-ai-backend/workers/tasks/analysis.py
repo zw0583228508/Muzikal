@@ -41,7 +41,7 @@ def get_task():
         try:
             from api.database import update_job
             update_job(job_id, "running", 1, "Celery worker picked up task",
-                       extra={"celery_task_id": self.request.id})
+                       processing_metadata={"celery_task_id": self.request.id})
         except Exception:
             pass
 

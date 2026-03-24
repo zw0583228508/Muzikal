@@ -4,10 +4,7 @@ import glob
 from typing import Optional
 from functools import lru_cache
 
-GENRES_DIR = os.path.join(
-    os.path.dirname(os.path.dirname(__file__)),
-    "configs", "styles", "genres"
-)
+from config_paths import GENRES_DIR
 
 GENERIC_FALLBACK_ID = "generic_world_music"
 

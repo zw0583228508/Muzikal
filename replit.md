@@ -118,6 +118,7 @@ artifacts/
       style_enricher.py      # LLM enrichment + 30-day cache
       profile_validator.py   # StyleProfile validation
       style_database.py      # 50 YAML genre files with search
+    config_paths.py          # ← SINGLE SOURCE OF TRUTH for all config file paths
     workers/
       celery_app.py          # Celery + Redis (graceful fallback)
       tasks/analysis.py

@@ -4,7 +4,7 @@
 
 Production-grade AI-powered music intelligence and generation web app (cloud-based DAW).
 Full-stack: React frontend + Node.js Express API + Python FastAPI audio backend.
-Hebrew-first, RTL, 50+ musical styles, 847 Python tests passing.
+Hebrew-first, RTL, 50+ musical styles, 847+ Python tests passing.
 
 ## Architecture
 
@@ -113,6 +113,8 @@ artifacts/
       ensemble.py            # Multi-source weighted voting
       fusion_engine.py       # FUSION ENGINE — confidence-weighted multi-source fusion
       theory_guard.py        # Final harmonic validation + scale snapping
+      chord_classifier.py    # Stage 12: key-constrained + bigram transition + cadence detector
+      canonical.py           # Stage 12: CanonicalScore (measure-level symbolic representation)
       cache.py               # Disk-backed feature cache (7-day TTL)
     audio/                   # Legacy v1 pipeline (fallback)
       analyzer.py            # Full 9-step MIR pipeline (librosa only)
@@ -153,14 +155,18 @@ lib/
 
 ## Key Features
 
-### Audio Analysis (MIR)
-- Rhythm: BPM, beat grid, time signature (madmom + librosa)
-- Key/Mode: HPCP chroma + Krumhansl-Schmuckler profiles, modulation detection
-- Chords: Extended vocabulary, template matching, Roman numerals, alternatives
-- Melody: F0 extraction (pyin), note segmentation
-- Structure: Self-similarity matrix + novelty detection, section labels
-- Source Separation: Demucs (ML) + HPSS fallback → stems
+### Audio Analysis (MIR) — Pipeline v2.0.0 (13 stages)
+- Rhythm: BPM, beat grid, time signature (madmom RNN+DBN on drums stem)
+- Key/Mode: Essentia HPCP + librosa K-S fusion with Viterbi smoothing
+- Chords: CQT+bass-stem template matching → bigram transition → diatonic ratio
+- Melody: torchcrepe pitch curve + basic-pitch note events (merged)
+- Structure: SSM + novelty curve + energy/density profile + similarity groups
+- Source Separation: Demucs 4.0.1 (htdemucs) 4-stem → bass/drums/vocals/other
+- Harmonic classification: scale degrees, harmonic functions, cadence detection
+- Canonical Score: measure-by-measure symbolic representation (CanonicalScore)
+- Quality flags: weak_rhythm_signal, unstable_key, ambiguous_chords, poor_separation, etc.
 - Feature caching: SHA-256 keyed disk cache, 7-day TTL
+- API endpoint: GET /python-api/projects/{id}/canonical → CanonicalScore JSON
 
 ### Arrangement Engine
 - 50+ musical styles via YAML genre database

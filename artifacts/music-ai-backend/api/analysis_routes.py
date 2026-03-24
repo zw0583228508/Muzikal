@@ -51,7 +51,8 @@ STAGE_SMOOTHING    = (82, "smoothing",      "Applying smoothing filters",       
 STAGE_THEORY       = (87, "theory_correction","Applying theory corrections",     "internal")
 STAGE_FUSION       = (91, "fusion",         "Fusing multi-source results",       "fusion-engine")
 STAGE_GUARD        = (95, "theory_guard",   "Validating harmonic correctness",   "theory-guard")
-STAGE_CONFIDENCE   = (98, "confidence",     "Scoring confidence",                "internal")
+STAGE_CONFIDENCE   = (97, "confidence",     "Scoring confidence",                "internal")
+STAGE_CANONICAL    = (99, "canonical",      "Building canonical score",          "chord-classifier+canonical")
 
 
 def _stage_update(job_id: str, stage_tuple: tuple, extra_msg: str = "") -> None:
@@ -72,6 +73,43 @@ def _stage_update(job_id: str, stage_tuple: tuple, extra_msg: str = "") -> None:
 
 
 # ─── Routes ───────────────────────────────────────────────────────────────────
+
+@router.get("/projects/{project_id}/canonical")
+async def get_canonical_score(project_id: int):
+    """
+    Return the Canonical Score for a project.
+
+    The canonical score is a measure-by-measure symbolic representation
+    (chord symbols, melody notes, section labels, harmonic functions)
+    produced by Stage 12 of the analysis pipeline.
+
+    Returns 404 if the project has not been analysed yet.
+    Returns 202 if analysis is in progress (no canonical yet).
+    """
+    from fastapi import HTTPException
+    from api.database import get_analysis_result
+
+    data = get_analysis_result(project_id)
+    if data is None:
+        raise HTTPException(status_code=404, detail="No analysis result found for this project")
+
+    canonical = data.get("canonical")
+    if canonical is None:
+        raise HTTPException(
+            status_code=202,
+            detail="Analysis exists but canonical score not yet generated (re-analyse with pipeline v2.0.0+)",
+        )
+
+    return {
+        "projectId":     project_id,
+        "pipelineVersion": data.get("pipelineVersion"),
+        "qualityFlags":  data.get("qualityFlags", []),
+        "harmonicRhythm": data.get("harmonicRhythm"),
+        "diatonicRatio": data.get("diatonicRatio"),
+        "cadences":      data.get("cadences", []),
+        "canonical":     canonical,
+    }
+
 
 @router.post("/analyze")
 async def start_analysis(request: AnalyzeRequest, background_tasks: BackgroundTasks):
@@ -220,6 +258,7 @@ def _run_new_pipeline_staged(
             "Stage 9":  STAGE_THEORY,
             "Stage 10": STAGE_FUSION,
             "Stage 11": STAGE_GUARD,
+            "Stage 12": STAGE_CANONICAL,
         }
 
         def emit(self, record: logging.LogRecord) -> None:
@@ -240,6 +279,7 @@ def _run_new_pipeline_staged(
         pipe_logger.removeHandler(observer)
 
     _stage_update(job_id, STAGE_CONFIDENCE)
+    _stage_update(job_id, STAGE_CANONICAL)
     return result
 
 

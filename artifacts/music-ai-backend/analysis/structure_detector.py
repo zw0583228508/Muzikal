@@ -1,19 +1,21 @@
 """
-Musical structure / section detection.
+Musical structure / section detection v2.
 
 Uses Self-Similarity Matrix (SSM) + spectral novelty curve.
 Labels sections heuristically (intro, verse, chorus, bridge, outro).
-Detects repeated sections for arrangement insights.
+Detects repeated sections and groups structurally similar sections.
+Adds energy/density/spectral-centroid profile per section.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import numpy as np
 import librosa
 import scipy.ndimage
+import scipy.spatial.distance
 
 from analysis.schemas import Section, StructureResult
 from analysis.cache import cache_get, cache_set
@@ -182,6 +184,114 @@ def _assign_labels(n_sections: int) -> List[str]:
     return labels
 
 
+def _compute_energy_profile(
+    y: np.ndarray,
+    sr: int,
+    boundaries: List[float],
+) -> List[Dict[str, float]]:
+    """
+    Compute RMS energy, onset density, and spectral centroid for each section.
+
+    Returns list of dicts with keys: energy, density, spectral_centroid.
+    Length = len(boundaries) - 1 sections.
+    """
+    profiles: List[Dict[str, float]] = []
+    hop = 512
+
+    # Pre-compute global features at hop level
+    rms_global = librosa.feature.rms(y=y, hop_length=hop)[0]
+    rms_max = float(rms_global.max()) + 1e-8
+
+    onset_env = librosa.onset.onset_strength(y=y, sr=sr, hop_length=hop)
+    spec_centroid = librosa.feature.spectral_centroid(y=y, sr=sr, hop_length=hop)[0]
+
+    for i in range(len(boundaries) - 1):
+        t_start = boundaries[i]
+        t_end = boundaries[i + 1]
+
+        f_start = int(t_start * sr / hop)
+        f_end   = min(int(t_end * sr / hop), len(rms_global))
+
+        if f_end <= f_start:
+            profiles.append({"energy": 0.0, "density": 0.0, "spectral_centroid": 0.0})
+            continue
+
+        section_rms = rms_global[f_start:f_end]
+        section_ons = onset_env[f_start:f_end]
+        section_sc  = spec_centroid[f_start:f_end]
+
+        energy = round(float(section_rms.mean()) / rms_max, 4)
+
+        # Onset density: peaks per second
+        from scipy.signal import find_peaks
+        peaks, _ = find_peaks(section_ons, height=section_ons.mean() * 0.8)
+        section_dur = max(t_end - t_start, 0.01)
+        density = round(float(len(peaks)) / section_dur, 3)
+
+        sc_mean = round(float(section_sc.mean()), 1)
+
+        profiles.append({
+            "energy":            energy,
+            "density":           density,
+            "spectral_centroid": sc_mean,
+        })
+
+    return profiles
+
+
+def _group_similar_sections(
+    sections: List[Section],
+    ssm: np.ndarray,
+    times: np.ndarray,
+) -> List[Section]:
+    """
+    Cluster sections into similarity groups using their SSM fingerprint.
+
+    Each section gets a `group_id`; sections that sound alike share an ID.
+    Uses simple greedy agglomerative clustering with cosine distance.
+    """
+    if len(sections) < 2:
+        for i, s in enumerate(sections):
+            sections[i] = s.model_copy(update={"group_id": 0})
+        return sections
+
+    dt = float(times[1] - times[0]) if len(times) > 1 else 1.0
+
+    def section_ssm_vector(s: Section) -> np.ndarray:
+        f_start = int(s.start / dt)
+        f_end   = int(s.end   / dt)
+        f_end   = min(f_end, ssm.shape[0])
+        if f_end <= f_start:
+            return np.zeros(ssm.shape[0])
+        row_slice = ssm[f_start:f_end, :].mean(axis=0)
+        return row_slice / (np.linalg.norm(row_slice) + 1e-8)
+
+    fingerprints = [section_ssm_vector(s) for s in sections]
+
+    # Greedy grouping: two sections merge if cosine similarity > threshold
+    THRESHOLD = 0.72
+    group_ids = [-1] * len(sections)
+    next_group = 0
+
+    for i, fp_i in enumerate(fingerprints):
+        if group_ids[i] >= 0:
+            continue
+        group_ids[i] = next_group
+        for j in range(i + 1, len(sections)):
+            if group_ids[j] >= 0:
+                continue
+            sim = float(np.dot(fp_i, fingerprints[j]))
+            if sim >= THRESHOLD:
+                group_ids[j] = next_group
+        next_group += 1
+
+    # Apply group IDs
+    updated: List[Section] = []
+    for s, gid in zip(sections, group_ids):
+        updated.append(s.model_copy(update={"group_id": gid}))
+    return updated
+
+
 def detect_structure(bundle, force: bool = False) -> StructureResult:
     """
     Main structure detection entry point.
@@ -247,15 +357,33 @@ def detect_structure(bundle, force: bool = False) -> StructureResult:
     # Detect repetitions using SSM
     sections = _detect_repetitions(sections, ssm, times)
 
+    # Energy / density / spectral-centroid profile per section
+    energy_profiles = _compute_energy_profile(y, sr, boundaries)
+    for i, ep in enumerate(energy_profiles):
+        if i < len(sections):
+            sections[i] = sections[i].model_copy(update={
+                "energy":            ep["energy"],
+                "density":           ep["density"],
+                "spectral_centroid": ep["spectral_centroid"],
+            })
+
+    # Similarity grouping
+    sections = _group_similar_sections(sections, ssm, times)
+
+    num_groups = len(set(s.group_id for s in sections if s.group_id is not None))
     global_confidence = round(float(np.mean([s.confidence for s in sections])), 3) if sections else 0.0
 
     result = StructureResult(
         sections=sections,
         num_sections=len(sections),
         confidence=global_confidence,
-        source="ssm_novelty",
+        source="ssm_novelty+energy+groups",
+        num_groups=num_groups,
     )
 
     cache_set(file_hash, stage, result.model_dump())
-    logger.info("Structure: %d sections, conf=%.2f", len(sections), global_confidence)
+    logger.info(
+        "Structure: %d sections, %d groups, conf=%.2f",
+        len(sections), num_groups, global_confidence,
+    )
     return result

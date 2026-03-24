@@ -185,11 +185,65 @@ def save_analysis_result(project_id: int, result: dict, pipeline_version: str = 
                     json.dumps(result.get("confidenceData")),
                     pipeline_version,
                     json.dumps(result.get("modelVersions")),
-                    json.dumps(result.get("processingMetadata")),
+                    json.dumps({
+                        **(result.get("processingMetadata") or {}),
+                        "canonical":        result.get("canonical"),
+                        "cadences":         result.get("cadences"),
+                        "harmonicRhythm":   result.get("harmonicRhythm"),
+                        "diatonicRatio":    result.get("diatonicRatio"),
+                        "qualityFlags":     result.get("qualityFlags"),
+                    }),
                 ),
             )
         conn.commit()
         logger.info(f"Saved analysis result for project {project_id}")
+    finally:
+        conn.close()
+
+
+def get_analysis_result(project_id: int) -> Optional[dict]:
+    """Retrieve the latest analysis result for a project.
+
+    Returns None if no result exists yet.
+    """
+    conn = get_db_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                """
+                SELECT
+                    rhythm_data, key_data, chords_data,
+                    melody_data, structure_data,
+                    pipeline_version, model_versions, processing_metadata
+                FROM analysis_results
+                WHERE project_id = %s
+                """,
+                (project_id,),
+            )
+            row = cur.fetchone()
+        if row is None:
+            return None
+
+        def _load(v):
+            if v is None:
+                return None
+            return json.loads(v) if isinstance(v, str) else v
+
+        processing_meta = _load(row[7]) or {}
+        return {
+            "rhythm":           _load(row[0]),
+            "key":              _load(row[1]),
+            "chords":           _load(row[2]),
+            "melody":           _load(row[3]),
+            "structure":        _load(row[4]),
+            "pipelineVersion":  row[5],
+            "modelVersions":    _load(row[6]),
+            "canonical":        processing_meta.get("canonical"),
+            "cadences":         processing_meta.get("cadences"),
+            "harmonicRhythm":   processing_meta.get("harmonicRhythm"),
+            "diatonicRatio":    processing_meta.get("diatonicRatio"),
+            "qualityFlags":     processing_meta.get("qualityFlags", []),
+        }
     finally:
         conn.close()
 

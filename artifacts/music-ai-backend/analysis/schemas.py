@@ -5,7 +5,7 @@ Every analyzer returns a dataclass or dict that conforms to these schemas.
 
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict
 
 
 # ─── Audio Metadata ────────────────────────────────────────────────────────────
@@ -83,6 +83,18 @@ class ChordEvent(BaseModel):
     quality: str
     confidence: float
     alternatives: List[Dict[str, Any]] = Field(default_factory=list)
+    # Harmonic function in current key (tonic / subdominant / dominant / secondary / chromatic)
+    harmonic_function: Optional[str] = None
+    # Scale degree of chord root (1–7, or None if chromatic)
+    scale_degree: Optional[int] = None
+
+
+class CadenceEvent(BaseModel):
+    kind: str        # "authentic" | "half" | "plagal" | "deceptive" | "evaded"
+    start: float
+    end: float
+    chords: List[str]
+    strength: float  # 0–1
 
 
 class ChordsResult(BaseModel):
@@ -90,6 +102,10 @@ class ChordsResult(BaseModel):
     global_confidence: float = 0.0
     unique_chords: List[str] = Field(default_factory=list)
     source: str = "chroma_template"
+    # Key-aware harmonic analysis (populated by chord_classifier)
+    cadences: List[CadenceEvent] = Field(default_factory=list)
+    harmonic_rhythm: float = 0.0     # Mean chord duration in beats
+    diatonic_ratio: float = 0.0      # Fraction of chords that are diatonic
 
 
 # ─── Melody ────────────────────────────────────────────────────────────────────
@@ -123,6 +139,12 @@ class Section(BaseModel):
     confidence: float
     repeated: bool = False
     repeat_of: Optional[str] = None
+    # Energy/density profile
+    energy: float = 0.0              # RMS energy (normalized 0–1)
+    density: float = 0.0             # Onset density events/sec
+    spectral_centroid: float = 0.0   # Mean spectral centroid (Hz)
+    # Similarity grouping (sections with same group_id are structurally similar)
+    group_id: Optional[int] = None
 
 
 class StructureResult(BaseModel):
@@ -130,6 +152,8 @@ class StructureResult(BaseModel):
     num_sections: int = 0
     confidence: float = 0.0
     source: str = "ssm_novelty"
+    # Section-level grouping statistics
+    num_groups: int = 0
 
 
 # ─── Full Analysis Result ──────────────────────────────────────────────────────
@@ -141,6 +165,8 @@ class AnalysisWarning(BaseModel):
 
 
 class AnalysisResult(BaseModel):
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
     audio_meta: AudioMeta
     stems: StemsResult = Field(default_factory=StemsResult)
     tempo: Optional[TempoResult] = None
@@ -156,6 +182,8 @@ class AnalysisResult(BaseModel):
     quality_flags: List[str] = Field(default_factory=list)
     # Which model versions were used for each stage
     model_versions: Dict[str, str] = Field(default_factory=dict)
+    # Canonical Score (CanonicalScore dataclass — set by pipeline Stage 12)
+    canonical: Optional[Any] = Field(default=None, exclude=True)
 
     def to_legacy_format(self) -> dict:
         """Convert to the legacy format expected by existing API routes."""
@@ -219,5 +247,13 @@ class AnalysisResult(BaseModel):
             "basicPitch": "0.4.0",
             "librosa":    "0.11.0",
         }
+
+        if self.canonical is not None:
+            result["canonical"] = self.canonical.to_dict()
+
+        if self.chords and self.chords.cadences:
+            result["cadences"] = [c.model_dump() for c in self.chords.cadences]
+            result["harmonicRhythm"] = self.chords.harmonic_rhythm
+            result["diatonicRatio"]  = self.chords.diatonic_ratio
 
         return result

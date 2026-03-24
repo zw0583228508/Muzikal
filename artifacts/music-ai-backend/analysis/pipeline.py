@@ -322,6 +322,27 @@ def _run_full(bundle: AudioBundle, mode: str) -> AnalysisResult:
     result = apply_theory_guard(result)
     logger.info("[pipeline] Theory Guard done — %d warnings total", len(result.warnings))
 
+    # ── Stage 12: Harmonic classification + Canonical Score ───────────────────
+    logger.info("[pipeline] Stage 12: Harmonic classification + Canonical score")
+    from analysis.chord_classifier import classify as chord_classify
+    from analysis.canonical import to_canonical
+
+    if result.chords:
+        result.chords = chord_classify(result.chords, result.key)
+        logger.info(
+            "[pipeline] Chord classifier: diatonic=%.0f%%, cadences=%d",
+            result.chords.diatonic_ratio * 100, len(result.chords.cadences),
+        )
+
+    canonical = to_canonical(result)
+    result.canonical = canonical  # type: ignore[attr-defined]  — duck-typed field
+
+    logger.info(
+        "[pipeline] Canonical: %d bars, %d notes, %.0f%% diatonic (%.1fs)",
+        canonical.num_measures, canonical.num_notes,
+        canonical.diatonic_ratio * 100, time.time() - t0,
+    )
+
     logger.info("[pipeline] Full pipeline DONE in %.1fs", time.time() - t0)
     return result
 
